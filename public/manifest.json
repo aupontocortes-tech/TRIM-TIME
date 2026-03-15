@@ -1,0 +1,18 @@
+{
+  "name": "Trim Time - Agendamento",
+  "short_name": "Trim Time",
+  "description": "Agende na sua barbearia pelo celular",
+  "start_url": "/b/trim-time",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#d4a853",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
