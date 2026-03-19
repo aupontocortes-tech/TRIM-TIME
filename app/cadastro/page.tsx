@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { Suspense, useState } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -10,7 +10,7 @@ import { FieldGroup, Field, FieldLabel } from "@/components/ui/field"
 import { Eye, EyeOff, ArrowLeft, Check } from "lucide-react"
 import { BrandLogo } from "@/components/brand-logo"
 
-export default function CadastroPage() {
+function CadastroPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const planoSelecionado = searchParams.get("plano") || "premium"
@@ -447,5 +447,19 @@ export default function CadastroPage() {
         </Card>
       </div>
     </div>
+  )
+}
+
+export default function CadastroPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-background flex items-center justify-center p-4">
+          <div className="text-muted-foreground text-sm animate-pulse">Carregando…</div>
+        </div>
+      }
+    >
+      <CadastroPageContent />
+    </Suspense>
   )
 }
