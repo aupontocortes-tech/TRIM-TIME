@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { FieldGroup, Field, FieldLabel } from "@/components/ui/field"
-import { Scissors, Eye, EyeOff, ArrowLeft, Check } from "lucide-react"
+import { Eye, EyeOff, ArrowLeft, Check } from "lucide-react"
+import { BrandLogo } from "@/components/brand-logo"
 
 export default function CadastroPage() {
   const router = useRouter()
@@ -55,7 +56,7 @@ export default function CadastroPage() {
           body: JSON.stringify({
             name: formData.nomeBarbearia || formData.nome,
             email: formData.email,
-            telefone: formData.telefone,
+            phone: formData.telefone?.replace(/\D/g, "") ? formData.telefone : undefined,
           }),
         })
         if (!res.ok) {
@@ -63,18 +64,28 @@ export default function CadastroPage() {
           throw new Error(err.error || "Erro ao criar barbearia")
         }
         const barbershop = await res.json()
-        await fetch("/api/auth/session", {
+        const sessionRes = await fetch("/api/auth/session", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ barbershop_id: barbershop.id }),
         })
+        if (!sessionRes.ok) {
+          const err = await sessionRes.json().catch(() => ({}))
+          throw new Error(err.error || "Erro ao iniciar sessão")
+        }
         router.push("/painel")
       } else {
         await new Promise((resolve) => setTimeout(resolve, 500))
         router.push("/")
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Erro ao criar conta. Tente novamente.")
+      const msg = e instanceof Error ? e.message : "Erro ao criar conta. Tente novamente."
+      const isTableError = typeof msg === "string" && (msg.includes("schema cache") || msg.includes("could not find the table") || msg.includes("barbershops"))
+      setError(
+        isTableError
+          ? "Falta criar as tabelas no Supabase. Abra o Supabase → SQL Editor → New query → copie TODO o conteúdo do arquivo supabase/CRIAR_TABELAS_SUPABASE.sql do projeto, cole no editor e clique em Run. Depois tente o cadastro de novo."
+          : msg
+      )
     } finally {
       setIsLoading(false)
     }
@@ -108,9 +119,7 @@ export default function CadastroPage() {
         <Card className="bg-card border-border">
           <CardHeader className="text-center pb-2">
             <div className="flex justify-center mb-4">
-              <div className="w-14 h-14 rounded-xl bg-primary flex items-center justify-center">
-                <Scissors className="w-8 h-8 text-primary-foreground" />
-              </div>
+              <BrandLogo size="lg" />
             </div>
             <h1 className="text-2xl font-bold text-foreground">Criar Conta</h1>
             <p className="text-muted-foreground">
@@ -315,27 +324,25 @@ export default function CadastroPage() {
                   </Field>
 
                   <Field>
-                    <FieldLabel htmlFor="endereco">Endereço</FieldLabel>
+                    <FieldLabel htmlFor="endereco">Endereço (opcional)</FieldLabel>
                     <Input
                       id="endereco"
                       type="text"
                       placeholder="Rua, número, bairro"
                       value={formData.endereco}
                       onChange={(e) => setFormData({ ...formData, endereco: e.target.value })}
-                      required
                       className="bg-input border-border text-foreground placeholder:text-muted-foreground"
                     />
                   </Field>
 
                   <Field>
-                    <FieldLabel htmlFor="cidade">Cidade</FieldLabel>
+                    <FieldLabel htmlFor="cidade">Cidade (opcional)</FieldLabel>
                     <Input
                       id="cidade"
                       type="text"
                       placeholder="Sua cidade"
                       value={formData.cidade}
                       onChange={(e) => setFormData({ ...formData, cidade: e.target.value })}
-                      required
                       className="bg-input border-border text-foreground placeholder:text-muted-foreground"
                     />
                   </Field>

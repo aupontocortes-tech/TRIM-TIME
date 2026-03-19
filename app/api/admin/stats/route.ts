@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { createServiceRoleClient } from "@/lib/supabase/server"
 import { getRealBarbershopIdFromRequest } from "@/lib/tenant"
 
-/** Apenas role=admin. Retorna totais para o dashboard do super admin. */
+/** Apenas role=super_admin. Retorna totais para o dashboard do super admin. */
 export async function GET() {
   try {
     const barbershopId = await getRealBarbershopIdFromRequest()
@@ -14,7 +14,7 @@ export async function GET() {
       .select("role")
       .eq("id", barbershopId)
       .single()
-    if (me?.role !== "admin") return NextResponse.json({ error: "Acesso negado" }, { status: 403 })
+    if (me?.role !== "super_admin") return NextResponse.json({ error: "Acesso negado" }, { status: 403 })
 
     const [countBarbershops, countSubscriptions] = await Promise.all([
       supabase.from("barbershops").select("id", { count: "exact", head: true }),

@@ -29,9 +29,12 @@ import { createClient as createSupabaseClient } from "@supabase/supabase-js"
 
 /** Cliente com service_role para API routes (backend-only). Nunca exponha no cliente. */
 export function createServiceRoleClient() {
-  return createSupabaseClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { persistSession: false } }
-  )
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key) {
+    throw new Error(
+      "Supabase não configurado. Defina NEXT_PUBLIC_SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY no .env.local"
+    )
+  }
+  return createSupabaseClient(url, key, { auth: { persistSession: false } })
 }

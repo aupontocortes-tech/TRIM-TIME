@@ -1,0 +1,230 @@
+// Trim Time - Schema Prisma (PostgreSQL / Supabase)
+// Gera as tabelas com: npx prisma db push  ou  npx prisma migrate dev
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ========== ENUMS ==========
+enum SubscriptionPlan {
+  basic
+  pro
+  premium
+}
+
+enum SubscriptionStatus {
+  trial
+  active
+  past_due
+  canceled
+}
+
+enum AppointmentStatus {
+  pending
+  confirmed
+  completed
+  canceled
+  no_show
+}
+
+enum WaitingListStatus {
+  waiting
+  notified
+  accepted
+  expired
+}
+
+enum NotificationType {
+  push
+  email
+  whatsapp
+}
+
+enum NotificationEvent {
+  appointment_confirmation
+  appointment_reminder
+  appointment_canceled
+  waiting_list_slot_available
+  inactive_client_marketing
+}
+
+// ========== BARBERSHOPS ==========
+model Barbershop {
+  id          String    @id @default(uuid()) @db.Uuid
+  name        String
+  email       String
+  phone       String?
+  slug        String    @unique
+  role        String    @default("admin_barbershop") // super_admin | admin_barbershop
+  suspendedAt DateTime? @map("suspended_at") @db.Timestamptz
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  subscriptions       Subscription[]
+  barbers             Barber[]
+  clients             Client[]
+  services            Service[]
+  appointments        Appointment[]
+  waitingList         WaitingListItem[]
+  whatsappIntegration WhatsAppIntegration?
+  notificationLogs    NotificationLog[]
+
+  @@index([email])
+  @@index([role])
+}
+
+// ========== SUBSCRIPTIONS ==========
+model Subscription {
+  id            String             @id @default(uuid()) @db.Uuid
+  barbershopId  String             @unique @map("barbershop_id") @db.Uuid
+  barbershop    Barbershop         @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  plan          SubscriptionPlan   @default(premium)
+  status        SubscriptionStatus @default(trial)
+  trialEnd      DateTime?          @map("trial_end") @db.Timestamptz
+  nextPayment   DateTime?          @map("next_payment") @db.Timestamptz
+  createdAt     DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime           @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([barbershopId])
+  @@index([status])
+}
+
+// ========== BARBERS ==========
+model Barber {
+  id           String   @id @default(uuid()) @db.Uuid
+  barbershopId String   @map("barbershop_id") @db.Uuid
+  barbershop   Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  name         String
+  phone        String?
+  commission   Decimal  @default(0) @db.Decimal(5, 2)
+  active       Boolean  @default(true)
+  role         String   @default("user") // admin_barbershop | user
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  appointments Appointment[]
+
+  @@index([barbershopId])
+  @@index([barbershopId, role])
+}
+
+// ========== CLIENTS ==========
+model Client {
+  id           String   @id @default(uuid()) @db.Uuid
+  barbershopId String   @map("barbershop_id") @db.Uuid
+  barbershop   Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  name         String
+  phone        String?
+  email        String?
+  notes        String?
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  appointments  Appointment[]
+  waitingList   WaitingListItem[]
+  notificationLogs NotificationLog[]
+
+  @@index([barbershopId])
+  @@index([barbershopId, phone])
+  @@index([barbershopId, email])
+}
+
+// ========== SERVICES ==========
+model Service {
+  id           String   @id @default(uuid()) @db.Uuid
+  barbershopId String   @map("barbershop_id") @db.Uuid
+  barbershop   Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  name         String
+  price        Decimal  @default(0) @db.Decimal(10, 2)
+  duration     Int      @default(30)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  appointments  Appointment[]
+  waitingList   WaitingListItem[]
+
+  @@index([barbershopId])
+}
+
+// ========== APPOINTMENTS ==========
+model Appointment {
+  id           String           @id @default(uuid()) @db.Uuid
+  barbershopId String           @map("barbershop_id") @db.Uuid
+  barbershop   Barbershop       @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  clientId     String           @map("client_id") @db.Uuid
+  client       Client           @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  barberId     String           @map("barber_id") @db.Uuid
+  barber       Barber           @relation(fields: [barberId], references: [id], onDelete: Restrict)
+  serviceId    String           @map("service_id") @db.Uuid
+  service      Service          @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  date         DateTime         @db.Date
+  time         String           // HH:MM ou HH:MM:SS
+  status       AppointmentStatus @default(pending)
+  totalPrice   Decimal?         @map("total_price") @db.Decimal(10, 2)
+  createdAt    DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime         @updatedAt @map("updated_at") @db.Timestamptz
+
+  notificationLogs NotificationLog[]
+
+  @@index([barbershopId])
+  @@index([barbershopId, date])
+  @@index([clientId])
+  @@index([barberId])
+}
+
+// ========== WAITING LIST ==========
+model WaitingListItem {
+  id           String            @id @default(uuid()) @db.Uuid
+  barbershopId String            @map("barbershop_id") @db.Uuid
+  barbershop   Barbershop        @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  clientId     String            @map("client_id") @db.Uuid
+  client       Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  serviceId    String            @map("service_id") @db.Uuid
+  service      Service           @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  desiredDate  DateTime?         @map("desired_date") @db.Date
+  desiredTime  String?           @map("desired_time") // HH:MM ou HH:MM:SS
+  status       WaitingListStatus @default(waiting)
+  notifiedAt   DateTime?        @map("notified_at") @db.Timestamptz
+  createdAt    DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime         @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([barbershopId])
+  @@index([barbershopId, status])
+}
+
+// ========== WHATSAPP INTEGRATIONS ==========
+model WhatsAppIntegration {
+  id           String   @id @default(uuid()) @db.Uuid
+  barbershopId String   @unique @map("barbershop_id") @db.Uuid
+  barbershop   Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  phoneNumber  String   @map("phone_number")
+  apiProvider  String   @default("meta") @map("api_provider")
+  apiToken     String?  @map("api_token")
+  connectedAt  DateTime @default(now()) @map("connected_at") @db.Timestamptz
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([barbershopId])
+}
+
+// ========== NOTIFICATION LOG ==========
+model NotificationLog {
+  id            String            @id @default(uuid()) @db.Uuid
+  barbershopId  String            @map("barbershop_id") @db.Uuid
+  barbershop    Barbershop        @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  clientId      String?           @map("client_id") @db.Uuid
+  client        Client?           @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  appointmentId String?           @map("appointment_id") @db.Uuid
+  appointment   Appointment?      @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  type          NotificationType
+  event         NotificationEvent
+  sentAt        DateTime          @default(now()) @map("sent_at") @db.Timestamptz
+  payload       Json?
+
+  @@index([barbershopId])
+  @@index([sentAt])
+}

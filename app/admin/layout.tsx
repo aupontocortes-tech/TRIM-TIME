@@ -18,7 +18,7 @@ export default function AdminLayout({
     fetch("/api/barbershops")
       .then((r) => r.json())
       .then((data) => {
-        if (data?.role === "admin") setAllowed(true)
+        if (data?.role === "super_admin") setAllowed(true)
         else setAllowed(false)
       })
       .catch(() => setAllowed(false))
@@ -47,7 +47,7 @@ export default function AdminLayout({
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex h-14 items-center justify-between">
           <div className="flex items-center gap-6">
             <Link href="/admin" className="flex items-center gap-2 font-semibold text-foreground">
-              <Shield className="w-6 h-6 text-amber-500" />
+              <Shield className="w-6 h-6 text-primary" />
               Painel Admin
             </Link>
             <nav className="flex gap-4">

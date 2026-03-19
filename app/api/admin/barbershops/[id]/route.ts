@@ -4,7 +4,7 @@ import { getRealBarbershopIdFromRequest } from "@/lib/tenant"
 import type { Barbershop } from "@/lib/db/types"
 import type { SubscriptionPlan } from "@/lib/db/types"
 
-/** Atualizar barbearia (dados, plano, suspender/ativar). Apenas role=admin. */
+/** Atualizar barbearia (dados, plano, suspender/ativar, role). Apenas role=super_admin. */
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -19,14 +19,14 @@ export async function PATCH(
       .select("role")
       .eq("id", barbershopId)
       .single()
-    if (me?.role !== "admin") return NextResponse.json({ error: "Acesso negado" }, { status: 403 })
+    if (me?.role !== "super_admin") return NextResponse.json({ error: "Acesso negado" }, { status: 403 })
 
     const { id } = await params
     const body = await request.json() as {
       name?: string
       email?: string
       phone?: string
-      role?: "admin" | "user"
+      role?: "super_admin" | "admin_barbershop"
       suspended?: boolean
       plan?: SubscriptionPlan
     }

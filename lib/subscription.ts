@@ -23,7 +23,7 @@ export function getEffectivePlanForBarbershop(
   barbershop: { role?: string } | null,
   subscription: Subscription | null
 ): SubscriptionPlan | null {
-  if (barbershop?.role === "admin") return "premium"
+  if (barbershop?.role === "super_admin") return "premium"
   return getEffectivePlan(subscription)
 }
 

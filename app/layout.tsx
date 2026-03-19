@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from 'next'
-import { Inter, Playfair_Display } from 'next/font/google'
+import { Inter, Playfair_Display, Cormorant_Garamond } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import './globals.css'
 
@@ -13,6 +13,14 @@ const playfair = Playfair_Display({
   variable: '--font-playfair'
 });
 
+/** Nome da marca — serifada elegante (barbearia premium) */
+const trimTimeWordmark = Cormorant_Garamond({
+  subsets: ["latin"],
+  variable: '--font-trim-time-wordmark',
+  weight: ['600', '700'],
+  display: 'swap',
+})
+
 export const metadata: Metadata = {
   title: 'Trim Time - Sistema de Agendamento para Barbearias',
   description: 'A plataforma completa para barbearias. Agendamentos online, gestão financeira e muito mais.',
@@ -20,25 +28,15 @@ export const metadata: Metadata = {
   manifest: '/manifest.json',
   icons: {
     icon: [
-      {
-        url: '/icon-light-32x32.png',
-        media: '(prefers-color-scheme: light)',
-      },
-      {
-        url: '/icon-dark-32x32.png',
-        media: '(prefers-color-scheme: dark)',
-      },
-      {
-        url: '/icon.svg',
-        type: 'image/svg+xml',
-      },
+      { url: '/icon.png', type: 'image/png' },
+      { url: '/icon.svg', type: 'image/svg+xml' },
     ],
-    apple: '/apple-icon.png',
+    apple: '/icon.png',
   },
 }
 
 export const viewport: Viewport = {
-  themeColor: '#d4a853',
+  themeColor: '#c9a227',
   width: 'device-width',
   initialScale: 1,
 }
@@ -50,7 +48,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="pt-BR" className="dark">
-      <body className={`${inter.variable} ${playfair.variable} font-sans antialiased`}>
+      <body className={`${inter.variable} ${playfair.variable} ${trimTimeWordmark.variable} font-sans antialiased`}>
         {children}
         <Analytics />
       </body>

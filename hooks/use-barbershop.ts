@@ -54,7 +54,8 @@ export function useBarbershop(): BarbershopState {
     refetch()
   }, [refetch])
 
-  const role: BarbershopRole = (barbershop as { role?: string } | null)?.role === "admin" ? "admin" : "user"
+  const role: BarbershopRole =
+    (barbershop as { role?: string } | null)?.role === "super_admin" ? "super_admin" : "admin_barbershop"
   const plan = getEffectivePlanForBarbershop(barbershop, subscription)
 
   return {

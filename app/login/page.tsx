@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { FieldGroup, Field, FieldLabel } from "@/components/ui/field"
-import { Scissors, Eye, EyeOff, ArrowLeft } from "lucide-react"
+import { Eye, EyeOff, ArrowLeft } from "lucide-react"
+import { BrandLogo } from "@/components/brand-logo"
 
 export default function LoginPage() {
   const router = useRouter()
@@ -65,9 +66,7 @@ export default function LoginPage() {
         <Card className="bg-card border-border">
           <CardHeader className="text-center pb-2">
             <div className="flex justify-center mb-4">
-              <div className="w-14 h-14 rounded-xl bg-primary flex items-center justify-center">
-                <Scissors className="w-8 h-8 text-primary-foreground" />
-              </div>
+              <BrandLogo size="lg" />
             </div>
             <h1 className="text-2xl font-bold text-foreground">Área do Barbeiro</h1>
             <p className="text-muted-foreground">Acesse sua barbearia no Trim Time</p>
@@ -137,7 +136,7 @@ export default function LoginPage() {
 
             <p className="text-center text-sm text-muted-foreground mt-6">
               Ainda não tem conta?{" "}
-              <Link href="/cadastro" className="text-primary hover:underline font-medium">
+              <Link href="/cadastro?tipo=barbearia" className="text-primary hover:underline font-medium">
                 Cadastre sua barbearia
               </Link>
             </p>

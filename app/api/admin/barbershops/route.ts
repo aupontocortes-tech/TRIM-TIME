@@ -3,7 +3,7 @@ import { createServiceRoleClient } from "@/lib/supabase/server"
 import { getRealBarbershopIdFromRequest } from "@/lib/tenant"
 import type { Barbershop } from "@/lib/db/types"
 
-/** Lista todas as barbearias. Apenas role=admin. */
+/** Lista todas as barbearias. Apenas role=super_admin. */
 export async function GET() {
   try {
     const barbershopId = await getRealBarbershopIdFromRequest()
@@ -15,7 +15,7 @@ export async function GET() {
       .select("role")
       .eq("id", barbershopId)
       .single()
-    if (me?.role !== "admin") return NextResponse.json({ error: "Acesso negado" }, { status: 403 })
+    if (me?.role !== "super_admin") return NextResponse.json({ error: "Acesso negado" }, { status: 403 })
 
     const { data, error } = await supabase
       .from("barbershops")

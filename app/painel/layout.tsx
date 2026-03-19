@@ -26,13 +26,16 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { BrandLogo } from "@/components/brand-logo"
 
-const menuItems = [
+/** Role para exibição do menu: super_admin e admin_barbershop veem tudo; user (barbeiro) só agenda e clientes. */
+type MenuRole = "super_admin" | "admin_barbershop" | "user"
+const menuItems: { href: string; label: string; icon: typeof LayoutDashboard; roles?: MenuRole[] }[] = [
   { href: "/painel", label: "Dashboard", icon: LayoutDashboard },
   { href: "/painel/agenda", label: "Agenda", icon: Calendar },
   { href: "/painel/clientes", label: "Clientes", icon: Users },
-  { href: "/painel/financeiro", label: "Financeiro", icon: DollarSign },
-  { href: "/painel/configuracoes", label: "Configurações", icon: Settings },
+  { href: "/painel/financeiro", label: "Financeiro", icon: DollarSign, roles: ["super_admin", "admin_barbershop"] },
+  { href: "/painel/configuracoes", label: "Configurações", icon: Settings, roles: ["super_admin", "admin_barbershop"] },
 ]
 
 export default function PainelLayout({
@@ -45,6 +48,9 @@ export default function PainelLayout({
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const { barbershop } = useBarbershop()
   const [impersonating, setImpersonating] = useState(false)
+  /** Role para menu: hoje sempre da barbearia; quando houver login de barbeiro, usar barber.role (user = só agenda/clientes). */
+  const menuRole: MenuRole = (barbershop?.role ?? "admin_barbershop") as MenuRole
+  const visibleMenuItems = menuItems.filter((item) => !item.roles || item.roles.includes(menuRole))
 
   useEffect(() => {
     fetch("/api/admin/impersonate")
@@ -78,12 +84,12 @@ export default function PainelLayout({
         sidebarOpen ? "translate-x-0" : "-translate-x-full"
       }`}>
         <div className="flex flex-col h-full">
-          <div className="flex items-center justify-between h-16 px-4 border-b border-border">
-            <Link href="/painel" className="flex items-center focus:outline-none focus:ring-2 focus:ring-primary rounded-lg transition-opacity hover:opacity-90">
-              <img src="/icon.svg" alt="Trim Time" className="w-10 h-10 rounded-lg" />
+          <div className="flex items-center justify-between gap-2 h-24 px-3 border-b border-border">
+            <Link href="/painel" className="flex flex-1 min-w-0 items-center justify-center h-full py-3 px-3 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset rounded-lg transition-opacity hover:opacity-95">
+              <BrandLogo size="xl" />
             </Link>
             <button 
-              className="lg:hidden text-muted-foreground hover:text-foreground"
+              className="lg:hidden shrink-0 text-muted-foreground hover:text-foreground p-1"
               onClick={() => setSidebarOpen(false)}
             >
               <X className="w-5 h-5" />
@@ -96,7 +102,7 @@ export default function PainelLayout({
           </div>
 
           <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-            {menuItems.map((item) => {
+            {visibleMenuItems.map((item) => {
               const isActive = pathname === item.href || (item.href !== "/painel" && pathname.startsWith(item.href))
               return (
                 <Link
@@ -114,11 +120,11 @@ export default function PainelLayout({
                 </Link>
               )
             })}
-            {barbershop?.role === "admin" && (
+            {barbershop?.role === "super_admin" && (
               <Link
                 href="/admin"
                 onClick={() => setSidebarOpen(false)}
-                className="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-amber-600 hover:bg-amber-500/10"
+                className="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-primary hover:bg-primary/10"
               >
                 <Shield className="w-5 h-5" />
                 <span className="font-medium">Painel Admin</span>
@@ -137,7 +143,7 @@ export default function PainelLayout({
                   </div>
                   <div className="flex-1 text-left">
                     <p className="text-sm font-medium text-foreground truncate">{barbershop?.name ?? "Usuário"}</p>
-                    <p className="text-xs text-muted-foreground">{barbershop?.role === "admin" ? "Super Admin" : "Barbearia"}</p>
+                    <p className="text-xs text-muted-foreground">{barbershop?.role === "super_admin" ? "Super Admin" : "Barbearia"}</p>
                   </div>
                   <ChevronDown className="w-4 h-4 text-muted-foreground" />
                 </button>
@@ -164,11 +170,11 @@ export default function PainelLayout({
 
       <div className="lg:pl-64">
         {impersonating && (
-          <div className="bg-amber-500/15 border-b border-amber-500/30 px-4 py-2 flex items-center justify-between">
-            <p className="text-sm text-amber-800 dark:text-amber-200">
+          <div className="bg-primary/15 border-b border-primary/30 px-4 py-2 flex items-center justify-between">
+            <p className="text-sm text-primary">
               Você está acessando como esta barbearia (impersonação).
             </p>
-            <Button variant="outline" size="sm" onClick={handleVoltarAdmin} className="border-amber-600 text-amber-700 hover:bg-amber-500/20">
+            <Button variant="outline" size="sm" onClick={handleVoltarAdmin} className="border-primary text-primary hover:bg-primary/20">
               Voltar ao Painel Admin
             </Button>
           </div>
@@ -183,7 +189,7 @@ export default function PainelLayout({
                 <Menu className="w-6 h-6" />
               </button>
               <h1 className="text-lg font-semibold text-foreground hidden sm:block">
-                {menuItems.find(item => 
+                {visibleMenuItems.find(item => 
                   pathname === item.href || (item.href !== "/painel" && pathname.startsWith(item.href))
                 )?.label || "Dashboard"}
               </h1>

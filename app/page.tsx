@@ -19,6 +19,8 @@ import {
   X
 } from "lucide-react"
 import { PLAN_PRICES, PLAN_LABELS, PLAN_FEATURES } from "@/lib/plans"
+import { BrandLogo } from "@/components/brand-logo"
+import { TrimTimeWordmark } from "@/components/trim-time-wordmark"
 
 export default function LandingPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -28,10 +30,10 @@ export default function LandingPage() {
       {/* Header */}
       <header className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-md border-b border-border">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <Link href="/" className="flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-primary rounded-lg transition-opacity hover:opacity-90">
-              <img src="/icon.svg" alt="Trim Time" className="w-10 h-10 rounded-lg" />
-              <span className="text-xl font-bold text-amber-400">Trim Time</span>
+          <div className="flex items-center justify-between min-h-[5.5rem] md:min-h-[7.5rem] py-2 md:py-3">
+            <Link href="/" className="flex items-center gap-3 sm:gap-4 min-w-0 focus:outline-none focus:ring-2 focus:ring-primary rounded-lg transition-opacity hover:opacity-90">
+              <BrandLogo size="hero" priority />
+              <TrimTimeWordmark className="text-2xl sm:text-3xl md:text-4xl shrink-0 leading-none" />
             </Link>
 
             {/* Desktop Navigation */}
@@ -53,7 +55,7 @@ export default function LandingPage() {
                     Sou Barbeiro
                   </Button>
                 </Link>
-              <Link href="/cadastro">
+              <Link href="/cadastro?tipo=barbearia">
                 <Button className="bg-primary text-primary-foreground hover:bg-primary/90">
                   Começar Agora
                 </Button>
@@ -101,7 +103,7 @@ export default function LandingPage() {
                         Sou Barbeiro
                       </Button>
                     </Link>
-                <Link href="/cadastro">
+                <Link href="/cadastro?tipo=barbearia">
                   <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90">
                     Começar Agora
                   </Button>
@@ -113,7 +115,7 @@ export default function LandingPage() {
       </header>
 
       {/* Hero Section */}
-      <section className="pt-32 pb-20 px-4 sm:px-6 lg:px-8">
+      <section className="pt-40 md:pt-44 pb-20 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
           <div className="flex flex-col lg:flex-row items-center gap-12">
             <div className="flex-1 text-center lg:text-left">
@@ -134,7 +136,7 @@ export default function LandingPage() {
               </p>
 
               <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
-                <Link href="/cadastro">
+                <Link href="/cadastro?tipo=barbearia">
                   <Button size="lg" className="bg-primary text-primary-foreground hover:bg-primary/90 w-full sm:w-auto">
                     Criar minha conta
                     <ChevronRight className="w-4 h-4 ml-2" />
@@ -321,19 +323,19 @@ export default function LandingPage() {
                   <p className="text-sm text-muted-foreground">Para crescer</p>
                 </div>
                 <div className="mb-6">
-                  <span className="text-4xl font-bold text-amber-600">R${PLAN_PRICES.pro}</span>
+                  <span className="text-4xl font-bold text-primary">R${PLAN_PRICES.pro}</span>
                   <span className="text-muted-foreground">/mês</span>
                 </div>
                 <ul className="space-y-3 mb-6">
                   {PLAN_FEATURES.pro.map((item, i) => (
                     <li key={i} className="flex items-center gap-2 text-sm text-foreground">
-                      <Check className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                      <Check className="w-4 h-4 text-primary flex-shrink-0" />
                       {item}
                     </li>
                   ))}
                 </ul>
                 <Link href="/cadastro?plano=pro">
-                  <Button className="w-full bg-amber-500 text-white hover:bg-amber-600">
+                  <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90">
                     Assinar Pro
                   </Button>
                 </Link>
@@ -443,7 +445,7 @@ export default function LandingPage() {
                 Junte-se a mais de 500 barbearias que já usam o Trim Time para crescer seus negócios.
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                <Link href="/cadastro">
+                <Link href="/cadastro?tipo=barbearia">
                   <Button size="lg" className="bg-primary text-primary-foreground hover:bg-primary/90 w-full sm:w-auto">
                     Criar minha conta
                     <ChevronRight className="w-4 h-4 ml-2" />
@@ -465,8 +467,8 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
             <div className="col-span-2 md:col-span-1">
-              <Link href="/" className="flex items-center gap-2 mb-4 w-fit focus:outline-none focus:ring-2 focus:ring-primary rounded-lg transition-opacity hover:opacity-90">
-                <img src="/icon.svg" alt="Trim Time" className="w-10 h-10 rounded-lg" />
+              <Link href="/" className="flex items-center gap-3 mb-4 w-fit focus:outline-none focus:ring-2 focus:ring-primary rounded-lg transition-opacity hover:opacity-90">
+                <BrandLogo size="lg" />
               </Link>
               <p className="text-sm text-muted-foreground">
                 A plataforma completa para gestão de barbearias.

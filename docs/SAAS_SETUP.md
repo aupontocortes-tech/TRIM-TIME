@@ -3,27 +3,39 @@
 ## Banco de dados (Supabase)
 
 1. Crie um projeto em [Supabase](https://supabase.com).
-2. Em **SQL Editor**, execute na ordem:
+2. **Opção A – Prisma (tabelas automáticas):**  
+   Defina `DATABASE_URL` no `.env.local` com a connection string do Supabase (Project Settings → Database → Connection string, modo Transaction ou Session). Depois rode:
+   ```bash
+   npm run db:push
+   ```
+   Isso cria/atualiza todas as tabelas a partir de `prisma/schema.prisma`. Para migrations versionadas: `npm run db:migrate`.
+3. **Opção B – SQL manual:**  
+   No **SQL Editor** do Supabase, execute na ordem:
    - `supabase/migrations/001_initial_schema.sql`
    - `supabase/migrations/002_super_admin_role.sql`
-3. Copie `.env.example` para `.env.local` e preencha com as variáveis do projeto Supabase (Project Settings → API).
+   - `supabase/migrations/003_roles_super_admin_admin_barbershop_user.sql`
+4. Copie `.env.example` para `.env.local` e preencha com as variáveis do projeto Supabase (Project Settings → API). Inclua `DATABASE_URL` se for usar Prisma.
 
-## Super Admin (seu login de admin)
+## Sistema de permissões
 
-- Contas de barbearia têm um campo `role`: `user` (padrão) ou `admin`.
-- **Forma mais fácil:** no `.env.local` (ou `.env`) defina sua variável de ambiente com **seu email**:
+- **Roles na barbearia (conta):** `super_admin` = dono do sistema (acesso ao painel /admin) | `admin_barbershop` = dono da barbearia (padrão ao criar conta).
+- **Roles em barbeiros (tabela `barbers`):** `admin_barbershop` = dono | `user` = barbeiro normal (no futuro, login de barbeiro com role `user` vê só Agenda e Clientes).
+
+### Super Admin (seu login de admin)
+
+- **Forma mais fácil:** no `.env.local` defina **seu email**:
   ```env
   SUPER_ADMIN_EMAIL=seu@email.com
   ```
-  - Se você **ainda não tem conta**: faça o **cadastro** normalmente com esse mesmo email. A conta já será criada como admin.
-  - Se você **já tem conta**: faça **login** com esse email. Na primeira vez que entrar, a conta será promovida a admin.
-- Após isso, no menu do **painel da barbearia** (/painel) aparecerá o botão **Painel Admin** e você terá **acesso a tudo grátis** (plano Premium para sua barbearia, sem pagar).
-- Em `/admin` apenas usuários com `role = 'admin'` podem acessar; os demais são redirecionados para a página inicial.
-- No Painel Admin você pode ver totais (barbearias, usuários, assinaturas ativas), listar barbearias, editar dados, alterar plano, suspender/ativar conta e usar **Entrar como usuário** para acessar a conta da barbearia (impersonação). Use **Voltar ao Painel Admin** no topo do painel para sair da impersonação.
+  - Se você **ainda não tem conta**: faça o **cadastro** com esse email. A conta será criada como `super_admin`.
+  - Se você **já tem conta**: faça **login** com esse email; a conta será promovida a `super_admin`.
+- No menu do **painel** (/painel) aparecerá o link **Painel Admin** e você terá plano Premium grátis para sua barbearia.
+- A rota `/admin` só é acessível para `role = 'super_admin'`; os demais são redirecionados para a página inicial.
+- No Painel Admin: dashboard (totais de barbearias, usuários, assinaturas ativas), lista de barbearias, editar dados, **alterar tipo de conta** (Super Admin / Dono da barbearia), alterar plano, suspender/ativar e **Entrar como usuário** (impersonação). Use **Voltar ao Painel Admin** para sair da impersonação.
 
-**Alternativa (sem variável de ambiente):** no Supabase, SQL Editor:
+**Alternativa (sem variável de ambiente):** no Painel Admin, edite sua barbearia e em "Tipo de conta" escolha **Super Admin**. Ou no Supabase, SQL Editor:
 ```sql
-UPDATE barbershops SET role = 'admin' WHERE email = 'seu@email.com';
+UPDATE barbershops SET role = 'super_admin' WHERE email = 'seu@email.com';
 ```
 
 ## Variáveis de ambiente

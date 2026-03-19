@@ -19,18 +19,30 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Store, Pencil, LogIn, Ban, CheckCircle } from "lucide-react"
-import type { Barbershop } from "@/lib/db/types"
+import type { Barbershop, BarbershopRole } from "@/lib/db/types"
 import type { SubscriptionPlan } from "@/lib/db/types"
 
 type BarbershopWithSub = Barbershop & {
   subscription?: { plan: SubscriptionPlan; status: string } | null
 }
 
+const ROLE_LABELS: Record<BarbershopRole, string> = {
+  super_admin: "Super Admin",
+  admin_barbershop: "Dono da barbearia",
+}
+
 export default function AdminBarbershopsPage() {
   const [list, setList] = useState<BarbershopWithSub[]>([])
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState<BarbershopWithSub | null>(null)
-  const [form, setForm] = useState({ name: "", email: "", phone: "", plan: "basic" as SubscriptionPlan, suspended: false })
+  const [form, setForm] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    plan: "basic" as SubscriptionPlan,
+    role: "admin_barbershop" as BarbershopRole,
+    suspended: false,
+  })
 
   const load = () => {
     fetch("/api/admin/barbershops")
@@ -50,6 +62,7 @@ export default function AdminBarbershopsPage() {
       email: b.email,
       phone: b.phone ?? "",
       plan: b.subscription?.plan ?? "basic",
+      role: (b.role === "super_admin" ? "super_admin" : "admin_barbershop") as BarbershopRole,
       suspended: !!b.suspended_at,
     })
   }
@@ -64,6 +77,7 @@ export default function AdminBarbershopsPage() {
         email: form.email,
         phone: form.phone || null,
         plan: form.plan,
+        role: form.role,
         suspended: form.suspended,
       }),
     })
@@ -114,7 +128,7 @@ export default function AdminBarbershopsPage() {
                       <p className="font-medium text-foreground">{b.name}</p>
                       <p className="text-sm text-muted-foreground">{b.email}</p>
                       <p className="text-xs text-muted-foreground">
-                        /b/{b.slug} • Plano: {b.subscription?.plan ?? "—"} • {b.suspended_at ? "Suspensa" : "Ativa"}
+                        /b/{b.slug} • {ROLE_LABELS[b.role as BarbershopRole] ?? b.role} • Plano: {b.subscription?.plan ?? "—"} • {b.suspended_at ? "Suspensa" : "Ativa"}
                       </p>
                     </div>
                   </div>
@@ -169,6 +183,22 @@ export default function AdminBarbershopsPage() {
                 onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
                 className="mt-1 bg-input border-border"
               />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-foreground">Tipo de conta</label>
+              <Select
+                value={form.role}
+                onValueChange={(v) => setForm((f) => ({ ...f, role: v as BarbershopRole }))}
+              >
+                <SelectTrigger className="mt-1 bg-input border-border">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="admin_barbershop">{ROLE_LABELS.admin_barbershop}</SelectItem>
+                  <SelectItem value="super_admin">{ROLE_LABELS.super_admin}</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground mt-1">Super Admin acessa o painel /admin e tudo grátis.</p>
             </div>
             <div>
               <label className="text-sm font-medium text-foreground">Plano</label>

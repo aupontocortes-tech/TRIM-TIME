@@ -8,7 +8,8 @@ export type SubscriptionStatus = "trial" | "active" | "past_due" | "canceled"
 export type AppointmentStatus = "pending" | "confirmed" | "completed" | "canceled" | "no_show"
 export type WaitingListStatus = "waiting" | "notified" | "accepted" | "expired"
 
-export type BarbershopRole = "admin" | "user"
+/** Conta da barbearia: super_admin = dono do sistema; admin_barbershop = dono da barbearia (padrão). */
+export type BarbershopRole = "super_admin" | "admin_barbershop"
 
 export interface Barbershop {
   id: string
@@ -33,6 +34,9 @@ export interface Subscription {
   updated_at: string
 }
 
+/** Role do barbeiro: admin_barbershop = dono; user = barbeiro normal (menu: só agenda e clientes). */
+export type BarberRole = "admin_barbershop" | "user"
+
 export interface Barber {
   id: string
   barbershop_id: string
@@ -40,6 +44,7 @@ export interface Barber {
   phone: string | null
   commission: number
   active: boolean
+  role?: BarberRole
   created_at: string
   updated_at: string
 }

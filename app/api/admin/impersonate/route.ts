@@ -3,14 +3,14 @@ import { cookies } from "next/headers"
 import { createServiceRoleClient } from "@/lib/supabase/server"
 import { getRealBarbershopIdFromRequest, IMPERSONATE_COOKIE } from "@/lib/tenant"
 
-/** Verifica se o usuário é admin e se está impersonando. */
+/** Verifica se o usuário é super_admin e se está impersonando. */
 export async function GET() {
   try {
     const barbershopId = await getRealBarbershopIdFromRequest()
     if (!barbershopId) return NextResponse.json({ impersonating: false, isAdmin: false })
     const supabase = createServiceRoleClient()
     const { data: me } = await supabase.from("barbershops").select("role").eq("id", barbershopId).single()
-    const isAdmin = me?.role === "admin"
+    const isAdmin = me?.role === "super_admin"
     const cookieStore = await cookies()
     const impersonating = isAdmin && !!cookieStore.get(IMPERSONATE_COOKIE)?.value
     return NextResponse.json({ impersonating, isAdmin })
@@ -31,7 +31,7 @@ export async function POST(request: Request) {
       .select("role")
       .eq("id", barbershopId)
       .single()
-    if (me?.role !== "admin") return NextResponse.json({ error: "Acesso negado" }, { status: 403 })
+    if (me?.role !== "super_admin") return NextResponse.json({ error: "Acesso negado" }, { status: 403 })
 
     const body = await request.json() as { barbershop_id?: string }
     const cookieStore = await cookies()

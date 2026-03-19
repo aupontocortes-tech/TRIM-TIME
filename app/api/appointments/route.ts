@@ -46,6 +46,20 @@ export async function POST(request: Request) {
       )
     }
     const supabase = createServiceRoleClient()
+    // Um cliente só pode ter um agendamento por dia (excluindo cancelados)
+    const { data: existing } = await supabase
+      .from("appointments")
+      .select("id")
+      .eq("barbershop_id", barbershopId)
+      .eq("client_id", body.client_id)
+      .eq("date", body.date)
+      .neq("status", "canceled")
+    if (existing && existing.length > 0) {
+      return NextResponse.json(
+        { error: "Você já possui um agendamento neste dia. Cancele-o para poder fazer outro." },
+        { status: 400 }
+      )
+    }
     const { data: service } = await supabase
       .from("services")
       .select("price")
