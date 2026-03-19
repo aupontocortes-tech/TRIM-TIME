@@ -1,40 +1,59 @@
 # Deploy na Vercel (Trim Time)
 
-## Se aparecer 404 branco da Vercel (`NOT_FOUND`)
+## ⚠️ 404 branco `NOT_FOUND` (causa nº 1)
 
-Esse erro **não vem do Next.js** — a Vercel não encontrou um deploy válido para o endereço que você abriu.
+URLs longas tipo:
 
-### Checklist
+`trim-time-xxxx-1gubd2vpn-thiago-s-projects-xxxx.vercel.app`
 
-1. **Vercel → Project → Deployments**  
-   - O último deploy está **Ready** (verde)?  
-   - Se estiver **Error** ou **Canceled**, abra o log e corrija o erro.
+são **URL de um deploy específico** (muitas vezes **preview**). Elas **expiram** ou deixam de existir quando há novo deploy. **Não use esse link nos favoritos.**
 
-2. **URL correta**  
-   - Use o link **Visit** ao lado do deploy de **Production**.  
-   - Exemplo: `https://trim-time-xxx.vercel.app` (sem barra errada no fim).
+### Use sempre um destes:
 
-3. **Root Directory**  
-   - Em **Settings → General → Root Directory** deve estar **vazio** (raiz do repositório, onde está o `package.json`).
+1. **Production**  
+   Vercel → **Deployments** → no deploy com selo **Production**, clique **Visit**.  
+   Normalmente é algo como: `https://trim-time.vercel.app` (nome curto do projeto).
 
-4. **Framework Preset**  
-   - Deve ser **Next.js** (detecção automática costuma acertar).
+2. **Settings → Domains**  
+   Veja qual domínio está marcado como **Production** e abra só esse.
 
-5. **Output Directory**  
-   - Para Next.js, **não** configure “Output Directory” manualmente (deixe em branco / padrão).
+---
 
-6. **Redeploy**  
-   - **Deployments → ⋮ → Redeploy** no último commit que passou no build.
+## ⚠️ Branch de produção (`main` vs `master`)
 
-## Variáveis de ambiente
+O GitHub do Trim Time usa a branch **`master`**.
 
-No painel da Vercel, **Settings → Environment Variables**, replique o que você usa no `.env.local` (Supabase, `DATABASE_URL`, etc.) para **Production** (e Preview, se quiser).
+Na Vercel, o padrão costuma ser **`main`**. Se **Production Branch** estiver em `main` e você só faz push em `master`, **a produção pode ficar vazia ou antiga** e os links quebram.
 
-## Build local (igual à Vercel)
+**Corrija assim:**
+
+1. Vercel → **Settings** → **Git**
+2. Em **Production Branch**, escolha **`master`** (ou renomeie a branch no GitHub para `main` e use só ela).
+
+Salve e faça **Redeploy** do último commit.
+
+---
+
+## Outras verificações
+
+| Onde | O que conferir |
+|------|----------------|
+| **Deployments** | Último deploy **Ready** (verde), não Error/Canceled |
+| **Settings → General → Root Directory** | **Vazio** (raiz do repo, onde está `package.json`) |
+| **Output Directory** | **Não** preencher (Next.js na Vercel) |
+| **Ignored Build Step** | Vazio ou não ignorar builds sem querer |
+| **Environment Variables** | Copiar do `.env.local` para Production (Supabase, DB, etc.) |
+
+## Build local (igual ao da Vercel)
+
+Node **20.9+** (recomendado **22** — veja `.nvmrc`).
 
 ```bash
 npm ci
 npm run build
 ```
 
-Se isso passar no seu PC, o mesmo `npm run build` na Vercel deve funcionar com as mesmas variáveis necessárias em runtime.
+## Arquivos deste repo que ajudam a Vercel
+
+- `vercel.json` — `framework: nextjs`, `npm ci`, `npm run build`
+- `package.json` — `engines.node`, `postinstall` com `prisma generate`
