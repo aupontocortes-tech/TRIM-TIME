@@ -243,7 +243,7 @@ export default function BarbeariaPage() {
           <Card className="bg-card border-border">
             <CardContent className="p-6">
               <div className="flex justify-center mb-4">
-                <img src={barbearia.logo} alt="" className="w-14 h-14 rounded-full object-contain bg-background" />
+                <img src={barbearia.logo} alt="" className="w-14 h-14 rounded-2xl object-contain bg-background p-1.5" />
               </div>
               <h1 className="text-xl font-bold text-foreground text-center mb-1">Cadastre-se</h1>
               <p className="text-sm text-muted-foreground text-center mb-6">
@@ -346,7 +346,7 @@ export default function BarbeariaPage() {
           <Card className="bg-card border-border">
             <CardContent className="p-6">
               <div className="flex justify-center mb-4">
-                <img src={barbearia.logo} alt="" className="w-14 h-14 rounded-full object-contain bg-background" />
+                <img src={barbearia.logo} alt="" className="w-14 h-14 rounded-2xl object-contain bg-background p-1.5" />
               </div>
               <h1 className="text-xl font-bold text-foreground text-center mb-1">Entrar</h1>
               <p className="text-sm text-muted-foreground text-center mb-6">
@@ -502,8 +502,8 @@ export default function BarbeariaPage() {
         <div className="h-32 bg-gradient-to-r from-primary/30 to-primary/10" />
         <div className="max-w-2xl mx-auto px-4 -mt-12">
           <div className="flex items-end gap-4 mb-4">
-            <div className="w-24 h-24 rounded-full bg-background border-4 border-background overflow-hidden flex items-center justify-center shrink-0 ring-1 ring-border/40">
-              <img src={barbearia.logo} alt="Logo Trim Time" className="w-20 h-20 object-contain bg-background" />
+            <div className="w-24 h-24 rounded-2xl bg-background border-4 border-background overflow-hidden flex items-center justify-center shrink-0 ring-1 ring-border/40 p-1">
+              <img src={barbearia.logo} alt="Logo Trim Time" className="w-full h-full object-contain bg-background" />
             </div>
             <div className="pb-2">
               <h1 className="text-2xl font-bold text-foreground">{barbearia.nome}</h1>

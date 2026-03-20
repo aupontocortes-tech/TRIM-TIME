@@ -50,25 +50,27 @@ export function BrandLogo({
   return (
     <div
       className={cn(
-        /* Mesma cor do fundo do app (tema escuro) — áreas transparentes do PNG “somem” no layout */
-        "relative shrink-0 overflow-hidden rounded-full bg-background",
+        /* rounded-full + overflow cortava o topo do pente; quadrado arredondado + padding = logo inteiro */
+        "relative shrink-0 overflow-hidden rounded-2xl bg-background",
         withBorder && "border border-primary/40 shadow-[0_0_14px_rgba(201,162,39,0.22)]",
         sizeClass[size],
         className
       )}
     >
-      <Image
-        src={LOGO_SRC}
-        alt="Trim Time"
-        fill
-        sizes={sizesAttr(size)}
-        quality={100}
-        priority={isPriority}
-        /* PNG original: evita AVIF/WebP que podem suavizar ouro/detalhes finos do logo */
-        unoptimized
-        className="object-contain object-center p-0 [image-rendering:auto]"
-        draggable={false}
-      />
+      {/* Margem interna: o círculo dourado do PNG não encosta no limite — evita “cortar” detalhes no topo */}
+      <div className="absolute inset-[10%]">
+        <Image
+          src={LOGO_SRC}
+          alt="Trim Time"
+          fill
+          sizes={sizesAttr(size)}
+          quality={100}
+          priority={isPriority}
+          unoptimized
+          className="object-contain object-center [image-rendering:auto]"
+          draggable={false}
+        />
+      </div>
     </div>
   )
 }

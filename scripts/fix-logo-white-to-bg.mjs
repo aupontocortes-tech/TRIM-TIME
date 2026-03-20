@@ -32,6 +32,8 @@ function shouldReplaceWhite(r, g, b, a) {
   if (chroma <= 32 && lum >= 228) return true
   // Quase branco puro
   if (lum >= 248 && chroma <= 40) return true
+  // Halo claro em volta do dourado (anti-alias / fundo mal removido), sem tocar na pele (mais escura)
+  if (chroma <= 44 && lum >= 218) return true
   return false
 }
 
