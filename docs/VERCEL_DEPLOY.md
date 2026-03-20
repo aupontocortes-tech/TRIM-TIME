@@ -1,5 +1,27 @@
 # Deploy na Vercel (Trim Time)
 
+## ⚠️ Login no celular / site: erro `127.0.0.1:5432` ou "Can't reach database server"
+
+O app na Vercel **não usa o banco do seu PC**. Ele precisa da **mesma** connection string do Supabase que está no `.env.local`.
+
+### Obrigatório na Vercel (Environment Variables)
+
+No projeto Vercel: **Settings → Environment Variables** → adicione para **Production** (e **Preview**, se quiser):
+
+| Nome | Onde copiar |
+|------|-------------|
+| **`DATABASE_URL`** | Supabase → **Project Settings** → **Database** → *Connection string* → **URI** → modo **Session pooler** (porta **6543**). Substitua `[YOUR-PASSWORD]`. |
+| **`DIRECT_DATABASE_URL`** | Mesma tela → **Direct connection** (porta **5432**, host `db.xxx.supabase.co`). Útil para consistência com Prisma CLI; o app em runtime usa sobretudo `DATABASE_URL`. |
+| **`NEXT_PUBLIC_SUPABASE_URL`** | Supabase → **Settings → API** → Project URL |
+| **`NEXT_PUBLIC_SUPABASE_ANON_KEY`** | Supabase → **anon public** key |
+| **`SUPABASE_SERVICE_ROLE_KEY`** | Supabase → **service_role** (reveal) — **nunca** commite no Git |
+
+Depois: **Deployments → Redeploy** (sem cache, se puder).
+
+Se `DATABASE_URL` faltar na Vercel, o Prisma tentava `localhost` e aparecia erro no login (no celular e no próprio site).
+
+---
+
 ## ⚠️ 404 branco `NOT_FOUND` (causa nº 1)
 
 URLs longas tipo:
