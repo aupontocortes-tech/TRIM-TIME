@@ -30,12 +30,14 @@ function shouldReplaceWhite(r, g, b, a) {
   const mn = Math.min(r, g, b)
   const chroma = mx - mn
   const lum = 0.299 * r + 0.587 * g + 0.114 * b
-  // Branco / cinza muito claro (baixa saturação)
-  if (chroma <= 32 && lum >= 228) return true
-  // Quase branco puro
-  if (lum >= 248 && chroma <= 40) return true
-  // Halo claro em volta do dourado (anti-alias / fundo mal removido), sem tocar na pele (mais escura)
-  if (chroma <= 44 && lum >= 218) return true
+  // Quase branco / branco cremoso (muito claro, pouca “cor”)
+  if (lum >= 240 && chroma <= 52) return true
+  // Branco / cinza muito claro neutro
+  if (chroma <= 32 && lum >= 220) return true
+  // Cinza claro e halos (baixa saturação)
+  if (chroma <= 40 && lum >= 208) return true
+  // Halo junto ao dourado
+  if (chroma <= 44 && lum >= 200) return true
   return false
 }
 
