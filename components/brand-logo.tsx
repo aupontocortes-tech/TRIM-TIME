@@ -50,27 +50,24 @@ export function BrandLogo({
   return (
     <div
       className={cn(
-        /* rounded-full + overflow cortava o topo do pente; quadrado arredondado + padding = logo inteiro */
-        "relative shrink-0 overflow-hidden rounded-2xl bg-background",
+        /* Sem máscara circular (não corta o pente). Vermelho num print = só indicação, não é arte do logo. */
+        "relative shrink-0 overflow-hidden rounded-xl bg-background",
         withBorder && "border border-primary/40 shadow-[0_0_14px_rgba(201,162,39,0.22)]",
         sizeClass[size],
         className
       )}
     >
-      {/* Margem interna: o círculo dourado do PNG não encosta no limite — evita “cortar” detalhes no topo */}
-      <div className="absolute inset-[10%]">
-        <Image
-          src={LOGO_SRC}
-          alt="Trim Time"
-          fill
-          sizes={sizesAttr(size)}
-          quality={100}
-          priority={isPriority}
-          unoptimized
-          className="object-contain object-center [image-rendering:auto]"
-          draggable={false}
-        />
-      </div>
+      <Image
+        src={LOGO_SRC}
+        alt="Trim Time"
+        fill
+        sizes={sizesAttr(size)}
+        quality={100}
+        priority={isPriority}
+        unoptimized
+        className="object-contain object-center [image-rendering:auto]"
+        draggable={false}
+      />
     </div>
   )
 }

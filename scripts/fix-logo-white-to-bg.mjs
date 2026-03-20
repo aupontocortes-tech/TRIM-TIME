@@ -1,5 +1,7 @@
 /**
  * Troca pixels brancos / cinza-claro neutros (fundo do PNG) por preto do tema.
+ * Use só o PNG exportado do logo — NÃO uses prints de ecrã com anotações (vermelho, setas).
+ *
  * Não mexe em dourados (alto contraste entre R, G, B).
  *
  * Uso:

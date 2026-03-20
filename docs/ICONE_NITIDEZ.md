@@ -5,6 +5,10 @@
 - O **logo na interface** (`BrandLogo`) usa **`unoptimized`**: o navegador recebe o **PNG original** de `public/icon.png`, sem conversão para WebP/AVIF (que às vezes suaviza detalhes).
 - Os `sizes` pedem versões com mais pixels para telas **retina**.
 
+## Prints com marca a vermelho
+
+Se enviares um **print de ecrã** com traços **vermelhos** só para **mostrar onde** queres mudanças, isso **não** é o ficheiro do logo — é anotação. O ícone do app deve ser sempre o **PNG original** (sem setas nem rabiscos). O vermelho no print **não** se cola de volta no design.
+
 ## Fundo branco no ficheiro PNG (área em baixo / bordas)
 
 Se o PNG tiver **branco opaco** (comum em exportações), o CSS não consegue “apagar”. O projeto inclui um script que **pinta esses pixels de preto** (~cor do tema), sem estragar o dourado (detecta branco/cinza neutro, baixa saturação).
