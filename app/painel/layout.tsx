@@ -84,10 +84,20 @@ export default function PainelLayout({
         sidebarOpen ? "translate-x-0" : "-translate-x-full"
       }`}>
         <div className="flex flex-col h-full">
-          <div className="flex items-center justify-between gap-2 h-24 px-3 border-b border-border">
-            <Link href="/painel" className="flex flex-1 min-w-0 items-center justify-center h-full py-3 px-3 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset rounded-lg transition-opacity hover:opacity-95">
-              <BrandLogo size="xl" />
-            </Link>
+          <div className="flex items-center justify-between gap-2 min-h-[11rem] px-3 py-4 border-b border-border">
+            {/* flex-1 só no wrapper: o Link fica só no tamanho do quadrado → anel de foco dourado alinha com o ícone */}
+            <div className="flex min-w-0 flex-1 justify-center">
+              <Link
+                href="/painel"
+                className="inline-flex shrink-0 rounded-xl outline-none transition-opacity hover:opacity-95 focus:ring-2 focus:ring-primary focus:ring-inset focus:ring-offset-0 focus:ring-offset-transparent focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
+                aria-label="Ir para o dashboard"
+              >
+                {/* Quadro quadrado: mesmo tom da sidebar (bg-card), só borda neutra — sem brilho dourado no ícone */}
+                <div className="flex aspect-square h-44 w-44 max-w-full shrink-0 items-center justify-center rounded-xl border border-border/80 bg-card p-2 shadow-none">
+                  <BrandLogo size="panel" withBorder={false} priority />
+                </div>
+              </Link>
+            </div>
             <button 
               className="lg:hidden shrink-0 text-muted-foreground hover:text-foreground p-1"
               onClick={() => setSidebarOpen(false)}
