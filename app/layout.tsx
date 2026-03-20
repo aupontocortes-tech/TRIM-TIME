@@ -26,13 +26,7 @@ export const metadata: Metadata = {
   description: 'A plataforma completa para barbearias. Agendamentos online, gestão financeira e muito mais.',
   keywords: ['barbearia', 'agendamento', 'barber', 'corte', 'cabelo', 'barba', 'Trim Time'],
   manifest: '/manifest.json',
-  icons: {
-    icon: [
-      { url: '/icon.png', type: 'image/png' },
-      { url: '/icon.svg', type: 'image/svg+xml' },
-    ],
-    apple: '/icon.png',
-  },
+  // Ícones: use app/icon.png e app/apple-icon.png (convenção oficial do Next.js)
 }
 
 export const viewport: Viewport = {

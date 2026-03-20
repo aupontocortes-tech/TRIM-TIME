@@ -34,7 +34,7 @@ const barbeariaData = {
   slug: "trim-time",
   nome: "Trim Time",
   descricao: "Sua barbearia de confiança. Corte, barba e cuidado masculino.",
-  logo: "/logo-trim-time.png",
+  logo: "/icon.png",
   capa: "/placeholder.svg",
   endereco: "Rua das Flores, 123 - Centro",
   cidade: "São Paulo, SP",

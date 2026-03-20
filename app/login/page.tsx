@@ -30,11 +30,19 @@ export default function LoginPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: formData.email }),
+        credentials: "include",
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
         setError(err.error || "Email ou senha inválidos")
         setIsLoading(false)
+        return
+      }
+      await res.json().catch(() => ({}))
+      // Navegação completa: em vários celulares o cookie httpOnly ainda não entra
+      // a tempo do router.push; assim o /painel já carrega com a sessão.
+      if (typeof window !== "undefined") {
+        window.location.assign("/painel")
         return
       }
       router.push("/painel")

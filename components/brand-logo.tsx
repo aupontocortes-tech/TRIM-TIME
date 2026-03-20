@@ -1,8 +1,8 @@
 import Image from "next/image"
 import { cn } from "@/lib/utils"
 
-/** Logo oficial Trim Time (PNG); otimizado pelo Next (AVIF/WebP) para melhor nitidez. */
-const LOGO_SRC = "/logo-trim-time.png"
+/** Mesmo arquivo que `public/icon.png` e `app/icon.png` (favicon + UI). */
+const LOGO_SRC = "/icon.png"
 
 const sizeClass: Record<"sm" | "md" | "lg" | "xl" | "hero", string> = {
   sm: "h-9 w-9 min-h-9 min-w-9",
@@ -13,19 +13,20 @@ const sizeClass: Record<"sm" | "md" | "lg" | "xl" | "hero", string> = {
   hero: "h-20 w-20 min-h-20 min-w-20 sm:h-24 sm:w-24 sm:min-h-24 sm:min-w-24 md:h-[7rem] md:w-[7rem] md:min-h-[7rem] md:min-w-[7rem]",
 }
 
+/** Larguras “lógicas” um pouco maiores → Next gera src maior → mais nítido em telas retina (2x/3x). */
 function sizesAttr(size: keyof typeof sizeClass): string {
   switch (size) {
     case "hero":
-      return "(max-width: 640px) 80px, (max-width: 768px) 96px, 128px"
+      return "(max-width: 640px) 160px, (max-width: 768px) 192px, 256px"
     case "xl":
-      return "64px"
+      return "128px"
     case "lg":
-      return "48px"
+      return "96px"
     case "md":
-      return "44px"
+      return "88px"
     case "sm":
     default:
-      return "36px"
+      return "72px"
   }
 }
 
@@ -62,7 +63,9 @@ export function BrandLogo({
         sizes={sizesAttr(size)}
         quality={100}
         priority={isPriority}
-        className="object-contain p-0.5 [image-rendering:auto]"
+        /* PNG original: evita AVIF/WebP que podem suavizar ouro/detalhes finos do logo */
+        unoptimized
+        className="object-contain p-px [image-rendering:auto]"
         draggable={false}
       />
     </div>

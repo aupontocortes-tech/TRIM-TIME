@@ -50,7 +50,7 @@ Se quiser acessar o **Painel Admin** (`/admin`):
 npm run dev
 ```
 
-Abre [http://localhost:3001](http://localhost:3001), cadastre uma barbearia e use o painel.
+Abre [http://127.0.0.1:3000](http://127.0.0.1:3000) (ou `http://localhost:3000`), cadastre uma barbearia e use o painel.
 
 ---
 

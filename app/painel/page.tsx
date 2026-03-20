@@ -28,8 +28,8 @@ export default function PainelDashboard() {
     if (barbershopLoading) return
     const today = new Date().toISOString().slice(0, 10)
     Promise.all([
-      fetch("/api/dashboard").then((r) => (r.ok ? r.json() : null)),
-      fetch(`/api/appointments?date=${today}`).then((r) => (r.ok ? r.json() : [])),
+      fetch("/api/dashboard", { credentials: "include" }).then((r) => (r.ok ? r.json() : null)),
+      fetch(`/api/appointments?date=${today}`, { credentials: "include" }).then((r) => (r.ok ? r.json() : [])),
     ]).then(([dashboardData, appointments]) => {
       setStats(dashboardData)
       setAgendamentosHoje(Array.isArray(appointments) ? appointments : [])

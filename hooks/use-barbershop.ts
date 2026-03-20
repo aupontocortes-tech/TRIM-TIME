@@ -28,8 +28,8 @@ export function useBarbershop(): BarbershopState {
     setError(null)
     try {
       const [bsRes, subRes] = await Promise.all([
-        fetch("/api/barbershops"),
-        fetch("/api/subscriptions"),
+        fetch("/api/barbershops", { credentials: "include" }),
+        fetch("/api/subscriptions", { credentials: "include" }),
       ])
       if (bsRes.ok && bsRes.status !== 204) {
         const data = await bsRes.json()

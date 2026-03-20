@@ -53,6 +53,7 @@ function CadastroPageContent() {
         const res = await fetch("/api/barbershops", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          credentials: "include",
           body: JSON.stringify({
             name: formData.nomeBarbearia || formData.nome,
             email: formData.email,
@@ -67,11 +68,17 @@ function CadastroPageContent() {
         const sessionRes = await fetch("/api/auth/session", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          credentials: "include",
           body: JSON.stringify({ barbershop_id: barbershop.id }),
         })
         if (!sessionRes.ok) {
           const err = await sessionRes.json().catch(() => ({}))
           throw new Error(err.error || "Erro ao iniciar sessão")
+        }
+        await sessionRes.json().catch(() => ({}))
+        if (typeof window !== "undefined") {
+          window.location.assign("/painel")
+          return
         }
         router.push("/painel")
       } else {
