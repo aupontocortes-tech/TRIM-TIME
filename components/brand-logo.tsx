@@ -50,7 +50,8 @@ export function BrandLogo({
   return (
     <div
       className={cn(
-        "relative shrink-0 overflow-hidden rounded-lg bg-black",
+        /* Mesma cor do fundo do app (tema escuro) — áreas transparentes do PNG “somem” no layout */
+        "relative shrink-0 overflow-hidden rounded-full bg-background",
         withBorder && "border border-primary/40 shadow-[0_0_14px_rgba(201,162,39,0.22)]",
         sizeClass[size],
         className
@@ -65,7 +66,7 @@ export function BrandLogo({
         priority={isPriority}
         /* PNG original: evita AVIF/WebP que podem suavizar ouro/detalhes finos do logo */
         unoptimized
-        className="object-contain p-px [image-rendering:auto]"
+        className="object-contain object-center p-0 [image-rendering:auto]"
         draggable={false}
       />
     </div>
