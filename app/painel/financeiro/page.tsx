@@ -1,7 +1,8 @@
 "use client"
 
-import { useState } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { useState, useEffect, useCallback } from "react"
+import Link from "next/link"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { 
   DollarSign,
@@ -11,8 +12,10 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Download,
-  Filter
+  Filter,
+  Wallet,
 } from "lucide-react"
+import type { CommissionsSummaryResponse } from "@/lib/commissions"
 import { 
   BarChart, 
   Bar, 
@@ -74,11 +77,73 @@ const transacoesRecentes = [
 
 const periodos = ["Hoje", "Esta Semana", "Este Mês", "Este Ano"]
 
+function pad2(n: number) {
+  return String(n).padStart(2, "0")
+}
+
+/** Datas locais YYYY-MM-DD (evita deslocar dia com UTC). */
+function toYMD(d: Date) {
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
+}
+
+function dateRangeForPeriod(period: string): { from: string; to: string } {
+  const now = new Date()
+  const to = toYMD(now)
+  if (period === "Hoje") return { from: to, to }
+  if (period === "Esta Semana") {
+    const d = new Date(now)
+    const day = d.getDay()
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1)
+    d.setDate(diff)
+    return { from: toYMD(d), to }
+  }
+  if (period === "Este Mês") {
+    const d = new Date(now.getFullYear(), now.getMonth(), 1)
+    return { from: toYMD(d), to }
+  }
+  const d = new Date(now.getFullYear(), 0, 1)
+  return { from: toYMD(d), to }
+}
+
 export default function FinanceiroPage() {
   const [periodoSelecionado, setPeriodoSelecionado] = useState("Este Mês")
+  const [commissionSummary, setCommissionSummary] = useState<CommissionsSummaryResponse | null>(null)
+  const [commissionLoading, setCommissionLoading] = useState(true)
+
+  const loadCommissions = useCallback(async (period: string) => {
+    setCommissionLoading(true)
+    try {
+      const { from, to } = dateRangeForPeriod(period)
+      const res = await fetch(
+        `/api/commissions/summary?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+        { credentials: "include" }
+      )
+      if (!res.ok) {
+        setCommissionSummary(null)
+        return
+      }
+      const data = (await res.json()) as CommissionsSummaryResponse
+      setCommissionSummary(data)
+    } catch {
+      setCommissionSummary(null)
+    } finally {
+      setCommissionLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadCommissions(periodoSelecionado)
+  }, [periodoSelecionado, loadCommissions])
 
   const crescimento = ((resumoFinanceiro.faturamentoMes - resumoFinanceiro.faturamentoMesAnterior) / resumoFinanceiro.faturamentoMesAnterior * 100).toFixed(1)
   const crescimentoPositivo = Number(crescimento) > 0
+
+  const commissionChartData = (commissionSummary?.byBarber ?? []).map((b) => ({
+    nome:
+      b.barber_name.length > 16 ? `${b.barber_name.slice(0, 14)}…` : b.barber_name,
+    comissao: b.amount,
+    fullName: b.barber_name,
+  }))
 
   return (
     <div className="space-y-6">
@@ -119,7 +184,7 @@ export default function FinanceiroPage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
         <Card className="bg-card border-border">
           <CardContent className="p-6">
             <div className="flex items-center justify-between mb-4">
@@ -171,7 +236,109 @@ export default function FinanceiroPage() {
             <p className="text-2xl font-bold text-foreground">R${resumoFinanceiro.ticketMedio}</p>
           </CardContent>
         </Card>
+
+        <Card className="bg-card border-border">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center">
+                <Wallet className="w-5 h-5 text-amber-500" />
+              </div>
+            </div>
+            <p className="text-sm text-muted-foreground mb-1">Comissões (período)</p>
+            {commissionLoading ? (
+              <p className="text-2xl font-bold text-foreground">—</p>
+            ) : commissionSummary?.enabled ? (
+              <p className="text-2xl font-bold text-foreground">
+                R$
+                {(commissionSummary.total ?? 0).toLocaleString("pt-BR", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
+              </p>
+            ) : (
+              <>
+                <p className="text-lg font-semibold text-muted-foreground">Pro / Premium</p>
+                <Link href="/painel/configuracoes" className="text-xs text-primary hover:underline mt-1 inline-block">
+                  Ver planos em Configurações
+                </Link>
+              </>
+            )}
+          </CardContent>
+        </Card>
       </div>
+
+      {/* Comissões por barbeiro (Pro/Premium) */}
+      <Card className="bg-card border-border">
+        <CardHeader>
+          <CardTitle className="text-foreground">Comissões por barbeiro</CardTitle>
+          <CardDescription className="text-muted-foreground">
+            Valores com base em agendamentos concluídos ou confirmados com preço, no período selecionado
+            acima. Ajuste a % de cada um em Configurações → Equipe.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {commissionLoading ? (
+            <p className="text-sm text-muted-foreground py-12 text-center">Carregando…</p>
+          ) : !commissionSummary?.enabled ? (
+            <div className="py-10 text-center space-y-3">
+              <p className="text-muted-foreground text-sm max-w-md mx-auto">
+                Comissão por barbeiro está disponível nos planos <strong className="text-foreground">Pro</strong> e{" "}
+                <strong className="text-foreground">Premium</strong>. Faça upgrade para definir a % de cada
+                profissional e acompanhar aqui.
+              </p>
+              <Button asChild variant="outline" className="border-border">
+                <Link href="/painel/configuracoes">Abrir Configurações</Link>
+              </Button>
+            </div>
+          ) : commissionChartData.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-12 text-center">
+              Nenhum dado no período. Confira se os agendamentos têm valor e status concluído/confirmado.
+            </p>
+          ) : (
+            <div className="h-72 w-full min-h-[280px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  layout="vertical"
+                  data={commissionChartData}
+                  margin={{ left: 8, right: 16, top: 8, bottom: 8 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
+                  <XAxis
+                    type="number"
+                    stroke="var(--muted-foreground)"
+                    fontSize={12}
+                    tickFormatter={(v) => `R$${v}`}
+                  />
+                  <YAxis
+                    type="category"
+                    dataKey="nome"
+                    width={100}
+                    stroke="var(--muted-foreground)"
+                    fontSize={11}
+                    tickLine={false}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "var(--card)",
+                      border: "1px solid var(--border)",
+                      borderRadius: "8px",
+                    }}
+                    labelStyle={{ color: "var(--foreground)" }}
+                    formatter={(value: number | string, _name, item) => {
+                      const row = item?.payload as { fullName?: string }
+                      return [
+                        `R$${Number(value).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`,
+                        row?.fullName ?? "Comissão",
+                      ]
+                    }}
+                  />
+                  <Bar dataKey="comissao" fill="var(--primary)" radius={[0, 6, 6, 0]} name="Comissão" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Charts */}
       <div className="grid lg:grid-cols-2 gap-6">

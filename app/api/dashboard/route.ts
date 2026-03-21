@@ -2,6 +2,9 @@ import { NextResponse } from "next/server"
 import { createServiceRoleClient } from "@/lib/supabase/server"
 import { requireBarbershopId } from "@/lib/tenant"
 import type { DashboardStats } from "@/lib/db/types"
+import { fetchEffectivePlanForBarbershop } from "@/lib/barbershop-plan-server"
+import { hasFeature } from "@/lib/plans"
+import { aggregateCommissionsForRange } from "@/lib/commissions"
 
 export async function GET() {
   try {
@@ -70,12 +73,22 @@ export async function GET() {
       }
     }
 
+    const plan = await fetchEffectivePlanForBarbershop(barbershopId)
+    const commissionEnabled = !!(plan && hasFeature(plan, "barber_commission"))
+    let commissionMonth = 0
+    if (commissionEnabled) {
+      const { total } = await aggregateCommissionsForRange(supabase, barbershopId, startOfMonthStr, today)
+      commissionMonth = total
+    }
+
     const stats: DashboardStats = {
       appointmentsToday,
       revenueToday,
       revenueMonth,
       topBarber,
       newClientsMonth,
+      commissionMonth,
+      commissionEnabled,
     }
     return NextResponse.json(stats)
   } catch (e) {

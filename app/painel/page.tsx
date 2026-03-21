@@ -11,7 +11,8 @@ import {
   Clock,
   Check,
   X,
-  ChevronRight
+  ChevronRight,
+  Wallet,
 } from "lucide-react"
 import Link from "next/link"
 import { useBarbershop } from "@/hooks/use-barbershop"
@@ -54,7 +55,7 @@ export default function PainelDashboard() {
         </Link>
       </div>
 
-      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
         <Card className="bg-card border-border">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
@@ -117,6 +118,41 @@ export default function PainelDashboard() {
               </div>
               <div className="w-12 h-12 rounded-lg bg-blue-500/10 flex items-center justify-center">
                 <TrendingUp className="w-6 h-6 text-blue-500" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-card border-border">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm text-muted-foreground mb-1">Comissões (mês)</p>
+                {isLoading ? (
+                  <p className="text-3xl font-bold text-foreground">—</p>
+                ) : stats?.commissionEnabled ? (
+                  <>
+                    <p className="text-3xl font-bold text-foreground">
+                      R${(stats.commissionMonth ?? 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </p>
+                    <Link
+                      href="/painel/financeiro"
+                      className="text-xs text-primary hover:underline mt-1 inline-block"
+                    >
+                      Ver no financeiro
+                    </Link>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-lg font-semibold text-muted-foreground">Plano Pro / Premium</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Defina % por barbeiro em Configurações
+                    </p>
+                  </>
+                )}
+              </div>
+              <div className="w-12 h-12 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0">
+                <Wallet className="w-6 h-6 text-amber-500" />
               </div>
             </div>
           </CardContent>

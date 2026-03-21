@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server"
 import { createServiceRoleClient } from "@/lib/supabase/server"
 import { requireBarbershopId } from "@/lib/tenant"
-import { canAddBarber, getBarberLimitMessage } from "@/lib/plans"
+import { canAddBarber, getBarberLimitMessage, getUpgradeMessage, hasFeature } from "@/lib/plans"
 import { getEffectivePlanForBarbershop } from "@/lib/subscription"
+import { fetchEffectivePlanForBarbershop } from "@/lib/barbershop-plan-server"
 import type { Barber } from "@/lib/db/types"
 
 export async function GET() {
@@ -59,13 +60,33 @@ export async function POST(request: Request) {
     if (!body.name?.trim()) {
       return NextResponse.json({ error: "Nome é obrigatório" }, { status: 400 })
     }
+
+    const planForCommission = await fetchEffectivePlanForBarbershop(barbershopId)
+    const commissionAllowed = !!(planForCommission && hasFeature(planForCommission, "barber_commission"))
+    let commission = body.commission ?? 0
+    if (!commissionAllowed) {
+      if (body.commission != null && Number(body.commission) !== 0) {
+        return NextResponse.json(
+          { error: getUpgradeMessage("barber_commission"), code: "PLAN_FEATURE" },
+          { status: 403 }
+        )
+      }
+      commission = 0
+    } else {
+      const c = Number(commission)
+      if (!Number.isFinite(c) || c < 0 || c > 100) {
+        return NextResponse.json({ error: "Comissão deve ser entre 0 e 100%." }, { status: 400 })
+      }
+      commission = c
+    }
+
     const { data, error } = await supabase
       .from("barbers")
       .insert({
         barbershop_id: barbershopId,
         name: body.name.trim(),
         phone: body.phone?.trim() ?? null,
-        commission: body.commission ?? 0,
+        commission,
         active: true,
       })
       .select()

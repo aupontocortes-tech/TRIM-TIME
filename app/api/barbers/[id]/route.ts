@@ -2,6 +2,8 @@ import { NextResponse } from "next/server"
 import { createServiceRoleClient } from "@/lib/supabase/server"
 import { requireBarbershopId } from "@/lib/tenant"
 import type { Barber } from "@/lib/db/types"
+import { fetchEffectivePlanForBarbershop } from "@/lib/barbershop-plan-server"
+import { getUpgradeMessage, hasFeature } from "@/lib/plans"
 
 export async function PATCH(
   _request: Request,
@@ -12,12 +14,41 @@ export async function PATCH(
     const { id } = await params
     const body = await _request.json() as Partial<Pick<Barber, "name" | "phone" | "commission" | "active">>
     const supabase = createServiceRoleClient()
+
+    const update: Record<string, unknown> = {
+      updated_at: new Date().toISOString(),
+    }
+    if (body.name !== undefined) {
+      const n = String(body.name).trim()
+      if (!n) return NextResponse.json({ error: "Nome não pode ser vazio." }, { status: 400 })
+      update.name = n
+    }
+    if (body.phone !== undefined) update.phone = body.phone?.trim() || null
+    if (body.active !== undefined) update.active = Boolean(body.active)
+
+    if (body.commission !== undefined) {
+      const plan = await fetchEffectivePlanForBarbershop(barbershopId)
+      const allowed = !!(plan && hasFeature(plan, "barber_commission"))
+      const c = Number(body.commission)
+      if (!allowed) {
+        if (c !== 0) {
+          return NextResponse.json(
+            { error: getUpgradeMessage("barber_commission"), code: "PLAN_FEATURE" },
+            { status: 403 }
+          )
+        }
+        update.commission = 0
+      } else {
+        if (!Number.isFinite(c) || c < 0 || c > 100) {
+          return NextResponse.json({ error: "Comissão deve ser entre 0 e 100%." }, { status: 400 })
+        }
+        update.commission = c
+      }
+    }
+
     const { data, error } = await supabase
       .from("barbers")
-      .update({
-        ...body,
-        updated_at: new Date().toISOString(),
-      })
+      .update(update)
       .eq("id", id)
       .eq("barbershop_id", barbershopId)
       .select()

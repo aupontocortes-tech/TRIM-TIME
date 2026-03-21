@@ -120,6 +120,9 @@ export interface DashboardStats {
   revenueMonth: number
   topBarber: { barber_id: string; barber_name: string; count: number } | null
   newClientsMonth: number
+  /** Comissões dos barbeiros no mês (só plano Pro/Premium; senão 0). */
+  commissionMonth: number
+  commissionEnabled: boolean
 }
 
 export type NotificationType = "push" | "email" | "whatsapp"

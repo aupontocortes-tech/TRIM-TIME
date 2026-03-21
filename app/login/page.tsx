@@ -1,24 +1,45 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { FieldGroup, Field, FieldLabel } from "@/components/ui/field"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Eye, EyeOff, ArrowLeft } from "lucide-react"
 import { BrandLogo } from "@/components/brand-logo"
+
+/** Dados salvos só neste aparelho (localStorage). Não use em computadores compartilhados. */
+const SAVED_LOGIN_KEY = "trimtime_saved_login_v1"
+
+type SavedLogin = { email: string; password: string }
 
 export default function LoginPage() {
   const router = useRouter()
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [rememberDevice, setRememberDevice] = useState(false)
   const [formData, setFormData] = useState({
     email: "",
     password: ""
   })
   const [error, setError] = useState("")
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(SAVED_LOGIN_KEY)
+      if (!raw) return
+      const parsed = JSON.parse(raw) as SavedLogin
+      if (parsed?.email && typeof parsed.password === "string") {
+        setFormData({ email: parsed.email, password: parsed.password })
+        setRememberDevice(true)
+      }
+    } catch {
+      localStorage.removeItem(SAVED_LOGIN_KEY)
+    }
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -39,6 +60,17 @@ export default function LoginPage() {
         return
       }
       await res.json().catch(() => ({}))
+      if (typeof window !== "undefined") {
+        if (rememberDevice) {
+          const payload: SavedLogin = {
+            email: formData.email.trim().toLowerCase(),
+            password: formData.password,
+          }
+          localStorage.setItem(SAVED_LOGIN_KEY, JSON.stringify(payload))
+        } else {
+          localStorage.removeItem(SAVED_LOGIN_KEY)
+        }
+      }
       // Navegação completa: em vários celulares o cookie httpOnly ainda não entra
       // a tempo do router.push; assim o /painel já carrega com a sessão.
       if (typeof window !== "undefined") {
@@ -73,8 +105,11 @@ export default function LoginPage() {
 
         <Card className="bg-card border-border">
           <CardHeader className="text-center pb-2">
-            <div className="flex justify-center mb-4">
-              <BrandLogo size="lg" />
+            <div className="mb-4 flex justify-center">
+              {/* Quadro neutro alinhado ao tema — sem auréola dourada (BrandLogo withBorder) */}
+              <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-xl border border-border/80 bg-card p-2 shadow-none">
+                <BrandLogo size="xl" withBorder={false} priority />
+              </div>
             </div>
             <h1 className="text-2xl font-bold text-foreground">Área do Barbeiro</h1>
             <p className="text-muted-foreground">Acesse sua barbearia no Trim Time</p>
@@ -132,6 +167,15 @@ export default function LoginPage() {
                   </div>
                 </Field>
               </FieldGroup>
+
+              <div className="flex justify-start pt-1">
+                <Checkbox
+                  checked={rememberDevice}
+                  onCheckedChange={(v) => setRememberDevice(v === true)}
+                  className="size-5 shrink-0 rounded-[4px] border-2 border-border"
+                  aria-label="Salvar e-mail e senha neste aparelho"
+                />
+              </div>
 
               <Button 
                 type="submit" 

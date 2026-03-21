@@ -1,6 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useCallback } from "react"
+import { useBarbershop } from "@/hooks/use-barbershop"
+import { hasFeature } from "@/lib/plans"
+import type { Barber } from "@/lib/db/types"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -51,12 +54,6 @@ const horariosFuncionamento = {
   domingo: { ativo: false, abertura: "09:00", fechamento: "18:00" },
 }
 
-const profissionais = [
-  { id: 1, nome: "Carlos Silva", email: "carlos@email.com", ativo: true, comissao: 50 },
-  { id: 2, nome: "João Pedro", email: "joao@email.com", ativo: true, comissao: 50 },
-  { id: 3, nome: "Rafael Santos", email: "rafael@email.com", ativo: true, comissao: 45 },
-]
-
 const servicos = [
   { id: 1, nome: "Corte Tradicional", duracao: 30, preco: 35, ativo: true },
   { id: 2, nome: "Corte Degradê", duracao: 40, preco: 45, ativo: true },
@@ -77,17 +74,66 @@ const diasSemana = [
 ]
 
 export default function ConfiguracoesPage() {
+  const { plan, barbershop } = useBarbershop()
+  const commissionFeature = plan != null && hasFeature(plan, "barber_commission")
+
   const [barbearia, setBarbearia] = useState(dadosBarbearia)
   const [horarios, setHorarios] = useState(horariosFuncionamento)
   const [listaServicos, setListaServicos] = useState(servicos)
-  const [listaProfissionais, setListaProfissionais] = useState(profissionais)
+  const [barbers, setBarbers] = useState<Barber[]>([])
+  const [barbersLoading, setBarbersLoading] = useState(true)
+  const [equipeError, setEquipeError] = useState<string | null>(null)
+  const [equipeBusy, setEquipeBusy] = useState(false)
+  const [origin, setOrigin] = useState("")
+  const [addOpen, setAddOpen] = useState(false)
+  const [newName, setNewName] = useState("")
+  const [newPhone, setNewPhone] = useState("")
+  const [newCommission, setNewCommission] = useState("50")
+  const [editOpen, setEditOpen] = useState(false)
+  const [editing, setEditing] = useState<Barber | null>(null)
+  const [editName, setEditName] = useState("")
+  const [editPhone, setEditPhone] = useState("")
+  const [editCommission, setEditCommission] = useState("50")
+  const [editActive, setEditActive] = useState(true)
+
   const [isSaving, setIsSaving] = useState(false)
   const [linkCopiado, setLinkCopiado] = useState(false)
 
-  const linkAgendamento = `trimtime.com/b/${barbearia.slug}`
+  useEffect(() => {
+    setOrigin(typeof window !== "undefined" ? window.location.origin : "")
+  }, [])
+
+  const loadBarbers = useCallback(async () => {
+    setBarbersLoading(true)
+    setEquipeError(null)
+    try {
+      const r = await fetch("/api/barbers", { credentials: "include" })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        setEquipeError(typeof j.error === "string" ? j.error : "Erro ao carregar equipe")
+        setBarbers([])
+        return
+      }
+      const data = await r.json()
+      setBarbers(Array.isArray(data) ? data : [])
+    } catch {
+      setEquipeError("Erro de rede ao carregar equipe")
+      setBarbers([])
+    } finally {
+      setBarbersLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadBarbers()
+  }, [loadBarbers])
+
+  const linkAgendamento =
+    origin && barbershop?.slug ? `${origin}/b/${barbershop.slug}` : barbershop?.slug ? `/b/${barbershop.slug}` : "—"
 
   const copiarLink = () => {
-    navigator.clipboard.writeText(`https://${linkAgendamento}`)
+    const full = origin && barbershop?.slug ? `${origin}/b/${barbershop.slug}` : ""
+    if (full) void navigator.clipboard.writeText(full)
     setLinkCopiado(true)
     setTimeout(() => setLinkCopiado(false), 2000)
   }
@@ -111,10 +157,140 @@ export default function ConfiguracoesPage() {
     ))
   }
 
-  const toggleProfissional = (id: number) => {
-    setListaProfissionais(prev => prev.map(p => 
-      p.id === id ? { ...p, ativo: !p.ativo } : p
-    ))
+  const openEdit = (b: Barber) => {
+    setEditing(b)
+    setEditName(b.name)
+    setEditPhone(b.phone ?? "")
+    setEditCommission(String(Number(b.commission) || 0))
+    setEditActive(b.active)
+    setEditOpen(true)
+  }
+
+  const handleAddBarber = async () => {
+    if (!newName.trim()) return
+    setEquipeBusy(true)
+    setEquipeError(null)
+    try {
+      const body: { name: string; phone?: string; commission?: number } = {
+        name: newName.trim(),
+        phone: newPhone.trim() || undefined,
+      }
+      if (commissionFeature) {
+        const c = Math.min(100, Math.max(0, Number(newCommission)))
+        if (!Number.isFinite(c)) {
+          setEquipeError("Comissão inválida (use 0 a 100).")
+          setEquipeBusy(false)
+          return
+        }
+        body.commission = c
+      }
+      const r = await fetch("/api/barbers", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) {
+        setEquipeError(typeof j.error === "string" ? j.error : "Não foi possível adicionar")
+        setEquipeBusy(false)
+        return
+      }
+      setAddOpen(false)
+      setNewName("")
+      setNewPhone("")
+      setNewCommission("50")
+      await loadBarbers()
+    } catch {
+      setEquipeError("Erro de rede")
+    } finally {
+      setEquipeBusy(false)
+    }
+  }
+
+  const handleSaveEdit = async () => {
+    if (!editing || !editName.trim()) return
+    setEquipeBusy(true)
+    setEquipeError(null)
+    try {
+      const patch: Partial<Pick<Barber, "name" | "phone" | "active" | "commission">> = {
+        name: editName.trim(),
+        phone: editPhone.trim() || null,
+        active: editActive,
+      }
+      if (commissionFeature) {
+        const c = Math.min(100, Math.max(0, Number(editCommission)))
+        if (!Number.isFinite(c)) {
+          setEquipeError("Comissão inválida (use 0 a 100).")
+          setEquipeBusy(false)
+          return
+        }
+        patch.commission = c
+      }
+      const r = await fetch(`/api/barbers/${editing.id}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) {
+        setEquipeError(typeof j.error === "string" ? j.error : "Não foi possível salvar")
+        setEquipeBusy(false)
+        return
+      }
+      setEditOpen(false)
+      setEditing(null)
+      await loadBarbers()
+    } catch {
+      setEquipeError("Erro de rede")
+    } finally {
+      setEquipeBusy(false)
+    }
+  }
+
+  const handleDeleteBarber = async (b: Barber) => {
+    if (!confirm(`Remover ${b.name} da equipe?`)) return
+    setEquipeBusy(true)
+    setEquipeError(null)
+    try {
+      const r = await fetch(`/api/barbers/${b.id}`, { method: "DELETE", credentials: "include" })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        setEquipeError(typeof j.error === "string" ? j.error : "Erro ao remover")
+        setEquipeBusy(false)
+        return
+      }
+      await loadBarbers()
+    } catch {
+      setEquipeError("Erro de rede")
+    } finally {
+      setEquipeBusy(false)
+    }
+  }
+
+  const toggleBarberActive = async (b: Barber) => {
+    setEquipeBusy(true)
+    setEquipeError(null)
+    try {
+      const r = await fetch(`/api/barbers/${b.id}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ active: !b.active }),
+      })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) {
+        setEquipeError(typeof j.error === "string" ? j.error : "Erro ao atualizar")
+        setEquipeBusy(false)
+        return
+      }
+      await loadBarbers()
+    } catch {
+      setEquipeError("Erro de rede")
+    } finally {
+      setEquipeBusy(false)
+    }
   }
 
   return (
@@ -420,85 +596,213 @@ export default function ConfiguracoesPage() {
         {/* Tab: Equipe */}
         <TabsContent value="equipe">
           <Card className="bg-card border-border">
-            <CardHeader className="flex flex-row items-center justify-between">
+            <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <CardTitle className="text-foreground">Equipe</CardTitle>
                 <CardDescription className="text-muted-foreground">
-                  Gerencie os profissionais da barbearia
+                  Profissionais da barbearia. Comissão (% sobre o valor do atendimento) nos planos{" "}
+                  <strong className="text-foreground">Pro</strong> e <strong className="text-foreground">Premium</strong>.
                 </CardDescription>
+                {!commissionFeature && (
+                  <p className="text-sm text-amber-600/90 dark:text-amber-400/90 mt-2">
+                    No plano Básico a comissão fica em 0%. Faça upgrade para definir % por barbeiro.
+                  </p>
+                )}
               </div>
-              <Dialog>
+              <Dialog open={addOpen} onOpenChange={setAddOpen}>
                 <DialogTrigger asChild>
-                  <Button className="bg-primary text-primary-foreground hover:bg-primary/90">
+                  <Button className="bg-primary text-primary-foreground hover:bg-primary/90 shrink-0">
                     <Plus className="w-4 h-4 mr-2" />
-                    Novo Profissional
+                    Novo profissional
                   </Button>
                 </DialogTrigger>
                 <DialogContent className="bg-card border-border">
                   <DialogHeader>
-                    <DialogTitle className="text-foreground">Adicionar Profissional</DialogTitle>
+                    <DialogTitle className="text-foreground">Adicionar profissional</DialogTitle>
                   </DialogHeader>
                   <FieldGroup>
                     <Field>
-                      <FieldLabel>Nome Completo</FieldLabel>
-                      <Input className="bg-input border-border text-foreground" placeholder="Nome do profissional" />
+                      <FieldLabel>Nome</FieldLabel>
+                      <Input
+                        className="bg-input border-border text-foreground"
+                        placeholder="Nome do barbeiro"
+                        value={newName}
+                        onChange={(e) => setNewName(e.target.value)}
+                      />
                     </Field>
                     <Field>
-                      <FieldLabel>Email</FieldLabel>
-                      <Input type="email" className="bg-input border-border text-foreground" placeholder="email@exemplo.com" />
+                      <FieldLabel>Telefone (opcional)</FieldLabel>
+                      <Input
+                        className="bg-input border-border text-foreground"
+                        placeholder="(11) 99999-9999"
+                        value={newPhone}
+                        onChange={(e) => setNewPhone(e.target.value)}
+                      />
                     </Field>
-                    <Field>
-                      <FieldLabel>Comissão (%)</FieldLabel>
-                      <Input type="number" className="bg-input border-border text-foreground" placeholder="50" />
-                    </Field>
-                    <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90">
-                      Adicionar Profissional
+                    {commissionFeature && (
+                      <Field>
+                        <FieldLabel>Comissão (%)</FieldLabel>
+                        <Input
+                          type="number"
+                          min={0}
+                          max={100}
+                          step={0.5}
+                          className="bg-input border-border text-foreground"
+                          placeholder="50"
+                          value={newCommission}
+                          onChange={(e) => setNewCommission(e.target.value)}
+                        />
+                        <p className="text-xs text-muted-foreground mt-1">Porcentagem sobre o valor do serviço (0 a 100).</p>
+                      </Field>
+                    )}
+                    <Button
+                      className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+                      disabled={equipeBusy || !newName.trim()}
+                      onClick={() => void handleAddBarber()}
+                    >
+                      {equipeBusy ? "Salvando…" : "Adicionar"}
                     </Button>
                   </FieldGroup>
                 </DialogContent>
               </Dialog>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                {listaProfissionais.map((prof) => (
-                  <div 
-                    key={prof.id}
-                    className={`flex items-center gap-4 p-4 rounded-lg border transition-colors ${
-                      prof.ativo ? 'border-border bg-secondary/30' : 'border-border/50 bg-secondary/10'
-                    }`}
-                  >
-                    <Switch
-                      checked={prof.ativo}
-                      onCheckedChange={() => toggleProfissional(prof.id)}
-                    />
-                    <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
-                      <span className="font-semibold text-primary">
-                        {prof.nome.split(' ').map(n => n[0]).join('').slice(0, 2)}
-                      </span>
+              {equipeError && (
+                <div className="mb-4 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+                  {equipeError}
+                </div>
+              )}
+              {barbersLoading ? (
+                <p className="text-sm text-muted-foreground py-8 text-center">Carregando equipe…</p>
+              ) : barbers.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-8 text-center">Nenhum profissional cadastrado.</p>
+              ) : (
+                <div className="space-y-3">
+                  {barbers.map((prof) => (
+                    <div
+                      key={prof.id}
+                      className={`flex flex-wrap items-center gap-4 p-4 rounded-lg border transition-colors ${
+                        prof.active ? "border-border bg-secondary/30" : "border-border/50 bg-secondary/10"
+                      }`}
+                    >
+                      <Switch
+                        checked={prof.active}
+                        disabled={equipeBusy}
+                        onCheckedChange={() => void toggleBarberActive(prof)}
+                      />
+                      <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
+                        <span className="font-semibold text-primary text-sm">
+                          {prof.name
+                            .split(" ")
+                            .map((n) => n[0])
+                            .join("")
+                            .slice(0, 2)
+                            .toUpperCase()}
+                        </span>
+                      </div>
+                      <div className="flex-1 min-w-[140px]">
+                        <p className={`font-medium ${prof.active ? "text-foreground" : "text-muted-foreground"}`}>
+                          {prof.name}
+                        </p>
+                        {prof.phone && (
+                          <p className="text-sm text-muted-foreground">{prof.phone}</p>
+                        )}
+                      </div>
+                      <div className="text-center min-w-[72px]">
+                        <p className="text-lg font-semibold text-primary">
+                          {commissionFeature ? `${Number(prof.commission) || 0}%` : "—"}
+                        </p>
+                        <p className="text-xs text-muted-foreground">comissão</p>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                          disabled={equipeBusy}
+                          onClick={() => openEdit(prof)}
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                          disabled={equipeBusy}
+                          onClick={() => void handleDeleteBarber(prof)}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </div>
-                    <div className="flex-1">
-                      <p className={`font-medium ${prof.ativo ? 'text-foreground' : 'text-muted-foreground'}`}>
-                        {prof.nome}
-                      </p>
-                      <p className="text-sm text-muted-foreground">{prof.email}</p>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-lg font-semibold text-primary">{prof.comissao}%</p>
-                      <p className="text-xs text-muted-foreground">comissão</p>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground hover:text-foreground">
-                        <Edit2 className="w-4 h-4" />
-                      </Button>
-                      <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:bg-destructive/10">
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
+
+          <Dialog
+            open={editOpen}
+            onOpenChange={(open) => {
+              setEditOpen(open)
+              if (!open) setEditing(null)
+            }}
+          >
+            <DialogContent className="bg-card border-border">
+              <DialogHeader>
+                <DialogTitle className="text-foreground">Editar profissional</DialogTitle>
+              </DialogHeader>
+              {editing && (
+                <FieldGroup>
+                  <Field>
+                    <FieldLabel>Nome</FieldLabel>
+                    <Input
+                      className="bg-input border-border text-foreground"
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel>Telefone</FieldLabel>
+                    <Input
+                      className="bg-input border-border text-foreground"
+                      value={editPhone}
+                      onChange={(e) => setEditPhone(e.target.value)}
+                    />
+                  </Field>
+                  {commissionFeature && (
+                    <Field>
+                      <FieldLabel>Comissão (%)</FieldLabel>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={100}
+                        step={0.5}
+                        className="bg-input border-border text-foreground"
+                        value={editCommission}
+                        onChange={(e) => setEditCommission(e.target.value)}
+                      />
+                    </Field>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <Switch checked={editActive} onCheckedChange={setEditActive} id="edit-ativo" />
+                    <FieldLabel htmlFor="edit-ativo" className="cursor-pointer">
+                      Ativo na agenda
+                    </FieldLabel>
+                  </div>
+                  <Button
+                    className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+                    disabled={equipeBusy || !editName.trim()}
+                    onClick={() => void handleSaveEdit()}
+                  >
+                    {equipeBusy ? "Salvando…" : "Salvar alterações"}
+                  </Button>
+                </FieldGroup>
+              )}
+            </DialogContent>
+          </Dialog>
         </TabsContent>
       </Tabs>
     </div>
