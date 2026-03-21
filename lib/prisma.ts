@@ -1,6 +1,10 @@
 /**
  * Cliente Prisma singleton para uso em API routes e Server Components.
  * Prisma 7 exige adapter para PostgreSQL; evita múltiplas instâncias em dev (hot reload).
+ *
+ * Inicialização **lazy** (via Proxy): o `next build` importa rotas e não deve falhar só porque
+ * `DATABASE_URL` ainda não está disponível no passo de “Collecting page data”. Na Vercel, sem
+ * `DATABASE_URL` em runtime, a primeira query ainda falha com a mensagem clara abaixo.
  */
 import { PrismaClient } from "@prisma/client"
 import { PrismaPg } from "@prisma/adapter-pg"
@@ -21,16 +25,40 @@ function getDatabaseUrl(): string {
   return "postgresql://localhost:5432/trimtime"
 }
 
-const connectionString = getDatabaseUrl()
-const adapter = new PrismaPg({ connectionString })
-
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient | undefined }
 
-export const prisma =
-  globalForPrisma.prisma ??
-  new PrismaClient({
+function createPrismaClient(): PrismaClient {
+  const connectionString = getDatabaseUrl()
+  const adapter = new PrismaPg({ connectionString })
+  return new PrismaClient({
     adapter,
     log: process.env.NODE_ENV === "development" ? ["query", "error", "warn"] : ["error"],
   })
+}
 
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma
+/** Singleton em produção (módulo em cache); em dev usa global para hot reload. */
+let prismaProduction: PrismaClient | undefined
+
+function getClient(): PrismaClient {
+  if (process.env.NODE_ENV !== "production") {
+    if (!globalForPrisma.prisma) {
+      globalForPrisma.prisma = createPrismaClient()
+    }
+    return globalForPrisma.prisma
+  }
+  if (!prismaProduction) {
+    prismaProduction = createPrismaClient()
+  }
+  return prismaProduction
+}
+
+export const prisma = new Proxy({} as PrismaClient, {
+  get(_target, prop) {
+    const client = getClient()
+    const value = Reflect.get(client as object, prop, client)
+    if (typeof value === "function") {
+      return (value as (...args: unknown[]) => unknown).bind(client)
+    }
+    return value
+  },
+})
