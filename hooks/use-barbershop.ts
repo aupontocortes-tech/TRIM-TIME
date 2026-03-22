@@ -56,7 +56,9 @@ export function useBarbershop(): BarbershopState {
 
   const role: BarbershopRole =
     (barbershop as { role?: string } | null)?.role === "super_admin" ? "super_admin" : "admin_barbershop"
-  const plan = getEffectivePlanForBarbershop(barbershop, subscription)
+  const plan =
+    barbershop?.effective_plan ??
+    getEffectivePlanForBarbershop(barbershop, subscription)
 
   return {
     barbershop: barbershop ? { ...barbershop, role } : null,

@@ -17,7 +17,7 @@ Se o PNG tiver **branco opaco** (comum em exportações), o CSS não consegue �
 npm run fix-logo
 ```
 
-Por defeito processa `public/icon.png` e sobrescreve o mesmo ficheiro. Isto pinta **branco / cinza claro / halos** com o **preto do tema** (RGB 9,9,9 — igual ao fundo do app). Depois copie o ficheiro para `app/icon.png` e `app/apple-icon.png` ou volte a correr o projeto após commit dos três ficheiros. Para outra imagem:
+Por defeito processa `public/icon.png` e sobrescreve o mesmo ficheiro. Para outra imagem:
 
 ```bash
 node scripts/fix-logo-white-to-bg.mjs caminho/entrada.png public/icon.png

@@ -5,6 +5,12 @@
 import type { Barbershop, Subscription, SubscriptionPlan, SubscriptionStatus } from "@/lib/db/types"
 import { TRIAL_DAYS } from "@/lib/plans"
 
+/** Se `true` ou `1`, todas as barbearias tratam plano efetivo como Premium (desenvolvimento). Desligue em produção com pagamento real. */
+export function isUnlockAllPlanFeaturesEnv(): boolean {
+  const v = process.env.TRIMTIME_UNLOCK_ALL_PLAN_FEATURES?.trim().toLowerCase()
+  return v === "1" || v === "true" || v === "yes"
+}
+
 export function isTrialActive(subscription: Subscription | null): boolean {
   if (!subscription || subscription.status !== "trial") return false
   if (!subscription.trial_end) return false
@@ -18,11 +24,12 @@ export function getEffectivePlan(subscription: Subscription | null): Subscriptio
   return null
 }
 
-/** Se a barbearia for admin (role=admin), retorna premium (acesso total grátis). Caso contrário, usa a assinatura. */
+/** Plano efetivo para limites e `hasFeature`: super_admin, env de desbloqueio, trial/assinatura. */
 export function getEffectivePlanForBarbershop(
   barbershop: { role?: string } | null,
   subscription: Subscription | null
 ): SubscriptionPlan | null {
+  if (isUnlockAllPlanFeaturesEnv()) return "premium"
   if (barbershop?.role === "super_admin") return "premium"
   return getEffectivePlan(subscription)
 }

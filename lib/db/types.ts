@@ -11,6 +11,17 @@ export type WaitingListStatus = "waiting" | "notified" | "accepted" | "expired"
 /** Conta da barbearia: super_admin = dono do sistema; admin_barbershop = dono da barbearia (padrão). */
 export type BarbershopRole = "super_admin" | "admin_barbershop"
 
+/** Horário por dia (chaves: segunda, terca, …) — guardado em barbershops.settings.opening_hours */
+export type BarbershopOpeningDay = { active: boolean; open: string; close: string }
+
+export type BarbershopSettings = {
+  address?: string
+  city?: string
+  state?: string
+  cep?: string
+  opening_hours?: Record<string, BarbershopOpeningDay>
+}
+
 export interface Barbershop {
   id: string
   name: string
@@ -21,6 +32,13 @@ export interface Barbershop {
   suspended_at: string | null
   created_at: string
   updated_at: string
+  /** Preferência da API GET /api/barbershops (merge de JSONB). */
+  settings?: BarbershopSettings | null
+  /**
+   * Só no JSON da API: plano já com super_admin, trial e TRIMTIME_UNLOCK_ALL_PLAN_FEATURES.
+   * Use no cliente em vez de recalcular só com subscription.
+   */
+  effective_plan?: SubscriptionPlan | null
 }
 
 export interface Subscription {
@@ -81,6 +99,8 @@ export interface Appointment {
   time: string
   status: AppointmentStatus
   total_price: number | null
+  commission_percent?: number | null
+  commission_amount?: number | null
   created_at: string
   updated_at: string
   // joins opcionais

@@ -53,7 +53,10 @@ Helpers centralizados: `lib/access-control.ts` (reexport + `isPlatformAdmin`).
 
 Rodar no **SQL Editor** do Supabase (ou pipeline de migrations):
 
-`supabase/migrations/004_architecture_extensions.sql`
+`supabase/migrations/004_architecture_extensions.sql`  
+`supabase/migrations/005_barbershop_settings.sql` — coluna `barbershops.settings` (endereço + `opening_hours`).
+
+**Desenvolvimento:** `TRIMTIME_UNLOCK_ALL_PLAN_FEATURES=true` no `.env.local` / Vercel faz o plano efetivo ser Premium para todas as barbearias (ver `lib/subscription.ts`). Remover em produção com cobrança.
 
 Depois: `npx prisma db pull` (se quiser alinhar introspection) ou manter schema Prisma como fonte e `prisma db push` em dev.
 

@@ -1,16 +1,24 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import Link from "next/link"
 import { useBarbershop } from "@/hooks/use-barbershop"
-import { hasFeature } from "@/lib/plans"
-import type { Barber } from "@/lib/db/types"
+import { hasFeature, PLAN_LABELS } from "@/lib/plans"
+import type { Barber, Service } from "@/lib/db/types"
+import {
+  defaultHorariosUi,
+  openingHoursFromSettings,
+  openingHoursToSettings,
+  DIAS_SEMANA_KEYS,
+  type HorarioDiaUi,
+} from "@/lib/barbershop-settings-ui"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import { FieldGroup, Field, FieldLabel } from "@/components/ui/field"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { 
+import {
   Store,
   Clock,
   Users,
@@ -19,11 +27,13 @@ import {
   Plus,
   Trash2,
   Edit2,
-  Link,
+  Link as LinkIcon,
   Copy,
   Check,
   Share2,
-  QrCode
+  QrCode,
+  Shield,
+  Smartphone,
 } from "lucide-react"
 import {
   Dialog,
@@ -33,55 +43,64 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 
-// Mock data
-const dadosBarbearia = {
-  nome: "Barbearia Elite",
-  slug: "barbearia-elite",
-  telefone: "(11) 99999-9999",
-  endereco: "Rua das Flores, 123 - Centro",
-  cidade: "São Paulo",
-  estado: "SP",
-  cep: "01310-100"
-}
-
-const horariosFuncionamento = {
-  segunda: { ativo: true, abertura: "09:00", fechamento: "20:00" },
-  terca: { ativo: true, abertura: "09:00", fechamento: "20:00" },
-  quarta: { ativo: true, abertura: "09:00", fechamento: "20:00" },
-  quinta: { ativo: true, abertura: "09:00", fechamento: "20:00" },
-  sexta: { ativo: true, abertura: "09:00", fechamento: "20:00" },
-  sabado: { ativo: true, abertura: "09:00", fechamento: "18:00" },
-  domingo: { ativo: false, abertura: "09:00", fechamento: "18:00" },
-}
-
-const servicos = [
-  { id: 1, nome: "Corte Tradicional", duracao: 30, preco: 35, ativo: true },
-  { id: 2, nome: "Corte Degradê", duracao: 40, preco: 45, ativo: true },
-  { id: 3, nome: "Barba", duracao: 20, preco: 25, ativo: true },
-  { id: 4, nome: "Corte + Barba", duracao: 50, preco: 55, ativo: true },
-  { id: 5, nome: "Pigmentação", duracao: 60, preco: 80, ativo: true },
-  { id: 6, nome: "Sobrancelha", duracao: 15, preco: 15, ativo: true },
-]
-
 const diasSemana = [
-  { key: "segunda", label: "Segunda-feira" },
-  { key: "terca", label: "Terça-feira" },
-  { key: "quarta", label: "Quarta-feira" },
-  { key: "quinta", label: "Quinta-feira" },
-  { key: "sexta", label: "Sexta-feira" },
-  { key: "sabado", label: "Sábado" },
-  { key: "domingo", label: "Domingo" },
+  { key: "segunda" as const, label: "Segunda-feira" },
+  { key: "terca" as const, label: "Terça-feira" },
+  { key: "quarta" as const, label: "Quarta-feira" },
+  { key: "quinta" as const, label: "Quinta-feira" },
+  { key: "sexta" as const, label: "Sexta-feira" },
+  { key: "sabado" as const, label: "Sábado" },
+  { key: "domingo" as const, label: "Domingo" },
 ]
+
+type BarbeariaForm = {
+  nome: string
+  email: string
+  telefone: string
+  endereco: string
+  cidade: string
+  estado: string
+  cep: string
+}
+
+const emptyBarbearia: BarbeariaForm = {
+  nome: "",
+  email: "",
+  telefone: "",
+  endereco: "",
+  cidade: "",
+  estado: "",
+  cep: "",
+}
 
 export default function ConfiguracoesPage() {
-  const { plan, barbershop } = useBarbershop()
+  const { plan, barbershop, loading: barbershopLoading, refetch } = useBarbershop()
   const commissionFeature =
     barbershop?.role === "super_admin" ||
     (plan != null && hasFeature(plan, "barber_commission"))
 
-  const [barbearia, setBarbearia] = useState(dadosBarbearia)
-  const [horarios, setHorarios] = useState(horariosFuncionamento)
-  const [listaServicos, setListaServicos] = useState(servicos)
+  const [barbearia, setBarbearia] = useState<BarbeariaForm>(emptyBarbearia)
+  const [horarios, setHorarios] = useState<
+    Record<(typeof DIAS_SEMANA_KEYS)[number], HorarioDiaUi>
+  >(() => defaultHorariosUi())
+
+  const [listaServicos, setListaServicos] = useState<Service[]>([])
+  const [servicosLoading, setServicosLoading] = useState(true)
+  const [servicosError, setServicosError] = useState<string | null>(null)
+  const [servicoBusy, setServicoBusy] = useState(false)
+
+  const [addServOpen, setAddServOpen] = useState(false)
+  const [newServNome, setNewServNome] = useState("")
+  const [newServDuracao, setNewServDuracao] = useState("30")
+  const [newServPreco, setNewServPreco] = useState("")
+
+  const [editServOpen, setEditServOpen] = useState(false)
+  const [editingServ, setEditingServ] = useState<Service | null>(null)
+  const [editServNome, setEditServNome] = useState("")
+  const [editServDuracao, setEditServDuracao] = useState("")
+  const [editServPreco, setEditServPreco] = useState("")
+  const [editServAtivo, setEditServAtivo] = useState(true)
+
   const [barbers, setBarbers] = useState<Barber[]>([])
   const [barbersLoading, setBarbersLoading] = useState(true)
   const [equipeError, setEquipeError] = useState<string | null>(null)
@@ -99,11 +118,39 @@ export default function ConfiguracoesPage() {
   const [editActive, setEditActive] = useState(true)
 
   const [isSaving, setIsSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [saveOk, setSaveOk] = useState(false)
   const [linkCopiado, setLinkCopiado] = useState(false)
+
+  const [waLoading, setWaLoading] = useState(false)
+  const [waError, setWaError] = useState<string | null>(null)
+  const [waPhone, setWaPhone] = useState("")
+  const [waBusy, setWaBusy] = useState(false)
 
   useEffect(() => {
     setOrigin(typeof window !== "undefined" ? window.location.origin : "")
   }, [])
+
+  useEffect(() => {
+    if (!barbershop) return
+    setBarbearia({
+      nome: barbershop.name,
+      email: barbershop.email,
+      telefone: barbershop.phone ?? "",
+      endereco: barbershop.settings?.address ?? "",
+      cidade: barbershop.settings?.city ?? "",
+      estado: barbershop.settings?.state ?? "",
+      cep: barbershop.settings?.cep ?? "",
+    })
+    setHorarios(openingHoursFromSettings(barbershop.settings?.opening_hours))
+  }, [
+    barbershop?.id,
+    barbershop?.updated_at,
+    barbershop?.name,
+    barbershop?.email,
+    barbershop?.phone,
+    JSON.stringify(barbershop?.settings ?? null),
+  ])
 
   const loadBarbers = useCallback(async () => {
     setBarbersLoading(true)
@@ -126,9 +173,61 @@ export default function ConfiguracoesPage() {
     }
   }, [])
 
+  const loadServices = useCallback(async () => {
+    setServicosLoading(true)
+    setServicosError(null)
+    try {
+      const r = await fetch("/api/services", { credentials: "include" })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        setServicosError(typeof j.error === "string" ? j.error : "Erro ao carregar serviços")
+        setListaServicos([])
+        return
+      }
+      const data = await r.json()
+      setListaServicos(Array.isArray(data) ? data : [])
+    } catch {
+      setServicosError("Erro de rede")
+      setListaServicos([])
+    } finally {
+      setServicosLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
     loadBarbers()
   }, [loadBarbers])
+
+  useEffect(() => {
+    if (!barbershopLoading && barbershop) loadServices()
+  }, [barbershopLoading, barbershop?.id, loadServices])
+
+  const loadWhatsapp = useCallback(async () => {
+    setWaLoading(true)
+    setWaError(null)
+    try {
+      const r = await fetch("/api/whatsapp", { credentials: "include" })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) {
+        setWaError(typeof j.error === "string" ? j.error : "Não foi possível carregar")
+        setWaPhone("")
+        return
+      }
+      if (j && typeof j.phone_number === "string") {
+        setWaPhone(j.phone_number)
+      } else {
+        setWaPhone("")
+      }
+    } catch {
+      setWaError("Erro de rede")
+    } finally {
+      setWaLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!barbershopLoading && barbershop) void loadWhatsapp()
+  }, [barbershopLoading, barbershop?.id, loadWhatsapp])
 
   const linkAgendamento =
     origin && barbershop?.slug ? `${origin}/b/${barbershop.slug}` : barbershop?.slug ? `/b/${barbershop.slug}` : "—"
@@ -141,22 +240,178 @@ export default function ConfiguracoesPage() {
   }
 
   const handleSave = async () => {
+    if (!barbershop) return
     setIsSaving(true)
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    setIsSaving(false)
+    setSaveError(null)
+    setSaveOk(false)
+    try {
+      const opening_hours = openingHoursToSettings(horarios as Record<string, HorarioDiaUi>)
+      const r = await fetch("/api/barbershops", {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: barbearia.nome.trim(),
+          email: barbearia.email.trim(),
+          phone: barbearia.telefone.trim() || null,
+          settings: {
+            address: barbearia.endereco.trim() || undefined,
+            city: barbearia.cidade.trim() || undefined,
+            state: barbearia.estado.trim() || undefined,
+            cep: barbearia.cep.trim() || undefined,
+            opening_hours,
+          },
+        }),
+      })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) {
+        setSaveError(typeof j.error === "string" ? j.error : "Erro ao salvar")
+        return
+      }
+      setSaveOk(true)
+      setTimeout(() => setSaveOk(false), 3000)
+      await refetch()
+    } catch {
+      setSaveError("Erro de rede ao salvar")
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   const toggleDia = (dia: string) => {
-    setHorarios(prev => ({
+    setHorarios((prev) => ({
       ...prev,
-      [dia]: { ...prev[dia as keyof typeof prev], ativo: !prev[dia as keyof typeof prev].ativo }
+      [dia]: { ...prev[dia as keyof typeof prev], ativo: !prev[dia as keyof typeof prev].ativo },
     }))
   }
 
-  const toggleServico = (id: number) => {
-    setListaServicos(prev => prev.map(s => 
-      s.id === id ? { ...s, ativo: !s.ativo } : s
-    ))
+  const handleAddService = async () => {
+    if (!newServNome.trim()) return
+    const price = Number(newServPreco)
+    if (!Number.isFinite(price) || price < 0) {
+      setServicosError("Preço inválido")
+      return
+    }
+    setServicoBusy(true)
+    setServicosError(null)
+    try {
+      const r = await fetch("/api/services", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newServNome.trim(),
+          price,
+          duration: Math.max(1, Number(newServDuracao) || 30),
+        }),
+      })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) {
+        setServicosError(typeof j.error === "string" ? j.error : "Erro ao criar")
+        return
+      }
+      setAddServOpen(false)
+      setNewServNome("")
+      setNewServDuracao("30")
+      setNewServPreco("")
+      await loadServices()
+    } catch {
+      setServicosError("Erro de rede")
+    } finally {
+      setServicoBusy(false)
+    }
+  }
+
+  const openEditServ = (s: Service) => {
+    setEditingServ(s)
+    setEditServNome(s.name)
+    setEditServDuracao(String(s.duration))
+    setEditServPreco(String(s.price))
+    setEditServAtivo(s.active)
+    setEditServOpen(true)
+  }
+
+  const handleSaveServ = async () => {
+    if (!editingServ || !editServNome.trim()) return
+    const price = Number(editServPreco)
+    const duration = Math.max(1, Number(editServDuracao) || 30)
+    if (!Number.isFinite(price) || price < 0) {
+      setServicosError("Preço inválido")
+      return
+    }
+    setServicoBusy(true)
+    setServicosError(null)
+    try {
+      const r = await fetch(`/api/services/${editingServ.id}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: editServNome.trim(),
+          price,
+          duration,
+          active: editServAtivo,
+        }),
+      })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) {
+        setServicosError(typeof j.error === "string" ? j.error : "Erro ao salvar")
+        return
+      }
+      setEditServOpen(false)
+      setEditingServ(null)
+      await loadServices()
+    } catch {
+      setServicosError("Erro de rede")
+    } finally {
+      setServicoBusy(false)
+    }
+  }
+
+  const handleDeleteServ = async (s: Service) => {
+    if (!confirm(`Excluir o serviço "${s.name}"?`)) return
+    setServicoBusy(true)
+    setServicosError(null)
+    try {
+      const r = await fetch(`/api/services/${s.id}`, { method: "DELETE", credentials: "include" })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        setServicosError(typeof j.error === "string" ? j.error : "Erro ao excluir")
+        return
+      }
+      await loadServices()
+    } catch {
+      setServicosError("Erro de rede")
+    } finally {
+      setServicoBusy(false)
+    }
+  }
+
+  const handleSaveWhatsapp = async () => {
+    if (!waPhone.trim()) {
+      setWaError("Informe o número")
+      return
+    }
+    setWaBusy(true)
+    setWaError(null)
+    try {
+      const r = await fetch("/api/whatsapp", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone_number: waPhone.trim() }),
+      })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) {
+        setWaError(typeof j.error === "string" ? j.error : "Erro ao salvar")
+        return
+      }
+      await loadWhatsapp()
+    } catch {
+      setWaError("Erro de rede")
+    } finally {
+      setWaBusy(false)
+    }
   }
 
   const openEdit = (b: Barber) => {
@@ -295,30 +550,55 @@ export default function ConfiguracoesPage() {
     }
   }
 
+  if (barbershopLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[40vh] text-muted-foreground">
+        Carregando configurações…
+      </div>
+    )
+  }
+
+  if (!barbershop) {
+    return (
+      <div className="p-6 text-center text-muted-foreground">
+        Não foi possível carregar a barbearia. Faça login novamente.
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Configurações</h1>
-          <p className="text-muted-foreground">Gerencie as configurações da sua barbearia</p>
+          <p className="text-muted-foreground">Gerencie dados da barbearia, horários, serviços e integrações</p>
         </div>
-        <Button 
-          onClick={handleSave}
+        <Button
+          onClick={() => void handleSave()}
           disabled={isSaving}
           className="bg-primary text-primary-foreground hover:bg-primary/90"
         >
           <Save className="w-4 h-4 mr-2" />
-          {isSaving ? "Salvando..." : "Salvar Alterações"}
+          {isSaving ? "Salvando..." : "Salvar dados e horários"}
         </Button>
       </div>
 
-      {/* Card do Link de Agendamento */}
+      {saveError && (
+        <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+          {saveError}
+        </div>
+      )}
+      {saveOk && (
+        <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/30 text-green-700 dark:text-green-400 text-sm">
+          Dados e horários salvos com sucesso.
+        </div>
+      )}
+
       <Card className="bg-gradient-to-r from-primary/20 to-primary/5 border-primary/30">
         <CardContent className="p-6">
           <div className="flex flex-col sm:flex-row sm:items-center gap-4">
             <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
-              <Link className="w-6 h-6 text-primary" />
+              <LinkIcon className="w-6 h-6 text-primary" />
             </div>
             <div className="flex-1">
               <h3 className="text-lg font-semibold text-foreground mb-1">Seu Link de Agendamento</h3>
@@ -348,11 +628,11 @@ export default function ConfiguracoesPage() {
               </div>
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" className="border-border">
+              <Button variant="outline" className="border-border" type="button" disabled>
                 <QrCode className="w-4 h-4 mr-2" />
                 QR Code
               </Button>
-              <Button variant="outline" className="border-border">
+              <Button variant="outline" className="border-border" type="button" disabled>
                 <Share2 className="w-4 h-4 mr-2" />
                 Compartilhar
               </Button>
@@ -362,7 +642,7 @@ export default function ConfiguracoesPage() {
       </Card>
 
       <Tabs defaultValue="barbearia" className="space-y-6">
-        <TabsList className="bg-secondary/50 border border-border">
+        <TabsList className="bg-secondary/50 border border-border flex flex-wrap h-auto gap-1 p-1">
           <TabsTrigger value="barbearia" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             <Store className="w-4 h-4 mr-2" />
             Barbearia
@@ -379,15 +659,22 @@ export default function ConfiguracoesPage() {
             <Users className="w-4 h-4 mr-2" />
             Equipe
           </TabsTrigger>
+          <TabsTrigger value="plano" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+            <Shield className="w-4 h-4 mr-2" />
+            Plano &amp; conta
+          </TabsTrigger>
+          <TabsTrigger value="integracoes" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+            <Smartphone className="w-4 h-4 mr-2" />
+            Integrações
+          </TabsTrigger>
         </TabsList>
 
-        {/* Tab: Barbearia */}
         <TabsContent value="barbearia">
           <Card className="bg-card border-border">
             <CardHeader>
               <CardTitle className="text-foreground">Informações da Barbearia</CardTitle>
               <CardDescription className="text-muted-foreground">
-                Dados básicos que aparecem para seus clientes
+                Dados salvos no sistema (nome, e-mail de login, telefone e endereço)
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -401,7 +688,24 @@ export default function ConfiguracoesPage() {
                     className="bg-input border-border text-foreground"
                   />
                 </Field>
-
+                <Field>
+                  <FieldLabel htmlFor="email">E-mail da conta</FieldLabel>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={barbearia.email}
+                    onChange={(e) => setBarbearia({ ...barbearia, email: e.target.value })}
+                    className="bg-input border-border text-foreground"
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel>Slug público (somente leitura)</FieldLabel>
+                  <Input
+                    readOnly
+                    value={barbershop.slug}
+                    className="bg-muted/50 border-border text-muted-foreground"
+                  />
+                </Field>
                 <Field>
                   <FieldLabel htmlFor="telefone">Telefone / WhatsApp</FieldLabel>
                   <Input
@@ -411,7 +715,6 @@ export default function ConfiguracoesPage() {
                     className="bg-input border-border text-foreground"
                   />
                 </Field>
-
                 <Field>
                   <FieldLabel htmlFor="endereco">Endereço</FieldLabel>
                   <Input
@@ -421,7 +724,6 @@ export default function ConfiguracoesPage() {
                     className="bg-input border-border text-foreground"
                   />
                 </Field>
-
                 <div className="grid grid-cols-2 gap-4">
                   <Field>
                     <FieldLabel htmlFor="cidade">Cidade</FieldLabel>
@@ -442,7 +744,6 @@ export default function ConfiguracoesPage() {
                     />
                   </Field>
                 </div>
-
                 <Field>
                   <FieldLabel htmlFor="cep">CEP</FieldLabel>
                   <Input
@@ -457,31 +758,29 @@ export default function ConfiguracoesPage() {
           </Card>
         </TabsContent>
 
-        {/* Tab: Horários */}
         <TabsContent value="horarios">
           <Card className="bg-card border-border">
             <CardHeader>
               <CardTitle className="text-foreground">Horário de Funcionamento</CardTitle>
               <CardDescription className="text-muted-foreground">
-                Defina os dias e horários de atendimento
+                Defina os dias e horários de atendimento (salvos com &quot;Salvar dados e horários&quot;)
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
                 {diasSemana.map((dia) => {
-                  const horario = horarios[dia.key as keyof typeof horarios]
+                  const horario = horarios[dia.key]
                   return (
-                    <div 
+                    <div
                       key={dia.key}
                       className={`flex items-center gap-4 p-4 rounded-lg border transition-colors ${
-                        horario.ativo ? 'border-border bg-secondary/30' : 'border-border/50 bg-secondary/10'
+                        horario.ativo ? "border-border bg-secondary/30" : "border-border/50 bg-secondary/10"
                       }`}
                     >
-                      <Switch
-                        checked={horario.ativo}
-                        onCheckedChange={() => toggleDia(dia.key)}
-                      />
-                      <span className={`w-32 font-medium ${horario.ativo ? 'text-foreground' : 'text-muted-foreground'}`}>
+                      <Switch checked={horario.ativo} onCheckedChange={() => toggleDia(dia.key)} />
+                      <span
+                        className={`w-32 font-medium ${horario.ativo ? "text-foreground" : "text-muted-foreground"}`}
+                      >
                         {dia.label}
                       </span>
                       {horario.ativo ? (
@@ -489,20 +788,24 @@ export default function ConfiguracoesPage() {
                           <Input
                             type="time"
                             value={horario.abertura}
-                            onChange={(e) => setHorarios(prev => ({
-                              ...prev,
-                              [dia.key]: { ...prev[dia.key as keyof typeof prev], abertura: e.target.value }
-                            }))}
+                            onChange={(e) =>
+                              setHorarios((prev) => ({
+                                ...prev,
+                                [dia.key]: { ...prev[dia.key], abertura: e.target.value },
+                              }))
+                            }
                             className="w-32 bg-input border-border text-foreground"
                           />
                           <span className="text-muted-foreground">até</span>
                           <Input
                             type="time"
                             value={horario.fechamento}
-                            onChange={(e) => setHorarios(prev => ({
-                              ...prev,
-                              [dia.key]: { ...prev[dia.key as keyof typeof prev], fechamento: e.target.value }
-                            }))}
+                            onChange={(e) =>
+                              setHorarios((prev) => ({
+                                ...prev,
+                                [dia.key]: { ...prev[dia.key], fechamento: e.target.value },
+                              }))
+                            }
                             className="w-32 bg-input border-border text-foreground"
                           />
                         </div>
@@ -517,17 +820,16 @@ export default function ConfiguracoesPage() {
           </Card>
         </TabsContent>
 
-        {/* Tab: Serviços */}
         <TabsContent value="servicos">
           <Card className="bg-card border-border">
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
                 <CardTitle className="text-foreground">Serviços</CardTitle>
                 <CardDescription className="text-muted-foreground">
-                  Gerencie os serviços oferecidos
+                  Serviços reais da agenda (sincronizados com o banco de dados)
                 </CardDescription>
               </div>
-              <Dialog>
+              <Dialog open={addServOpen} onOpenChange={setAddServOpen}>
                 <DialogTrigger asChild>
                   <Button className="bg-primary text-primary-foreground hover:bg-primary/90">
                     <Plus className="w-4 h-4 mr-2" />
@@ -540,62 +842,180 @@ export default function ConfiguracoesPage() {
                   </DialogHeader>
                   <FieldGroup>
                     <Field>
-                      <FieldLabel>Nome do Serviço</FieldLabel>
-                      <Input className="bg-input border-border text-foreground" placeholder="Ex: Corte Navalhado" />
+                      <FieldLabel>Nome</FieldLabel>
+                      <Input
+                        className="bg-input border-border text-foreground"
+                        value={newServNome}
+                        onChange={(e) => setNewServNome(e.target.value)}
+                        placeholder="Ex: Corte"
+                      />
                     </Field>
                     <div className="grid grid-cols-2 gap-4">
                       <Field>
                         <FieldLabel>Duração (min)</FieldLabel>
-                        <Input type="number" className="bg-input border-border text-foreground" placeholder="30" />
+                        <Input
+                          type="number"
+                          min={1}
+                          className="bg-input border-border text-foreground"
+                          value={newServDuracao}
+                          onChange={(e) => setNewServDuracao(e.target.value)}
+                        />
                       </Field>
                       <Field>
                         <FieldLabel>Preço (R$)</FieldLabel>
-                        <Input type="number" className="bg-input border-border text-foreground" placeholder="35" />
+                        <Input
+                          type="number"
+                          min={0}
+                          step={0.01}
+                          className="bg-input border-border text-foreground"
+                          value={newServPreco}
+                          onChange={(e) => setNewServPreco(e.target.value)}
+                        />
                       </Field>
                     </div>
-                    <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90">
-                      Adicionar Serviço
+                    <Button
+                      className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+                      disabled={servicoBusy}
+                      onClick={() => void handleAddService()}
+                    >
+                      {servicoBusy ? "Salvando…" : "Adicionar"}
                     </Button>
                   </FieldGroup>
                 </DialogContent>
               </Dialog>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                {listaServicos.map((servico) => (
-                  <div 
-                    key={servico.id}
-                    className={`flex items-center gap-4 p-4 rounded-lg border transition-colors ${
-                      servico.ativo ? 'border-border bg-secondary/30' : 'border-border/50 bg-secondary/10'
-                    }`}
-                  >
-                    <Switch
-                      checked={servico.ativo}
-                      onCheckedChange={() => toggleServico(servico.id)}
-                    />
-                    <div className="flex-1">
-                      <p className={`font-medium ${servico.ativo ? 'text-foreground' : 'text-muted-foreground'}`}>
-                        {servico.nome}
-                      </p>
-                      <p className="text-sm text-muted-foreground">{servico.duracao} minutos</p>
+              {servicosError && (
+                <div className="mb-4 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+                  {servicosError}
+                </div>
+              )}
+              {servicosLoading ? (
+                <p className="text-sm text-muted-foreground py-8 text-center">Carregando serviços…</p>
+              ) : listaServicos.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-8 text-center">Nenhum serviço cadastrado.</p>
+              ) : (
+                <div className="space-y-3">
+                  {listaServicos.map((servico) => (
+                    <div
+                      key={servico.id}
+                      className={`flex items-center gap-4 p-4 rounded-lg border transition-colors ${
+                        servico.active ? "border-border bg-secondary/30" : "border-border/50 bg-secondary/10"
+                      }`}
+                    >
+                      <Switch
+                        checked={servico.active}
+                        disabled={servicoBusy}
+                        onCheckedChange={async (on) => {
+                          setServicoBusy(true)
+                          try {
+                            await fetch(`/api/services/${servico.id}`, {
+                              method: "PATCH",
+                              credentials: "include",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ active: on }),
+                            })
+                            await loadServices()
+                          } finally {
+                            setServicoBusy(false)
+                          }
+                        }}
+                      />
+                      <div className="flex-1">
+                        <p
+                          className={`font-medium ${servico.active ? "text-foreground" : "text-muted-foreground"}`}
+                        >
+                          {servico.name}
+                        </p>
+                        <p className="text-sm text-muted-foreground">{servico.duration} minutos</p>
+                      </div>
+                      <span className="text-lg font-semibold text-primary">R${Number(servico.price).toFixed(2)}</span>
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                          disabled={servicoBusy}
+                          onClick={() => openEditServ(servico)}
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                          disabled={servicoBusy}
+                          onClick={() => void handleDeleteServ(servico)}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </div>
-                    <span className="text-lg font-semibold text-primary">R${servico.preco}</span>
-                    <div className="flex gap-2">
-                      <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground hover:text-foreground">
-                        <Edit2 className="w-4 h-4" />
-                      </Button>
-                      <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:bg-destructive/10">
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
+
+          <Dialog open={editServOpen} onOpenChange={setEditServOpen}>
+            <DialogContent className="bg-card border-border">
+              <DialogHeader>
+                <DialogTitle className="text-foreground">Editar serviço</DialogTitle>
+              </DialogHeader>
+              {editingServ && (
+                <FieldGroup>
+                  <Field>
+                    <FieldLabel>Nome</FieldLabel>
+                    <Input
+                      className="bg-input border-border text-foreground"
+                      value={editServNome}
+                      onChange={(e) => setEditServNome(e.target.value)}
+                    />
+                  </Field>
+                  <div className="grid grid-cols-2 gap-4">
+                    <Field>
+                      <FieldLabel>Duração (min)</FieldLabel>
+                      <Input
+                        type="number"
+                        min={1}
+                        className="bg-input border-border text-foreground"
+                        value={editServDuracao}
+                        onChange={(e) => setEditServDuracao(e.target.value)}
+                      />
+                    </Field>
+                    <Field>
+                      <FieldLabel>Preço (R$)</FieldLabel>
+                      <Input
+                        type="number"
+                        min={0}
+                        step={0.01}
+                        className="bg-input border-border text-foreground"
+                        value={editServPreco}
+                        onChange={(e) => setEditServPreco(e.target.value)}
+                      />
+                    </Field>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Switch checked={editServAtivo} onCheckedChange={setEditServAtivo} id="serv-ativo" />
+                    <FieldLabel htmlFor="serv-ativo" className="cursor-pointer">
+                      Ativo
+                    </FieldLabel>
+                  </div>
+                  <Button
+                    className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+                    disabled={servicoBusy}
+                    onClick={() => void handleSaveServ()}
+                  >
+                    {servicoBusy ? "Salvando…" : "Salvar"}
+                  </Button>
+                </FieldGroup>
+              )}
+            </DialogContent>
+          </Dialog>
         </TabsContent>
 
-        {/* Tab: Equipe */}
         <TabsContent value="equipe">
           <Card className="bg-card border-border">
             <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -603,7 +1023,8 @@ export default function ConfiguracoesPage() {
                 <CardTitle className="text-foreground">Equipe</CardTitle>
                 <CardDescription className="text-muted-foreground">
                   Profissionais da barbearia. Comissão (% sobre o valor do atendimento) nos planos{" "}
-                  <strong className="text-foreground">Pro</strong> e <strong className="text-foreground">Premium</strong>.
+                  <strong className="text-foreground">Pro</strong> e <strong className="text-foreground">Premium</strong>{" "}
+                  (e para conta <strong className="text-foreground">Super Admin</strong>).
                 </CardDescription>
                 {!commissionFeature && (
                   <p className="text-sm text-amber-600/90 dark:text-amber-400/90 mt-2">
@@ -706,9 +1127,7 @@ export default function ConfiguracoesPage() {
                         <p className={`font-medium ${prof.active ? "text-foreground" : "text-muted-foreground"}`}>
                           {prof.name}
                         </p>
-                        {prof.phone && (
-                          <p className="text-sm text-muted-foreground">{prof.phone}</p>
-                        )}
+                        {prof.phone && <p className="text-sm text-muted-foreground">{prof.phone}</p>}
                       </div>
                       <div className="text-center min-w-[72px]">
                         <p className="text-lg font-semibold text-primary">
@@ -805,6 +1224,100 @@ export default function ConfiguracoesPage() {
               )}
             </DialogContent>
           </Dialog>
+        </TabsContent>
+
+        <TabsContent value="plano">
+          <Card className="bg-card border-border">
+            <CardHeader>
+              <CardTitle className="text-foreground">Plano efetivo e tipo de conta</CardTitle>
+              <CardDescription className="text-muted-foreground">
+                O que o sistema usa hoje para limites e recursos (agenda, comissões, WhatsApp, etc.)
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4 max-w-2xl text-sm text-muted-foreground">
+              <div>
+                <p className="text-foreground font-medium mb-1">Plano efetivo</p>
+                <p>
+                  {plan ? (
+                    <>
+                      <strong className="text-primary">{PLAN_LABELS[plan]}</strong> — recursos alinhados a este plano.
+                    </>
+                  ) : (
+                    "Nenhum plano ativo. Verifique a assinatura."
+                  )}
+                </p>
+              </div>
+              <div>
+                <p className="text-foreground font-medium mb-1">Tipo de conta da barbearia</p>
+                {barbershop.role === "super_admin" ? (
+                  <p>
+                    <strong className="text-primary">Super Admin (Trim Time)</strong> — acesso total aos recursos do
+                    sistema sem cobrança. Use o{" "}
+                    <Link href="/admin" className="text-primary underline underline-offset-2">
+                      Painel Admin
+                    </Link>{" "}
+                    para gerir barbearias, planos e suporte.
+                  </p>
+                ) : (
+                  <p>
+                    <strong className="text-foreground">Dono da barbearia</strong> — configura equipe, serviços e
+                    agenda aqui. O Super Admin da plataforma gere contas globalmente em{" "}
+                    <span className="text-foreground">/admin</span> (apenas para a equipe Trim Time).
+                  </p>
+                )}
+              </div>
+              <div className="p-3 rounded-lg border border-border bg-secondary/20">
+                <p className="text-foreground font-medium mb-1">Desenvolvimento</p>
+                <p>
+                  No servidor, a variável <code className="text-xs bg-muted px-1 rounded">TRIMTIME_UNLOCK_ALL_PLAN_FEATURES=true</code>{" "}
+                  faz todas as barbearias usarem recursos equivalentes ao <strong>Premium</strong> (útil antes do
+                  pagamento estar ligado). Em produção com cobrança real, remova ou defina como{" "}
+                  <code className="text-xs bg-muted px-1 rounded">false</code>.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="integracoes">
+          <Card className="bg-card border-border">
+            <CardHeader>
+              <CardTitle className="text-foreground">WhatsApp (estrutura)</CardTitle>
+              <CardDescription className="text-muted-foreground">
+                Número cadastrado para integração futura (API Business). Requer plano com recurso WhatsApp ou desbloqueio
+                de desenvolvimento.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="max-w-md space-y-4">
+              {waError && (
+                <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+                  {waError}
+                </div>
+              )}
+              {waLoading ? (
+                <p className="text-muted-foreground">Carregando…</p>
+              ) : (
+                <>
+                  <Field>
+                    <FieldLabel>Número (com DDI, ex.: 5511999998888)</FieldLabel>
+                    <Input
+                      className="bg-input border-border text-foreground"
+                      value={waPhone}
+                      onChange={(e) => setWaPhone(e.target.value)}
+                      placeholder="5511999998888"
+                    />
+                  </Field>
+                  <Button
+                    className="bg-primary text-primary-foreground hover:bg-primary/90"
+                    disabled={waBusy}
+                    onClick={() => void handleSaveWhatsapp()}
+                  >
+                    {waBusy ? "Salvando…" : "Salvar número"}
+                  </Button>
+                </>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>

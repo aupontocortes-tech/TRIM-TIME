@@ -61,6 +61,8 @@ model Barbershop {
   slug        String    @unique
   role        String    @default("admin_barbershop") // super_admin | admin_barbershop
   suspendedAt DateTime? @map("suspended_at") @db.Timestamptz
+  /// JSON: endereço, horários (opening_hours), etc. — ver BarbershopSettings em lib/db/types
+  settings    Json?     @map("settings")
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
   updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz
 

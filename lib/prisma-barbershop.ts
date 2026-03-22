@@ -1,7 +1,8 @@
 /**
  * Converte Barbershop do Prisma para o formato da API (snake_case para o frontend).
  */
-import type { Barbershop } from "@/lib/db/types"
+import type { Barbershop, BarbershopSettings } from "@/lib/db/types"
+import type { Prisma } from "@prisma/client"
 
 type PrismaBarbershop = {
   id: string
@@ -11,6 +12,7 @@ type PrismaBarbershop = {
   slug: string
   role: string
   suspendedAt: Date | null
+  settings: Prisma.JsonValue | null
   createdAt: Date
   updatedAt: Date
 }
@@ -24,6 +26,7 @@ export function toBarbershopApi(b: PrismaBarbershop): Barbershop {
     slug: b.slug,
     role: b.role as Barbershop["role"],
     suspended_at: b.suspendedAt?.toISOString() ?? null,
+    settings: (b.settings && typeof b.settings === "object" ? (b.settings as BarbershopSettings) : null) ?? null,
     created_at: b.createdAt.toISOString(),
     updated_at: b.updatedAt.toISOString(),
   }

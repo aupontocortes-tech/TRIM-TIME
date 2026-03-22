@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 import { createServiceRoleClient } from "@/lib/supabase/server"
 import { requireBarbershopId } from "@/lib/tenant"
+import { hasBarberSlotConflict } from "@/lib/scheduling"
+import { saleCommissionAmount } from "@/lib/commissions"
 import type { Appointment, AppointmentStatus } from "@/lib/db/types"
 
 export async function PATCH(
@@ -10,11 +12,74 @@ export async function PATCH(
   try {
     const barbershopId = await requireBarbershopId()
     const { id } = await params
-    const body = await _request.json() as { status?: AppointmentStatus; total_price?: number }
+    const body = await _request.json() as {
+      status?: AppointmentStatus
+      total_price?: number
+      date?: string
+      time?: string
+      barber_id?: string
+      service_id?: string
+    }
     const supabase = createServiceRoleClient()
+
+    const { data: before, error: beforeErr } = await supabase
+      .from("appointments")
+      .select("*")
+      .eq("id", id)
+      .eq("barbershop_id", barbershopId)
+      .single()
+    if (beforeErr || !before) {
+      return NextResponse.json({ error: "Agendamento não encontrado" }, { status: 404 })
+    }
+
+    const nextDate = body.date ?? (before as Appointment).date
+    const nextTime = body.time ?? (before as Appointment).time
+    const nextBarberId = body.barber_id ?? (before as Appointment).barber_id
+
+    if (
+      body.date !== undefined ||
+      body.time !== undefined ||
+      body.barber_id !== undefined
+    ) {
+      const conflict = await hasBarberSlotConflict(supabase, {
+        barbershopId,
+        barberId: nextBarberId,
+        date: nextDate,
+        time: nextTime,
+        excludeAppointmentId: id,
+      })
+      if (conflict) {
+        return NextResponse.json(
+          { error: "Este horário já está ocupado para o barbeiro escolhido." },
+          { status: 409 }
+        )
+      }
+    }
+
     const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
     if (body.status !== undefined) updates.status = body.status
     if (body.total_price !== undefined) updates.total_price = body.total_price
+    if (body.date !== undefined) updates.date = body.date
+    if (body.time !== undefined) updates.time = body.time
+    if (body.barber_id !== undefined) updates.barber_id = body.barber_id
+    if (body.service_id !== undefined) updates.service_id = body.service_id
+
+    const finalPrice =
+      body.total_price !== undefined
+        ? Number(body.total_price)
+        : Number((before as Appointment).total_price) || 0
+
+    if (body.status === "completed" && (before as Appointment).status !== "completed") {
+      const { data: barber } = await supabase
+        .from("barbers")
+        .select("commission")
+        .eq("id", nextBarberId)
+        .eq("barbershop_id", barbershopId)
+        .single()
+      const pct = Number(barber?.commission) || 0
+      updates.commission_percent = pct
+      updates.commission_amount = saleCommissionAmount(finalPrice, pct)
+    }
 
     const { data, error } = await supabase
       .from("appointments")

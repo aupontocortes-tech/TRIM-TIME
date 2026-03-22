@@ -3,7 +3,9 @@ import { getBarbershopIdFromRequest } from "@/lib/tenant"
 import { createTrialEndDate } from "@/lib/subscription"
 import { prisma } from "@/lib/prisma"
 import { toBarbershopApi } from "@/lib/prisma-barbershop"
-import type { Barbershop } from "@/lib/db/types"
+import { fetchBarbershopPlanContext } from "@/lib/barbershop-plan-server"
+import type { Barbershop, BarbershopSettings } from "@/lib/db/types"
+import type { Prisma } from "@prisma/client"
 
 function slugify(name: string): string {
   return name
@@ -35,7 +37,11 @@ export async function GET() {
         { status: 403 }
       )
     }
-    return NextResponse.json(toBarbershopApi(barbershop))
+    const ctx = await fetchBarbershopPlanContext(barbershopId)
+    return NextResponse.json({
+      ...toBarbershopApi(barbershop),
+      effective_plan: ctx.plan,
+    })
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Erro ao buscar barbearia" },
@@ -88,6 +94,29 @@ export async function POST(request: Request) {
   }
 }
 
+function mergeBarbershopSettings(
+  prev: Prisma.JsonValue | null | undefined,
+  inc: Partial<BarbershopSettings> | undefined
+): Prisma.InputJsonValue | undefined {
+  if (inc === undefined) return undefined
+  const base =
+    prev && typeof prev === "object" && !Array.isArray(prev)
+      ? { ...(prev as Record<string, unknown>) }
+      : {}
+  if (inc.address !== undefined) base.address = inc.address
+  if (inc.city !== undefined) base.city = inc.city
+  if (inc.state !== undefined) base.state = inc.state
+  if (inc.cep !== undefined) base.cep = inc.cep
+  if (inc.opening_hours !== undefined) {
+    const oldH =
+      base.opening_hours && typeof base.opening_hours === "object" && !Array.isArray(base.opening_hours)
+        ? (base.opening_hours as Record<string, unknown>)
+        : {}
+    base.opening_hours = { ...oldH, ...inc.opening_hours }
+  }
+  return base as Prisma.InputJsonValue
+}
+
 export async function PATCH(request: Request) {
   try {
     const barbershopId = await getBarbershopIdFromRequest()
@@ -97,16 +126,28 @@ export async function PATCH(request: Request) {
         { status: 401 }
       )
     }
-    const body = await request.json() as Partial<Pick<Barbershop, "name" | "email" | "phone">>
+    const body = await request.json() as Partial<
+      Pick<Barbershop, "name" | "email" | "phone"> & { settings?: Partial<BarbershopSettings> }
+    >
+    const current = await prisma.barbershop.findUnique({ where: { id: barbershopId } })
+    if (!current) {
+      return NextResponse.json({ error: "Barbearia não encontrada" }, { status: 404 })
+    }
+    const mergedSettings = mergeBarbershopSettings(current.settings, body.settings)
     const barbershop = await prisma.barbershop.update({
       where: { id: barbershopId },
       data: {
-        ...(body.name !== undefined && { name: body.name }),
+        ...(body.name !== undefined && { name: body.name.trim() }),
         ...(body.email !== undefined && { email: body.email.trim().toLowerCase() }),
         ...(body.phone !== undefined && { phone: body.phone?.trim() || null }),
+        ...(mergedSettings !== undefined && { settings: mergedSettings }),
       },
     })
-    return NextResponse.json(toBarbershopApi(barbershop))
+    const ctx = await fetchBarbershopPlanContext(barbershopId)
+    return NextResponse.json({
+      ...toBarbershopApi(barbershop),
+      effective_plan: ctx.plan,
+    })
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Erro ao atualizar barbearia" },
