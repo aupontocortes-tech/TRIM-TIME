@@ -123,7 +123,31 @@ export default function PainelDashboard() {
           </CardContent>
         </Card>
 
-        <Card className="bg-card border-border">
+        <Card
+          className={`bg-card border-border ${!isLoading && stats && !stats.commissionEnabled ? "cursor-pointer transition-opacity hover:opacity-95" : ""}`}
+          role={!isLoading && stats && !stats.commissionEnabled ? "button" : undefined}
+          tabIndex={!isLoading && stats && !stats.commissionEnabled ? 0 : undefined}
+          onClick={
+            !isLoading && stats && !stats.commissionEnabled
+              ? () =>
+                  window.alert(
+                    "Comissões por barbeiro estão disponíveis nos planos Pro e Premium. Faça upgrade para liberar este recurso."
+                  )
+              : undefined
+          }
+          onKeyDown={
+            !isLoading && stats && !stats.commissionEnabled
+              ? (e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault()
+                    window.alert(
+                      "Comissões por barbeiro estão disponíveis nos planos Pro e Premium. Faça upgrade para liberar este recurso."
+                    )
+                  }
+                }
+              : undefined
+          }
+        >
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div className="min-w-0 flex-1">
@@ -138,17 +162,13 @@ export default function PainelDashboard() {
                     <Link
                       href="/painel/financeiro"
                       className="text-xs text-primary hover:underline mt-1 inline-block"
+                      onClick={(e) => e.stopPropagation()}
                     >
                       Ver no financeiro
                     </Link>
                   </>
                 ) : (
-                  <>
-                    <p className="text-lg font-semibold text-muted-foreground">Plano Pro / Premium</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Defina % por barbeiro em Configurações
-                    </p>
-                  </>
+                  <p className="text-3xl font-bold text-muted-foreground">—</p>
                 )}
               </div>
               <div className="w-12 h-12 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0">

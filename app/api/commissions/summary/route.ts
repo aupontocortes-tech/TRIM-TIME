@@ -1,15 +1,15 @@
 import { NextResponse } from "next/server"
 import { createServiceRoleClient } from "@/lib/supabase/server"
 import { requireBarbershopId } from "@/lib/tenant"
-import { fetchEffectivePlanForBarbershop } from "@/lib/barbershop-plan-server"
-import { hasFeature } from "@/lib/plans"
+import { fetchBarbershopPlanContext } from "@/lib/barbershop-plan-server"
+import { canUseBarberCommission } from "@/lib/plans"
 import { aggregateCommissionsForRange, type CommissionsSummaryResponse } from "@/lib/commissions"
 
 export async function GET(request: Request) {
   try {
     const barbershopId = await requireBarbershopId()
-    const plan = await fetchEffectivePlanForBarbershop(barbershopId)
-    const enabled = !!(plan && hasFeature(plan, "barber_commission"))
+    const { plan, barbershopRole } = await fetchBarbershopPlanContext(barbershopId)
+    const enabled = canUseBarberCommission(plan, barbershopRole)
 
     const { searchParams } = new URL(request.url)
     const now = new Date()

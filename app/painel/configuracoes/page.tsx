@@ -75,7 +75,9 @@ const diasSemana = [
 
 export default function ConfiguracoesPage() {
   const { plan, barbershop } = useBarbershop()
-  const commissionFeature = plan != null && hasFeature(plan, "barber_commission")
+  const commissionFeature =
+    barbershop?.role === "super_admin" ||
+    (plan != null && hasFeature(plan, "barber_commission"))
 
   const [barbearia, setBarbearia] = useState(dadosBarbearia)
   const [horarios, setHorarios] = useState(horariosFuncionamento)

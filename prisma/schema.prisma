@@ -69,12 +69,104 @@ model Barbershop {
   clients             Client[]
   services            Service[]
   appointments        Appointment[]
-  waitingList         WaitingListItem[]
-  whatsappIntegration WhatsAppIntegration?
-  notificationLogs    NotificationLog[]
+  waitingList          WaitingListItem[]
+  whatsappIntegration  WhatsAppIntegration?
+  notificationLogs     NotificationLog[]
+  units                BarbershopUnit[]
+  payments             Payment[]
+  financialLedger      FinancialLedgerEntry[]
+  loyaltyLedgerEntries LoyaltyLedgerEntry[]
+  marketingCampaigns   MarketingCampaign[]
 
   @@index([email])
   @@index([role])
+}
+
+// ========== BARBERSHOP UNITS (multi-unidade — opcional) ==========
+model BarbershopUnit {
+  id           String   @id @default(uuid()) @db.Uuid
+  barbershopId String   @map("barbershop_id") @db.Uuid
+  barbershop   Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  name         String
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  appointments Appointment[]
+
+  @@index([barbershopId])
+  @@map("barbershop_units")
+}
+
+// ========== PAYMENTS (gateway futuro) ==========
+model Payment {
+  id           String            @id @default(uuid()) @db.Uuid
+  barbershopId String            @map("barbershop_id") @db.Uuid
+  barbershop   Barbershop        @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  provider     String
+  externalId   String?           @map("external_id")
+  amount       Decimal           @db.Decimal(12, 2)
+  currency     String            @default("BRL")
+  status       String
+  plan         SubscriptionPlan?
+  metadata     Json?
+  createdAt    DateTime          @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([barbershopId])
+  @@index([externalId])
+  @@map("payments")
+}
+
+// ========== FINANCIAL LEDGER ==========
+model FinancialLedgerEntry {
+  id            String        @id @default(uuid()) @db.Uuid
+  barbershopId  String        @map("barbershop_id") @db.Uuid
+  barbershop    Barbershop    @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  direction     String
+  category      String
+  amount        Decimal       @db.Decimal(12, 2)
+  appointmentId String?     @map("appointment_id") @db.Uuid
+  appointment   Appointment?  @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  note          String?
+  metadata      Json?
+  occurredAt    DateTime      @default(now()) @map("occurred_at") @db.Timestamptz
+
+  @@index([barbershopId, occurredAt])
+  @@map("financial_ledger_entries")
+}
+
+// ========== LOYALTY LEDGER ==========
+model LoyaltyLedgerEntry {
+  id            String       @id @default(uuid()) @db.Uuid
+  barbershopId  String       @map("barbershop_id") @db.Uuid
+  barbershop    Barbershop   @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  clientId      String       @map("client_id") @db.Uuid
+  client        Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  deltaPoints   Int          @map("delta_points")
+  reason        String
+  appointmentId String?      @map("appointment_id") @db.Uuid
+  appointment   Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  createdAt     DateTime     @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([clientId])
+  @@index([barbershopId])
+  @@map("loyalty_ledger_entries")
+}
+
+// ========== MARKETING CAMPAIGNS (estrutura) ==========
+model MarketingCampaign {
+  id           String    @id @default(uuid()) @db.Uuid
+  barbershopId String    @map("barbershop_id") @db.Uuid
+  barbershop   Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  name         String
+  channel      String
+  status       String
+  payload      Json?
+  scheduledFor DateTime? @map("scheduled_for") @db.Timestamptz
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([barbershopId])
+  @@map("marketing_campaigns")
 }
 
 // ========== SUBSCRIPTIONS ==========
@@ -103,6 +195,7 @@ model Barber {
   commission   Decimal  @default(0) @db.Decimal(5, 2)
   active       Boolean  @default(true)
   role         String   @default("user") // admin_barbershop | user
+  authUserId   String?  @map("auth_user_id")
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
@@ -114,19 +207,21 @@ model Barber {
 
 // ========== CLIENTS ==========
 model Client {
-  id           String   @id @default(uuid()) @db.Uuid
-  barbershopId String   @map("barbershop_id") @db.Uuid
-  barbershop   Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
-  name         String
-  phone        String?
-  email        String?
-  notes        String?
-  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz
+  id            String   @id @default(uuid()) @db.Uuid
+  barbershopId  String   @map("barbershop_id") @db.Uuid
+  barbershop    Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  name          String
+  phone         String?
+  email         String?
+  notes         String?
+  loyaltyPoints Int      @default(0) @map("loyalty_points")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
-  appointments  Appointment[]
-  waitingList   WaitingListItem[]
-  notificationLogs NotificationLog[]
+  appointments       Appointment[]
+  waitingList        WaitingListItem[]
+  notificationLogs   NotificationLog[]
+  loyaltyLedgerEntries LoyaltyLedgerEntry[]
 
   @@index([barbershopId])
   @@index([barbershopId, phone])
@@ -162,19 +257,26 @@ model Appointment {
   barber       Barber           @relation(fields: [barberId], references: [id], onDelete: Restrict)
   serviceId    String           @map("service_id") @db.Uuid
   service      Service          @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  unitId       String?          @map("unit_id") @db.Uuid
+  unit         BarbershopUnit?  @relation(fields: [unitId], references: [id], onDelete: SetNull)
   date         DateTime         @db.Date
   time         String           // HH:MM ou HH:MM:SS
   status       AppointmentStatus @default(pending)
   totalPrice   Decimal?         @map("total_price") @db.Decimal(10, 2)
+  commissionPercent Decimal?    @map("commission_percent") @db.Decimal(5, 2)
+  commissionAmount  Decimal?    @map("commission_amount") @db.Decimal(10, 2)
   createdAt    DateTime         @default(now()) @map("created_at") @db.Timestamptz
   updatedAt    DateTime         @updatedAt @map("updated_at") @db.Timestamptz
 
-  notificationLogs NotificationLog[]
+  notificationLogs      NotificationLog[]
+  financialLedgerEntries FinancialLedgerEntry[]
+  loyaltyLedgerEntries   LoyaltyLedgerEntry[]
 
   @@index([barbershopId])
   @@index([barbershopId, date])
   @@index([clientId])
   @@index([barberId])
+  @@index([unitId])
 }
 
 // ========== WAITING LIST ==========

@@ -2,8 +2,8 @@ import { NextResponse } from "next/server"
 import { createServiceRoleClient } from "@/lib/supabase/server"
 import { requireBarbershopId } from "@/lib/tenant"
 import type { Barber } from "@/lib/db/types"
-import { fetchEffectivePlanForBarbershop } from "@/lib/barbershop-plan-server"
-import { getUpgradeMessage, hasFeature } from "@/lib/plans"
+import { fetchBarbershopPlanContext } from "@/lib/barbershop-plan-server"
+import { canUseBarberCommission, getUpgradeMessage } from "@/lib/plans"
 
 export async function PATCH(
   _request: Request,
@@ -27,8 +27,8 @@ export async function PATCH(
     if (body.active !== undefined) update.active = Boolean(body.active)
 
     if (body.commission !== undefined) {
-      const plan = await fetchEffectivePlanForBarbershop(barbershopId)
-      const allowed = !!(plan && hasFeature(plan, "barber_commission"))
+      const { plan, barbershopRole } = await fetchBarbershopPlanContext(barbershopId)
+      const allowed = canUseBarberCommission(plan, barbershopRole)
       const c = Number(body.commission)
       if (!allowed) {
         if (c !== 0) {

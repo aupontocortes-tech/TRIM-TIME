@@ -99,6 +99,15 @@ export function hasFeature(plan: SubscriptionPlan, featureKey: keyof typeof FEAT
   return plans.includes(plan)
 }
 
+/** Comissão por barbeiro: Pro/Premium, ou super_admin (acesso total ao SaaS). */
+export function canUseBarberCommission(
+  plan: SubscriptionPlan | null,
+  barbershopRole?: string | null
+): boolean {
+  if (barbershopRole === "super_admin") return true
+  return !!(plan && hasFeature(plan, "barber_commission"))
+}
+
 export function getUpgradeMessage(featureKey: keyof typeof FEATURE_KEYS): string {
   return "Este recurso não está disponível no seu plano. Faça upgrade para desbloquear."
 }

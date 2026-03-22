@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { createServiceRoleClient } from "@/lib/supabase/server"
 import { requireBarbershopId } from "@/lib/tenant"
+import { hasBarberSlotConflict } from "@/lib/scheduling"
 import type { Appointment, AppointmentStatus } from "@/lib/db/types"
 
 export async function GET(request: Request) {
@@ -58,6 +59,18 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: "Você já possui um agendamento neste dia. Cancele-o para poder fazer outro." },
         { status: 400 }
+      )
+    }
+    const conflict = await hasBarberSlotConflict(supabase, {
+      barbershopId,
+      barberId: body.barber_id,
+      date: body.date,
+      time: body.time,
+    })
+    if (conflict) {
+      return NextResponse.json(
+        { error: "Este horário já está ocupado para o barbeiro escolhido." },
+        { status: 409 }
       )
     }
     const { data: service } = await supabase

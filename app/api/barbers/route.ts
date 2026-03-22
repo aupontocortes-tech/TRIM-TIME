@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server"
 import { createServiceRoleClient } from "@/lib/supabase/server"
 import { requireBarbershopId } from "@/lib/tenant"
-import { canAddBarber, getBarberLimitMessage, getUpgradeMessage, hasFeature } from "@/lib/plans"
+import { canAddBarber, canUseBarberCommission, getBarberLimitMessage, getUpgradeMessage } from "@/lib/plans"
 import { getEffectivePlanForBarbershop } from "@/lib/subscription"
-import { fetchEffectivePlanForBarbershop } from "@/lib/barbershop-plan-server"
+import { fetchBarbershopPlanContext } from "@/lib/barbershop-plan-server"
 import type { Barber } from "@/lib/db/types"
 
 export async function GET() {
@@ -61,8 +61,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Nome é obrigatório" }, { status: 400 })
     }
 
-    const planForCommission = await fetchEffectivePlanForBarbershop(barbershopId)
-    const commissionAllowed = !!(planForCommission && hasFeature(planForCommission, "barber_commission"))
+    const { plan: planForCommission, barbershopRole } = await fetchBarbershopPlanContext(barbershopId)
+    const commissionAllowed = canUseBarberCommission(planForCommission, barbershopRole)
     let commission = body.commission ?? 0
     if (!commissionAllowed) {
       if (body.commission != null && Number(body.commission) !== 0) {

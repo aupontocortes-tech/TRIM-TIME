@@ -256,40 +256,37 @@ export default function FinanceiroPage() {
                 })}
               </p>
             ) : (
-              <>
-                <p className="text-lg font-semibold text-muted-foreground">Pro / Premium</p>
-                <Link href="/painel/configuracoes" className="text-xs text-primary hover:underline mt-1 inline-block">
-                  Ver planos em Configurações
-                </Link>
-              </>
+              <p className="text-2xl font-bold text-muted-foreground">—</p>
             )}
           </CardContent>
         </Card>
       </div>
 
-      {/* Comissões por barbeiro (Pro/Premium) */}
+      {/* Comissões por barbeiro */}
       <Card className="bg-card border-border">
         <CardHeader>
           <CardTitle className="text-foreground">Comissões por barbeiro</CardTitle>
           <CardDescription className="text-muted-foreground">
-            Valores com base em agendamentos concluídos ou confirmados com preço, no período selecionado
-            acima. Ajuste a % de cada um em Configurações → Equipe.
+            {commissionSummary?.enabled
+              ? "Valores com base em agendamentos concluídos ou confirmados com preço, no período selecionado acima. Ajuste a % em Configurações → Equipe."
+              : "Resumo por profissional."}
           </CardDescription>
         </CardHeader>
         <CardContent>
           {commissionLoading ? (
             <p className="text-sm text-muted-foreground py-12 text-center">Carregando…</p>
           ) : !commissionSummary?.enabled ? (
-            <div className="py-10 text-center space-y-3">
-              <p className="text-muted-foreground text-sm max-w-md mx-auto">
-                Comissão por barbeiro está disponível nos planos <strong className="text-foreground">Pro</strong> e{" "}
-                <strong className="text-foreground">Premium</strong>. Faça upgrade para definir a % de cada
-                profissional e acompanhar aqui.
-              </p>
-              <Button asChild variant="outline" className="border-border">
-                <Link href="/painel/configuracoes">Abrir Configurações</Link>
-              </Button>
-            </div>
+            <button
+              type="button"
+              className="w-full py-14 text-center outline-none rounded-lg focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-card cursor-pointer"
+              onClick={() =>
+                window.alert(
+                  "Comissões por barbeiro estão disponíveis nos planos Pro e Premium. Faça upgrade para liberar este recurso."
+                )
+              }
+            >
+              <p className="text-3xl font-bold text-muted-foreground">—</p>
+            </button>
           ) : commissionChartData.length === 0 ? (
             <p className="text-sm text-muted-foreground py-12 text-center">
               Nenhum dado no período. Confira se os agendamentos têm valor e status concluído/confirmado.
