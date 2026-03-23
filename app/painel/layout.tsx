@@ -47,7 +47,7 @@ export default function PainelLayout({
   const pathname = usePathname()
   const router = useRouter()
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const { barbershop } = useBarbershop()
+  const { barbershop, loading: barbershopLoading } = useBarbershop()
   const { units, selectedUnitId, changeUnit, loading: unitsLoading } = useUnits()
   const [impersonating, setImpersonating] = useState(false)
   /** Role para menu: hoje sempre da barbearia; quando houver login de barbeiro, usar barber.role (user = só agenda/clientes). */
@@ -60,6 +60,13 @@ export default function PainelLayout({
       .then((data) => setImpersonating(data.impersonating === true))
       .catch(() => setImpersonating(false))
   }, [])
+
+  useEffect(() => {
+    if (barbershopLoading) return
+    if (!barbershop) {
+      router.replace("/login")
+    }
+  }, [barbershopLoading, barbershop, router])
 
   const handleVoltarAdmin = () => {
     fetch("/api/admin/impersonate", {
@@ -77,6 +84,22 @@ export default function PainelLayout({
     selectedUnitId && units.length > 0
       ? units.find((u) => u.id === selectedUnitId)?.name ?? "Unidade"
       : "Todas unidades"
+
+  if (barbershopLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center text-muted-foreground">
+        Carregando painel…
+      </div>
+    )
+  }
+
+  if (!barbershop) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center text-muted-foreground">
+        Redirecionando para o login…
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -261,9 +284,9 @@ export default function PainelLayout({
                 <span className="absolute top-1 right-1 w-2 h-2 bg-primary rounded-full" />
               </Button>
               <span className="md:hidden text-xs text-muted-foreground">{selectedUnitLabel}</span>
-              <Link href={barbershop?.slug ? `/b/${barbershop.slug}` : "/b/trim-time"} target="_blank">
+              <Link href={barbershop?.slug ? `/b/${barbershop.slug}` : "/b/trim-time"} target="_blank" rel="noopener noreferrer">
                 <Button variant="outline" size="sm" className="hidden sm:flex border-border text-foreground hover:bg-secondary">
-                  Ver página pública
+                  Link para clientes
                 </Button>
               </Link>
             </div>

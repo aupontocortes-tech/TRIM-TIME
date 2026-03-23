@@ -1,8 +1,10 @@
 {
-  "name": "Trim Time - Agendamento",
+  "id": "trimtime-painel",
+  "name": "Trim Time - Painel",
   "short_name": "Trim Time",
-  "description": "Agende na sua barbearia pelo celular",
-  "start_url": "/b/trim-time",
+  "description": "Gestão da sua barbearia: agenda, clientes e configurações",
+  "start_url": "/painel",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#0a0a0a",
   "theme_color": "#c9a227",

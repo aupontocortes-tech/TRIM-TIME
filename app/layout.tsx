@@ -29,7 +29,7 @@ export const metadata: Metadata = {
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
-    title: 'Trim Time',
+    title: 'Trim Time - Painel',
     statusBarStyle: 'black-translucent',
   },
   // Ícones: use app/icon.png e app/apple-icon.png (convenção oficial do Next.js)
