@@ -15,9 +15,9 @@ const src = path.join(root, "public", "trim-time-icon-source.png")
 const bg = { r: 0, g: 0, b: 0, alpha: 1 }
 
 /** Tamanho do logo em relação ao lado do quadrado (resto = margem). */
-const SCALE_ANY = 0.54
-/** Maskable: logo menor — Android recorta as bordas; assim o símbolo fica visualmente menor. */
-const SCALE_MASKABLE = 0.44
+const SCALE_ANY = 0.57
+/** Maskable: um pouco menor que "any" por causa do recorte do launcher Android. */
+const SCALE_MASKABLE = 0.47
 
 /**
  * @param {number} canvasSize
