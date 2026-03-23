@@ -3,8 +3,9 @@
 import { useState, useEffect, useCallback } from "react"
 import Link from "next/link"
 import { useBarbershop } from "@/hooks/use-barbershop"
+import { useUnits } from "@/hooks/use-units"
 import { hasFeature, PLAN_LABELS } from "@/lib/plans"
-import type { Barber, Service } from "@/lib/db/types"
+import type { Barber, Service, BarbershopUnit } from "@/lib/db/types"
 import {
   defaultHorariosUi,
   openingHoursFromSettings,
@@ -34,6 +35,7 @@ import {
   QrCode,
   Shield,
   Smartphone,
+  Building2,
 } from "lucide-react"
 import {
   Dialog,
@@ -75,9 +77,19 @@ const emptyBarbearia: BarbeariaForm = {
 
 export default function ConfiguracoesPage() {
   const { plan, barbershop, loading: barbershopLoading, refetch } = useBarbershop()
+  const {
+    units,
+    selectedUnitId,
+    loading: unitsLoading,
+    changeUnit,
+    refetch: refetchUnits,
+  } = useUnits()
   const commissionFeature =
     barbershop?.role === "super_admin" ||
     (plan != null && hasFeature(plan, "barber_commission"))
+  const multiUnitsFeature =
+    barbershop?.role === "super_admin" ||
+    (plan != null && hasFeature(plan, "multi_units"))
 
   const [barbearia, setBarbearia] = useState<BarbeariaForm>(emptyBarbearia)
   const [horarios, setHorarios] = useState<
@@ -126,6 +138,22 @@ export default function ConfiguracoesPage() {
   const [waError, setWaError] = useState<string | null>(null)
   const [waPhone, setWaPhone] = useState("")
   const [waBusy, setWaBusy] = useState(false)
+  const [unitBusy, setUnitBusy] = useState(false)
+  const [unitError, setUnitError] = useState<string | null>(null)
+  const [newUnitName, setNewUnitName] = useState("")
+  const [newUnitPhone, setNewUnitPhone] = useState("")
+  const [newUnitAddress, setNewUnitAddress] = useState("")
+  const [newUnitCity, setNewUnitCity] = useState("")
+  const [newUnitState, setNewUnitState] = useState("")
+  const [newUnitCep, setNewUnitCep] = useState("")
+  const [unitEditOpen, setUnitEditOpen] = useState(false)
+  const [editingUnit, setEditingUnit] = useState<BarbershopUnit | null>(null)
+  const [editUnitName, setEditUnitName] = useState("")
+  const [editUnitPhone, setEditUnitPhone] = useState("")
+  const [editUnitAddress, setEditUnitAddress] = useState("")
+  const [editUnitCity, setEditUnitCity] = useState("")
+  const [editUnitState, setEditUnitState] = useState("")
+  const [editUnitCep, setEditUnitCep] = useState("")
 
   useEffect(() => {
     setOrigin(typeof window !== "undefined" ? window.location.origin : "")
@@ -414,6 +442,110 @@ export default function ConfiguracoesPage() {
     }
   }
 
+  const handleCreateUnit = async () => {
+    if (!newUnitName.trim()) return
+    setUnitBusy(true)
+    setUnitError(null)
+    try {
+      const r = await fetch("/api/units", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newUnitName.trim(),
+          phone: newUnitPhone.trim() || null,
+          address: newUnitAddress.trim() || null,
+          city: newUnitCity.trim() || null,
+          state: newUnitState.trim() || null,
+          cep: newUnitCep.trim() || null,
+        }),
+      })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) {
+        setUnitError(typeof j.error === "string" ? j.error : "Erro ao criar unidade")
+        return
+      }
+      setNewUnitName("")
+      setNewUnitPhone("")
+      setNewUnitAddress("")
+      setNewUnitCity("")
+      setNewUnitState("")
+      setNewUnitCep("")
+      await refetchUnits()
+    } catch {
+      setUnitError("Erro de rede ao criar unidade")
+    } finally {
+      setUnitBusy(false)
+    }
+  }
+
+  const openEditUnit = (unit: BarbershopUnit) => {
+    setEditingUnit(unit)
+    setEditUnitName(unit.name)
+    setEditUnitPhone(unit.phone ?? "")
+    setEditUnitAddress(unit.address ?? "")
+    setEditUnitCity(unit.city ?? "")
+    setEditUnitState(unit.state ?? "")
+    setEditUnitCep(unit.cep ?? "")
+    setUnitEditOpen(true)
+  }
+
+  const handleSaveEditUnit = async () => {
+    if (!editingUnit || !editUnitName.trim()) return
+    setUnitBusy(true)
+    setUnitError(null)
+    try {
+      const r = await fetch(`/api/units/${editingUnit.id}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: editUnitName.trim(),
+          phone: editUnitPhone.trim() || null,
+          address: editUnitAddress.trim() || null,
+          city: editUnitCity.trim() || null,
+          state: editUnitState.trim() || null,
+          cep: editUnitCep.trim() || null,
+        }),
+      })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) {
+        setUnitError(typeof j.error === "string" ? j.error : "Erro ao salvar unidade")
+        return
+      }
+      setUnitEditOpen(false)
+      setEditingUnit(null)
+      await refetchUnits()
+    } catch {
+      setUnitError("Erro de rede ao salvar unidade")
+    } finally {
+      setUnitBusy(false)
+    }
+  }
+
+  const handleToggleUnit = async (unit: BarbershopUnit) => {
+    setUnitBusy(true)
+    setUnitError(null)
+    try {
+      const r = await fetch(`/api/units/${unit.id}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ active: !unit.active }),
+      })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) {
+        setUnitError(typeof j.error === "string" ? j.error : "Erro ao atualizar unidade")
+        return
+      }
+      await refetchUnits()
+    } catch {
+      setUnitError("Erro de rede ao atualizar unidade")
+    } finally {
+      setUnitBusy(false)
+    }
+  }
+
   const openEdit = (b: Barber) => {
     setEditing(b)
     setEditName(b.name)
@@ -662,6 +794,10 @@ export default function ConfiguracoesPage() {
           <TabsTrigger value="plano" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             <Shield className="w-4 h-4 mr-2" />
             Plano &amp; conta
+          </TabsTrigger>
+          <TabsTrigger value="unidades" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+            <Building2 className="w-4 h-4 mr-2" />
+            Unidades
           </TabsTrigger>
           <TabsTrigger value="integracoes" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             <Smartphone className="w-4 h-4 mr-2" />
@@ -1277,6 +1413,274 @@ export default function ConfiguracoesPage() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="unidades">
+          <Card className="bg-card border-border">
+            <CardHeader>
+              <CardTitle className="text-foreground">Unidades da barbearia</CardTitle>
+              <CardDescription className="text-muted-foreground space-y-2">
+                <span className="block">
+                  Cada unidade pode ter <strong className="text-foreground">nome próprio</strong> (muitas vezes igual ao
+                  nome da marca) e, se quiser, <strong className="text-foreground">telefone e endereço</strong> diferentes
+                  para identificar a loja física.
+                </span>
+                <span className="block">
+                  <strong className="text-foreground">E-mail e WhatsApp</strong> da integração continuam os da conta da
+                  barbearia — um único número pode atender todas as unidades. Só faz sentido cadastrar WhatsApp por
+                  unidade se cada loja tiver atendimento separado (isso pode ser evoluído depois).
+                </span>
+                <span className="block">
+                  No topo do painel, escolha a unidade para filtrar dashboard e relatórios que usam agendamentos por
+                  unidade.
+                </span>
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {!multiUnitsFeature && (
+                <div className="p-3 rounded-lg border border-amber-500/30 bg-amber-500/10 text-sm text-amber-700 dark:text-amber-400">
+                  Multiunidade está disponível no plano Premium.
+                </div>
+              )}
+              {unitError && (
+                <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+                  {unitError}
+                </div>
+              )}
+
+              <div className="space-y-3 max-w-2xl">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="text-primary"
+                    disabled={!barbershop?.name}
+                    onClick={() => setNewUnitName(barbershop?.name ?? "")}
+                  >
+                    Usar nome da barbearia
+                  </Button>
+                </div>
+                <FieldGroup>
+                  <Field>
+                    <FieldLabel>Nome da unidade</FieldLabel>
+                    <Input
+                      className="bg-input border-border text-foreground"
+                      placeholder="Ex.: Trim Time — Centro ou mesmo nome da barbearia"
+                      value={newUnitName}
+                      onChange={(e) => setNewUnitName(e.target.value)}
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel>Telefone da unidade (opcional)</FieldLabel>
+                    <Input
+                      className="bg-input border-border text-foreground"
+                      placeholder="WhatsApp / fixo desta loja"
+                      value={newUnitPhone}
+                      onChange={(e) => setNewUnitPhone(e.target.value)}
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel>Endereço (opcional)</FieldLabel>
+                    <Input
+                      className="bg-input border-border text-foreground"
+                      placeholder="Rua, número, bairro"
+                      value={newUnitAddress}
+                      onChange={(e) => setNewUnitAddress(e.target.value)}
+                    />
+                  </Field>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                    <Field>
+                      <FieldLabel>Cidade</FieldLabel>
+                      <Input
+                        className="bg-input border-border text-foreground"
+                        value={newUnitCity}
+                        onChange={(e) => setNewUnitCity(e.target.value)}
+                      />
+                    </Field>
+                    <Field>
+                      <FieldLabel>Estado</FieldLabel>
+                      <Input
+                        className="bg-input border-border text-foreground"
+                        value={newUnitState}
+                        onChange={(e) => setNewUnitState(e.target.value)}
+                      />
+                    </Field>
+                    <Field>
+                      <FieldLabel>CEP</FieldLabel>
+                      <Input
+                        className="bg-input border-border text-foreground"
+                        value={newUnitCep}
+                        onChange={(e) => setNewUnitCep(e.target.value)}
+                      />
+                    </Field>
+                  </div>
+                </FieldGroup>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <Button
+                    className="bg-primary text-primary-foreground hover:bg-primary/90"
+                    disabled={unitBusy || !newUnitName.trim() || !multiUnitsFeature}
+                    onClick={() => void handleCreateUnit()}
+                  >
+                    {unitBusy ? "Salvando…" : "Adicionar unidade"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="border-border text-foreground hover:bg-secondary"
+                    onClick={() => void changeUnit(null)}
+                  >
+                    Ver todas unidades
+                  </Button>
+                </div>
+              </div>
+
+              {unitsLoading ? (
+                <p className="text-sm text-muted-foreground">Carregando unidades…</p>
+              ) : units.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Nenhuma unidade cadastrada. O sistema está em modo "todas as unidades".
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {units.map((unit) => (
+                    <div
+                      key={unit.id}
+                      className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-lg border border-border bg-secondary/20"
+                    >
+                      <div className="min-w-0">
+                        <p className="font-medium text-foreground">{unit.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {unit.id === selectedUnitId ? "Unidade ativa no painel" : "Unidade disponível"}
+                          {" • "}
+                          {unit.active ? "Ativa" : "Inativa"}
+                        </p>
+                        {(unit.phone || unit.address || unit.city) && (
+                          <p className="text-xs text-muted-foreground mt-1 max-w-md">
+                            {[unit.phone, [unit.address, unit.city, unit.state].filter(Boolean).join(", ")].filter(Boolean).join(" · ")}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="border-border text-foreground hover:bg-secondary"
+                          onClick={() => void changeUnit(unit.id)}
+                        >
+                          Selecionar
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="border-border text-foreground hover:bg-secondary"
+                          onClick={() => openEditUnit(unit)}
+                          disabled={unitBusy || !multiUnitsFeature}
+                        >
+                          Editar
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="border-border text-foreground hover:bg-secondary"
+                          onClick={() => void handleToggleUnit(unit)}
+                          disabled={unitBusy || !multiUnitsFeature}
+                        >
+                          {unit.active ? "Desativar" : "Ativar"}
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Dialog
+            open={unitEditOpen}
+            onOpenChange={(open) => {
+              setUnitEditOpen(open)
+              if (!open) setEditingUnit(null)
+            }}
+          >
+            <DialogContent className="bg-card border-border max-w-lg">
+              <DialogHeader>
+                <DialogTitle className="text-foreground">Editar unidade</DialogTitle>
+              </DialogHeader>
+              {editingUnit && (
+                <FieldGroup className="py-2">
+                  <Field>
+                    <FieldLabel>Nome</FieldLabel>
+                    <Input
+                      className="bg-input border-border text-foreground"
+                      value={editUnitName}
+                      onChange={(e) => setEditUnitName(e.target.value)}
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel>Telefone (opcional)</FieldLabel>
+                    <Input
+                      className="bg-input border-border text-foreground"
+                      value={editUnitPhone}
+                      onChange={(e) => setEditUnitPhone(e.target.value)}
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel>Endereço</FieldLabel>
+                    <Input
+                      className="bg-input border-border text-foreground"
+                      value={editUnitAddress}
+                      onChange={(e) => setEditUnitAddress(e.target.value)}
+                    />
+                  </Field>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                    <Field>
+                      <FieldLabel>Cidade</FieldLabel>
+                      <Input
+                        className="bg-input border-border text-foreground"
+                        value={editUnitCity}
+                        onChange={(e) => setEditUnitCity(e.target.value)}
+                      />
+                    </Field>
+                    <Field>
+                      <FieldLabel>Estado</FieldLabel>
+                      <Input
+                        className="bg-input border-border text-foreground"
+                        value={editUnitState}
+                        onChange={(e) => setEditUnitState(e.target.value)}
+                      />
+                    </Field>
+                    <Field>
+                      <FieldLabel>CEP</FieldLabel>
+                      <Input
+                        className="bg-input border-border text-foreground"
+                        value={editUnitCep}
+                        onChange={(e) => setEditUnitCep(e.target.value)}
+                      />
+                    </Field>
+                  </div>
+                  <div className="flex gap-2 pt-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="flex-1 border-border"
+                      onClick={() => setUnitEditOpen(false)}
+                    >
+                      Cancelar
+                    </Button>
+                    <Button
+                      type="button"
+                      className="flex-1 bg-primary text-primary-foreground"
+                      disabled={unitBusy || !editUnitName.trim()}
+                      onClick={() => void handleSaveEditUnit()}
+                    >
+                      {unitBusy ? "Salvando…" : "Salvar"}
+                    </Button>
+                  </div>
+                </FieldGroup>
+              )}
+            </DialogContent>
+          </Dialog>
         </TabsContent>
 
         <TabsContent value="integracoes">

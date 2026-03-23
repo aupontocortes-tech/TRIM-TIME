@@ -3,6 +3,7 @@ import { createServiceRoleClient } from "@/lib/supabase/server"
 import { requireBarbershopId } from "@/lib/tenant"
 import { hasBarberSlotConflict } from "@/lib/scheduling"
 import { saleCommissionAmount } from "@/lib/commissions"
+import { resolveSelectedUnitId } from "@/lib/unit-context"
 import type { Appointment, AppointmentStatus } from "@/lib/db/types"
 
 export async function PATCH(
@@ -21,13 +22,15 @@ export async function PATCH(
       service_id?: string
     }
     const supabase = createServiceRoleClient()
+    const selectedUnitId = await resolveSelectedUnitId(supabase, barbershopId)
 
-    const { data: before, error: beforeErr } = await supabase
+    let beforeQuery = supabase
       .from("appointments")
       .select("*")
       .eq("id", id)
       .eq("barbershop_id", barbershopId)
-      .single()
+    if (selectedUnitId) beforeQuery = beforeQuery.eq("unit_id", selectedUnitId)
+    const { data: before, error: beforeErr } = await beforeQuery.single()
     if (beforeErr || !before) {
       return NextResponse.json({ error: "Agendamento não encontrado" }, { status: 404 })
     }
@@ -81,11 +84,13 @@ export async function PATCH(
       updates.commission_amount = saleCommissionAmount(finalPrice, pct)
     }
 
-    const { data, error } = await supabase
+    let updateQuery = supabase
       .from("appointments")
       .update(updates)
       .eq("id", id)
       .eq("barbershop_id", barbershopId)
+    if (selectedUnitId) updateQuery = updateQuery.eq("unit_id", selectedUnitId)
+    const { data, error } = await updateQuery
       .select("*, client:clients(*), barber:barbers(*), service:services(*)")
       .single()
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -143,18 +148,22 @@ export async function DELETE(
     const barbershopId = await requireBarbershopId()
     const { id } = await params
     const supabase = createServiceRoleClient()
-    const { data: appointment } = await supabase
+    const selectedUnitId = await resolveSelectedUnitId(supabase, barbershopId)
+    let appointmentQuery = supabase
       .from("appointments")
       .select("*")
       .eq("id", id)
       .eq("barbershop_id", barbershopId)
-      .single()
+    if (selectedUnitId) appointmentQuery = appointmentQuery.eq("unit_id", selectedUnitId)
+    const { data: appointment } = await appointmentQuery.single()
     if (appointment) await notifyFirstWaitingList(supabase, barbershopId, appointment as Appointment)
-    const { error } = await supabase
+    let deleteQuery = supabase
       .from("appointments")
       .delete()
       .eq("id", id)
       .eq("barbershop_id", barbershopId)
+    if (selectedUnitId) deleteQuery = deleteQuery.eq("unit_id", selectedUnitId)
+    const { error } = await deleteQuery
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     return NextResponse.json({ ok: true })
   } catch (e) {

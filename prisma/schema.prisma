@@ -90,6 +90,12 @@ model BarbershopUnit {
   barbershopId String   @map("barbershop_id") @db.Uuid
   barbershop   Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
   name         String
+  /// Contato e endereço da loja (opcional). E-mail e WhatsApp da integração seguem na conta da barbearia.
+  phone        String?  @map("phone")
+  address      String?  @map("address")
+  city         String?  @map("city")
+  state        String?  @map("state")
+  cep          String?  @map("cep")
   active       Boolean  @default(true)
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz

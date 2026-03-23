@@ -32,7 +32,7 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between min-h-[5.5rem] md:min-h-[7.5rem] py-2 md:py-3">
             <Link href="/" className="flex items-center gap-3 sm:gap-4 min-w-0 focus:outline-none focus:ring-2 focus:ring-primary rounded-lg transition-opacity hover:opacity-90">
-              <BrandLogo size="hero" priority />
+              <BrandLogo size="hero" src="/icon.png" withBorder={false} priority />
               <TrimTimeWordmark className="text-2xl sm:text-3xl md:text-4xl shrink-0 leading-none" />
             </Link>
 
@@ -468,7 +468,7 @@ export default function LandingPage() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
             <div className="col-span-2 md:col-span-1">
               <Link href="/" className="flex items-center gap-3 mb-4 w-fit focus:outline-none focus:ring-2 focus:ring-primary rounded-lg transition-opacity hover:opacity-90">
-                <BrandLogo size="lg" />
+                <BrandLogo size="lg" src="/icon.png" withBorder={false} />
               </Link>
               <p className="text-sm text-muted-foreground">
                 A plataforma completa para gestão de barbearias.

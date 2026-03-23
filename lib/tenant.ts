@@ -5,6 +5,7 @@
 import { cookies, headers } from "next/headers"
 
 const BARBERSHOP_ID_COOKIE = "trimtime_barbershop_id"
+export const BARBERSHOP_UNIT_COOKIE = "trimtime_barbershop_unit_id"
 export const IMPERSONATE_COOKIE = "trimtime_impersonate_id"
 
 /** Usado em API routes e Server Components para obter o barbershop do request. Se impersonação ativa, retorna o id impersonado. */
@@ -22,6 +23,12 @@ export async function getBarbershopIdFromRequest(): Promise<string | null> {
 export async function getRealBarbershopIdFromRequest(): Promise<string | null> {
   const cookieStore = await cookies()
   return cookieStore.get(BARBERSHOP_ID_COOKIE)?.value ?? null
+}
+
+/** Unidade selecionada da barbearia (opcional). */
+export async function getBarbershopUnitIdFromRequest(): Promise<string | null> {
+  const cookieStore = await cookies()
+  return cookieStore.get(BARBERSHOP_UNIT_COOKIE)?.value ?? null
 }
 
 /** Exige barbershop_id; lança se não houver (para usar em API que requer tenant) */

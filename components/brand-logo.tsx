@@ -10,7 +10,7 @@ const sizeClass: Record<"sm" | "md" | "lg" | "xl" | "panel" | "hero", string> = 
   lg: "h-12 w-12 min-h-12 min-w-12",
   xl: "h-16 w-16 min-h-16 min-w-16",
   /** Sidebar do painel — grande, sem brilho dourado (use com withBorder={false} dentro do quadro) */
-  panel: "h-36 w-36 min-h-36 min-w-36 sm:h-40 sm:w-40 sm:min-h-40 sm:min-w-40",
+  panel: "h-24 w-24 min-h-24 min-w-24 sm:h-28 sm:w-28 sm:min-h-28 sm:min-w-28",
   /** Landing / destaque — quadrado grande na tela */
   hero: "h-20 w-20 min-h-20 min-w-20 sm:h-24 sm:w-24 sm:min-h-24 sm:min-w-24 md:h-[7rem] md:w-[7rem] md:min-h-[7rem] md:min-w-[7rem]",
 }
@@ -21,7 +21,7 @@ function sizesAttr(size: keyof typeof sizeClass): string {
     case "hero":
       return "(max-width: 640px) 160px, (max-width: 768px) 192px, 256px"
     case "panel":
-      return "(max-width: 640px) 160px, 192px"
+      return "(max-width: 640px) 96px, 112px"
     case "xl":
       return "128px"
     case "lg":
@@ -37,6 +37,8 @@ function sizesAttr(size: keyof typeof sizeClass): string {
 type BrandLogoProps = {
   size?: keyof typeof sizeClass
   className?: string
+  /** Permite usar um arquivo alternativo de logo (ex.: versão com fundo transparente na landing). */
+  src?: string
   /** Borda dourada sutil (ex.: painel) */
   withBorder?: boolean
   /** Prioridade de carregamento (LCP) — use no topo da página */
@@ -46,6 +48,7 @@ type BrandLogoProps = {
 export function BrandLogo({
   size = "md",
   className,
+  src = LOGO_SRC,
   withBorder = true,
   priority,
 }: BrandLogoProps) {
@@ -64,7 +67,7 @@ export function BrandLogo({
       )}
     >
       <Image
-        src={LOGO_SRC}
+        src={src}
         alt="Trim Time"
         fill
         sizes={sizesAttr(size)}

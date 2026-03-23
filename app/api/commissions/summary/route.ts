@@ -4,6 +4,7 @@ import { requireBarbershopId } from "@/lib/tenant"
 import { fetchBarbershopPlanContext } from "@/lib/barbershop-plan-server"
 import { canUseBarberCommission } from "@/lib/plans"
 import { aggregateCommissionsForRange, type CommissionsSummaryResponse } from "@/lib/commissions"
+import { resolveSelectedUnitId } from "@/lib/unit-context"
 
 export async function GET(request: Request) {
   try {
@@ -36,7 +37,14 @@ export async function GET(request: Request) {
     }
 
     const supabase = createServiceRoleClient()
-    const { total, byBarber } = await aggregateCommissionsForRange(supabase, barbershopId, from, to)
+    const selectedUnitId = await resolveSelectedUnitId(supabase, barbershopId)
+    const { total, byBarber } = await aggregateCommissionsForRange(
+      supabase,
+      barbershopId,
+      from,
+      to,
+      selectedUnitId
+    )
 
     const payload: CommissionsSummaryResponse = {
       enabled: true,

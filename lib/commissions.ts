@@ -36,16 +36,20 @@ export async function aggregateCommissionsForRange(
   supabase: SupabaseClient,
   barbershopId: string,
   startDate: string,
-  endDate: string
+  endDate: string,
+  unitId?: string | null
 ): Promise<{ total: number; byBarber: CommissionBarberRow[] }> {
+  let appointmentsQuery = supabase
+    .from("appointments")
+    .select("barber_id, total_price")
+    .eq("barbershop_id", barbershopId)
+    .gte("date", startDate)
+    .lte("date", endDate)
+    .in("status", [...COMMISSION_APPOINTMENT_STATUSES])
+  if (unitId) appointmentsQuery = appointmentsQuery.eq("unit_id", unitId)
+
   const [{ data: appointments }, { data: barbers }] = await Promise.all([
-    supabase
-      .from("appointments")
-      .select("barber_id, total_price")
-      .eq("barbershop_id", barbershopId)
-      .gte("date", startDate)
-      .lte("date", endDate)
-      .in("status", [...COMMISSION_APPOINTMENT_STATUSES]),
+    appointmentsQuery,
     supabase.from("barbers").select("id, name, commission").eq("barbershop_id", barbershopId),
   ])
 

@@ -41,6 +41,21 @@ export interface Barbershop {
   effective_plan?: SubscriptionPlan | null
 }
 
+export interface BarbershopUnit {
+  id: string
+  barbershop_id: string
+  name: string
+  /** Telefone da unidade (opcional). E-mail da conta continua em `barbershop.email`. */
+  phone?: string | null
+  address?: string | null
+  city?: string | null
+  state?: string | null
+  cep?: string | null
+  active: boolean
+  created_at: string
+  updated_at: string
+}
+
 export interface Subscription {
   id: string
   barbershop_id: string
@@ -101,6 +116,7 @@ export interface Appointment {
   total_price: number | null
   commission_percent?: number | null
   commission_amount?: number | null
+  unit_id?: string | null
   created_at: string
   updated_at: string
   // joins opcionais

@@ -74,6 +74,7 @@ const FEATURE_KEYS: Record<string, SubscriptionPlan[]> = {
   email_notifications: ["pro", "premium"],
   backup: ["pro", "premium"],
   online_booking: ["premium"],
+  multi_units: ["premium"],
   public_booking_link: ["premium"],
   advanced_reports: ["premium"],
   loyalty_program: ["premium"],

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import { useBarbershop } from "@/hooks/use-barbershop"
+import { useUnits } from "@/hooks/use-units"
 import { usePathname, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { 
@@ -47,6 +48,7 @@ export default function PainelLayout({
   const router = useRouter()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const { barbershop } = useBarbershop()
+  const { units, selectedUnitId, changeUnit, loading: unitsLoading } = useUnits()
   const [impersonating, setImpersonating] = useState(false)
   /** Role para menu: hoje sempre da barbearia; quando houver login de barbeiro, usar barber.role (user = só agenda/clientes). */
   const menuRole: MenuRole = (barbershop?.role ?? "admin_barbershop") as MenuRole
@@ -71,6 +73,11 @@ export default function PainelLayout({
     router.push("/login")
   }
 
+  const selectedUnitLabel =
+    selectedUnitId && units.length > 0
+      ? units.find((u) => u.id === selectedUnitId)?.name ?? "Unidade"
+      : "Todas unidades"
+
   return (
     <div className="min-h-screen bg-background">
       {sidebarOpen && (
@@ -93,7 +100,7 @@ export default function PainelLayout({
                 aria-label="Ir para o dashboard"
               >
                 {/* Quadro quadrado: mesmo tom da sidebar (bg-card), só borda neutra — sem brilho dourado no ícone */}
-                <div className="flex aspect-square h-44 w-44 max-w-full shrink-0 items-center justify-center rounded-xl border border-border/80 bg-card p-2 shadow-none">
+                <div className="flex aspect-square h-28 w-28 max-w-full shrink-0 items-center justify-center rounded-xl border border-border/80 bg-card p-2 shadow-none">
                   <BrandLogo size="panel" withBorder={false} priority />
                 </div>
               </Link>
@@ -109,6 +116,26 @@ export default function PainelLayout({
           <div className="px-4 py-4 border-b border-border">
             <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Sua barbearia</p>
             <p className="font-semibold text-foreground truncate">{barbershop?.name ?? "Trim Time"}</p>
+            <div className="mt-3">
+              <p className="text-[11px] text-muted-foreground mb-1">Unidade ativa</p>
+              <select
+                className="w-full h-9 rounded-md border border-border bg-card px-2 text-sm text-foreground"
+                value={selectedUnitId ?? "__all__"}
+                disabled={unitsLoading}
+                onChange={async (e) => {
+                  const next = e.target.value === "__all__" ? null : e.target.value
+                  await changeUnit(next)
+                  window.location.reload()
+                }}
+              >
+                <option value="__all__">Todas unidades</option>
+                {units.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
@@ -206,10 +233,34 @@ export default function PainelLayout({
             </div>
 
             <div className="flex items-center gap-3">
+              <div className="hidden md:flex items-center gap-2">
+                <label htmlFor="unit-select" className="text-xs text-muted-foreground">
+                  Unidade
+                </label>
+                <select
+                  id="unit-select"
+                  className="h-9 rounded-md border border-border bg-card px-2 text-sm text-foreground"
+                  value={selectedUnitId ?? "__all__"}
+                  disabled={unitsLoading}
+                  onChange={async (e) => {
+                    const next = e.target.value === "__all__" ? null : e.target.value
+                    await changeUnit(next)
+                  window.location.reload()
+                  }}
+                >
+                  <option value="__all__">Todas unidades</option>
+                  {units.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <Button variant="ghost" size="icon" className="relative">
                 <Bell className="w-5 h-5 text-muted-foreground" />
                 <span className="absolute top-1 right-1 w-2 h-2 bg-primary rounded-full" />
               </Button>
+              <span className="md:hidden text-xs text-muted-foreground">{selectedUnitLabel}</span>
               <Link href={barbershop?.slug ? `/b/${barbershop.slug}` : "/b/trim-time"} target="_blank">
                 <Button variant="outline" size="sm" className="hidden sm:flex border-border text-foreground hover:bg-secondary">
                   Ver página pública

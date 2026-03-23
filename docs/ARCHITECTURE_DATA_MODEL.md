@@ -25,7 +25,7 @@ Documento para **extensão segura** do SaaS. O app hoje usa **Supabase** nas API
 - **Financeiro detalhado**: lançamentos → `financial_ledger_entries` (entrada/saída, vínculo opcional com `appointments`).
 - **Fidelidade**: saldo em `clients.loyalty_points` + histórico `loyalty_ledger_entries`.
 - **Marketing**: campanhas agendadas → `marketing_campaigns` (payload JSON, canal, status).
-- **Multi-unidade (Premium)**: `barbershop_units` + `appointments.unit_id` (opcional, sem quebrar agenda atual).
+- **Multi-unidade (Premium)**: `barbershop_units` (nome + opcional: `phone`, `address`, `city`, `state`, `cep`) + `appointments.unit_id` (opcional). E-mail da conta e `whatsapp_integrations` permanecem no nível da `barbershop`.
 - **Snapshot de comissão**: `appointments.commission_percent` / `commission_amount` (opcional, para histórico estável).
 - **Auth por barbeiro (futuro)**: `barbers.auth_user_id` opcional (ligação Supabase Auth).
 - **Conflito de horário**: checagem na API ao criar agendamento (`lib/scheduling.ts`).

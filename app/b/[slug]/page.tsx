@@ -19,7 +19,9 @@ import {
   Eye,
   EyeOff,
   LogOut,
-  Smartphone
+  Smartphone,
+  Phone,
+  Building2,
 } from "lucide-react"
 import {
   getClienteLogado,
@@ -83,6 +85,27 @@ const gerarDias = () => {
 const diasSemana = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
 const meses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
+type PublicUnit = {
+  id: string
+  name: string
+  phone: string | null
+  address: string | null
+  city: string | null
+  state: string | null
+  cep: string | null
+}
+
+type PublicShopPayload = {
+  name: string
+  slug: string
+  phone: string | null
+  address: string | null
+  city: string | null
+  state: string | null
+  cep: string | null
+  units: PublicUnit[]
+}
+
 export default function BarbeariaPage() {
   const params = useParams()
   const slug = (params?.slug as string) || "trim-time"
@@ -116,6 +139,37 @@ export default function BarbeariaPage() {
 
   // PWA install
   const [showPwaBanner, setShowPwaBanner] = useState(false)
+
+  /** Dados públicos da barbearia (API) — nome, contato, unidades */
+  const [publicMeta, setPublicMeta] = useState<PublicShopPayload | null>(null)
+  const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    fetch(`/api/public/barbershops/${encodeURIComponent(slug)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: PublicShopPayload | null) => {
+        if (!cancelled && data?.name) setPublicMeta(data)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [slug])
+
+  useEffect(() => {
+    const units = publicMeta?.units
+    if (!units?.length) return
+    if (units.length === 1) {
+      setSelectedUnitId(units[0].id)
+      return
+    }
+    if (typeof window === "undefined") return
+    const saved = sessionStorage.getItem(`trimtime_unit_${slug}`)
+    if (saved && units.some((u) => u.id === saved)) {
+      setSelectedUnitId(saved)
+    }
+  }, [publicMeta, slug])
 
   useEffect(() => {
     const c = getClienteLogado(slug)
@@ -200,6 +254,30 @@ export default function BarbeariaPage() {
   const horarios = gerarHorarios()
   const dias = gerarDias()
 
+  const selectedUnit =
+    publicMeta?.units?.find((u) => u.id === selectedUnitId) ?? null
+  const displayNome = publicMeta?.name ?? barbeariaData.nome
+  const displayPhone =
+    selectedUnit?.phone ?? publicMeta?.phone ?? barbeariaData.telefone
+  const displayAddress =
+    selectedUnit?.address ?? publicMeta?.address ?? barbeariaData.endereco
+  const cityStateUnit = [selectedUnit?.city, selectedUnit?.state]
+    .filter(Boolean)
+    .join(" - ")
+  const cityStateBase = [publicMeta?.city, publicMeta?.state]
+    .filter(Boolean)
+    .join(" - ")
+  const displayCityLine =
+    cityStateUnit || cityStateBase || barbeariaData.cidade
+  const needsUnitChoice = !!(publicMeta?.units && publicMeta.units.length > 1)
+
+  const persistUnit = (id: string) => {
+    setSelectedUnitId(id)
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem(`trimtime_unit_${slug}`, id)
+    }
+  }
+
   const toggleServico = (id: number) => {
     setServicosSelecionados(prev => 
       prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]
@@ -214,7 +292,10 @@ export default function BarbeariaPage() {
 
   const podeAvancar = () => {
     switch (etapa) {
-      case 1: return servicosSelecionados.length > 0
+      case 1: {
+        if (needsUnitChoice && !selectedUnitId) return false
+        return servicosSelecionados.length > 0
+      }
       case 2: return profissionalSelecionado !== null
       case 3: return dataSelecionada !== null && horarioSelecionado !== null
       case 4: return dadosCliente.nome.trim() !== "" && dadosCliente.telefone.trim() !== ""
@@ -247,7 +328,7 @@ export default function BarbeariaPage() {
               </div>
               <h1 className="text-xl font-bold text-foreground text-center mb-1">Cadastre-se</h1>
               <p className="text-sm text-muted-foreground text-center mb-6">
-                {barbearia.nome} — preencha para agendar
+                {displayNome} — preencha para agendar
               </p>
               <form onSubmit={handleCadastro} className="space-y-4">
                 {erroCadastro && (
@@ -425,8 +506,16 @@ export default function BarbeariaPage() {
             <div className="bg-secondary/50 rounded-lg p-4 text-left space-y-3 mb-6">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Barbearia</span>
-                <span className="text-foreground font-medium">{barbearia.nome}</span>
+                <span className="text-foreground font-medium">{displayNome}</span>
               </div>
+              {selectedUnit ? (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Unidade</span>
+                  <span className="text-foreground font-medium text-right max-w-[60%]">
+                    {selectedUnit.name}
+                  </span>
+                </div>
+              ) : null}
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Profissional</span>
                 <span className="text-foreground font-medium">{profissionalData?.nome}</span>
@@ -506,7 +595,7 @@ export default function BarbeariaPage() {
               <img src={barbearia.logo} alt="Logo Trim Time" className="w-[5.25rem] h-[5.25rem] object-contain bg-background" />
             </div>
             <div className="pb-2">
-              <h1 className="text-2xl font-bold text-foreground">{barbearia.nome}</h1>
+              <h1 className="text-2xl font-bold text-foreground">{displayNome}</h1>
               <div className="flex items-center gap-2 text-muted-foreground text-sm">
                 <Star className="w-4 h-4 text-primary fill-primary" />
                 <span>{barbearia.avaliacao}</span>
@@ -515,11 +604,25 @@ export default function BarbeariaPage() {
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-4 text-sm text-muted-foreground mb-6">
-            <div className="flex items-center gap-1">
-              <MapPin className="w-4 h-4" />
-              <span>{barbearia.cidade}</span>
+          <div className="flex items-start gap-2 text-sm text-muted-foreground mb-3">
+            <MapPin className="w-4 h-4 mt-0.5 shrink-0" />
+            <div>
+              {displayAddress ? (
+                <span className="block text-foreground/90">{displayAddress}</span>
+              ) : null}
+              <span>{displayCityLine}</span>
             </div>
+          </div>
+          <div className="flex flex-wrap gap-4 text-sm text-muted-foreground mb-6">
+            {displayPhone ? (
+              <a
+                href={`tel:${displayPhone.replace(/\D/g, "")}`}
+                className="flex items-center gap-1 hover:text-primary transition-colors"
+              >
+                <Phone className="w-4 h-4 shrink-0" />
+                {displayPhone}
+              </a>
+            ) : null}
             <div className="flex items-center gap-1">
               <Clock className="w-4 h-4" />
               <span>{barbearia.horarioFuncionamento}</span>
@@ -527,6 +630,34 @@ export default function BarbeariaPage() {
           </div>
         </div>
       </div>
+
+      {needsUnitChoice ? (
+        <div className="max-w-2xl mx-auto px-4 mb-6">
+          <Card className="border-primary/20 bg-card/80">
+            <CardContent className="p-4 space-y-2">
+              <div className="flex items-center gap-2 text-foreground font-medium text-sm">
+                <Building2 className="w-4 h-4 text-primary" />
+                Escolha a unidade
+              </div>
+              <p className="text-xs text-muted-foreground">
+                O agendamento será vinculado à unidade selecionada.
+              </p>
+              <select
+                className="w-full mt-1 rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+                value={selectedUnitId ?? ""}
+                onChange={(e) => persistUnit(e.target.value)}
+              >
+                <option value="">Selecione…</option>
+                {publicMeta!.units.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name}
+                  </option>
+                ))}
+              </select>
+            </CardContent>
+          </Card>
+        </div>
+      ) : null}
 
       {/* Indicador de Etapas */}
       <div className="max-w-2xl mx-auto px-4 mb-6">
@@ -729,6 +860,16 @@ export default function BarbeariaPage() {
                     </p>
                   </div>
                 </div>
+
+                {selectedUnit ? (
+                  <div className="flex items-center gap-3 pb-3 border-b border-border">
+                    <Building2 className="w-5 h-5 text-primary" />
+                    <div>
+                      <p className="text-sm text-muted-foreground">Unidade</p>
+                      <p className="font-medium text-foreground">{selectedUnit.name}</p>
+                    </div>
+                  </div>
+                ) : null}
                 
                 <div className="flex items-center gap-3 pb-3 border-b border-border">
                   <Scissors className="w-5 h-5 text-primary" />

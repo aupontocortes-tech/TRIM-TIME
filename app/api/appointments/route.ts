@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { createServiceRoleClient } from "@/lib/supabase/server"
 import { requireBarbershopId } from "@/lib/tenant"
 import { hasBarberSlotConflict } from "@/lib/scheduling"
+import { resolveSelectedUnitId } from "@/lib/unit-context"
 import type { Appointment, AppointmentStatus } from "@/lib/db/types"
 
 export async function GET(request: Request) {
@@ -11,11 +12,13 @@ export async function GET(request: Request) {
     const date = searchParams.get("date") // YYYY-MM-DD
     const barberId = searchParams.get("barber_id")
     const supabase = createServiceRoleClient()
+    const selectedUnitId = await resolveSelectedUnitId(supabase, barbershopId)
     let query = supabase
       .from("appointments")
       .select("*, client:clients(*), barber:barbers(*), service:services(*)")
       .eq("barbershop_id", barbershopId)
       .order("time")
+    if (selectedUnitId) query = query.eq("unit_id", selectedUnitId)
     if (date) query = query.eq("date", date)
     if (barberId) query = query.eq("barber_id", barberId)
     const { data, error } = await query
@@ -36,6 +39,7 @@ export async function POST(request: Request) {
       client_id: string
       barber_id: string
       service_id: string
+      unit_id?: string | null
       date: string
       time: string
       total_price?: number
@@ -47,6 +51,19 @@ export async function POST(request: Request) {
       )
     }
     const supabase = createServiceRoleClient()
+    const selectedUnitId = await resolveSelectedUnitId(supabase, barbershopId)
+    const effectiveUnitId = body.unit_id ?? selectedUnitId
+    if (effectiveUnitId) {
+      const { data: unitData } = await supabase
+        .from("barbershop_units")
+        .select("id")
+        .eq("id", effectiveUnitId)
+        .eq("barbershop_id", barbershopId)
+        .maybeSingle()
+      if (!unitData?.id) {
+        return NextResponse.json({ error: "Unidade inválida para esta barbearia" }, { status: 400 })
+      }
+    }
     // Um cliente só pode ter um agendamento por dia (excluindo cancelados)
     const { data: existing } = await supabase
       .from("appointments")
@@ -87,6 +104,7 @@ export async function POST(request: Request) {
         client_id: body.client_id,
         barber_id: body.barber_id,
         service_id: body.service_id,
+        unit_id: effectiveUnitId ?? null,
         date: body.date,
         time: body.time,
         status: "pending",
