@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import { Inter, Playfair_Display, Cormorant_Garamond } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
+import { GlobalAppInstallPrompt } from '@/components/global-app-install-prompt'
 import './globals.css'
 
 const inter = Inter({ 
@@ -26,6 +27,11 @@ export const metadata: Metadata = {
   description: 'A plataforma completa para barbearias. Agendamentos online, gestão financeira e muito mais.',
   keywords: ['barbearia', 'agendamento', 'barber', 'corte', 'cabelo', 'barba', 'Trim Time'],
   manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    title: 'Trim Time',
+    statusBarStyle: 'black-translucent',
+  },
   // Ícones: use app/icon.png e app/apple-icon.png (convenção oficial do Next.js)
 }
 
@@ -44,6 +50,7 @@ export default function RootLayout({
     <html lang="pt-BR" className="dark">
       <body className={`${inter.variable} ${playfair.variable} ${trimTimeWordmark.variable} font-sans antialiased`}>
         {children}
+        <GlobalAppInstallPrompt />
         <Analytics />
       </body>
     </html>

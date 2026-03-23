@@ -19,7 +19,6 @@ import {
   Eye,
   EyeOff,
   LogOut,
-  Smartphone,
   Phone,
   Building2,
 } from "lucide-react"
@@ -137,9 +136,6 @@ export default function BarbeariaPage() {
   const [showSenhaLogin, setShowSenhaLogin] = useState(false)
   const [erroLogin, setErroLogin] = useState("")
 
-  // PWA install
-  const [showPwaBanner, setShowPwaBanner] = useState(false)
-
   /** Dados públicos da barbearia (API) — nome, contato, unidades */
   const [publicMeta, setPublicMeta] = useState<PublicShopPayload | null>(null)
   const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null)
@@ -181,15 +177,6 @@ export default function BarbeariaPage() {
       setAuthPhase("cadastro")
     }
   }, [slug])
-
-  useEffect(() => {
-    const isStandalone = window.matchMedia("(display-mode: standalone)").matches
-      || (window.navigator as unknown as { standalone?: boolean }).standalone === true
-    const visited = typeof window !== "undefined" && sessionStorage.getItem("trimtime_pwa_banner_seen")
-    if (!isStandalone && !visited && typeof window !== "undefined") {
-      setShowPwaBanner(true)
-    }
-  }, [])
 
   const formatPhone = (value: string) => {
     const numbers = value.replace(/\D/g, "")
@@ -243,11 +230,6 @@ export default function BarbeariaPage() {
     setDataSelecionada(null)
     setHorarioSelecionado(null)
     setDadosCliente({ nome: "", telefone: "", email: "" })
-  }
-
-  const dismissPwaBanner = () => {
-    setShowPwaBanner(false)
-    if (typeof window !== "undefined") sessionStorage.setItem("trimtime_pwa_banner_seen", "1")
   }
 
   const barbearia = barbeariaData
@@ -554,7 +536,7 @@ export default function BarbeariaPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Barra: Sair + PWA */}
+      {/* Barra: Sair */}
       {clienteLogado && (
         <div className="sticky top-0 z-20 flex items-center justify-between px-4 py-2 bg-background/90 backdrop-blur border-b border-border">
           <span className="text-sm text-muted-foreground truncate">
@@ -569,19 +551,6 @@ export default function BarbeariaPage() {
           >
             <LogOut className="w-4 h-4 mr-1" />
             Sair
-          </Button>
-        </div>
-      )}
-      {showPwaBanner && (
-        <div className="bg-primary/10 border-b border-primary/20 px-4 py-3 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2 min-w-0">
-            <Smartphone className="w-5 h-5 text-primary flex-shrink-0" />
-            <p className="text-sm text-foreground">
-              Adicione ao celular: abra o menu do navegador (⋮) e toque em &quot;Adicionar à tela inicial&quot; ou &quot;Instalar app&quot;.
-            </p>
-          </div>
-          <Button type="button" variant="ghost" size="sm" onClick={dismissPwaBanner} className="flex-shrink-0">
-            Ok
           </Button>
         </div>
       )}
