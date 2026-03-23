@@ -3,9 +3,11 @@ import { getBarbershopIdFromRequest } from "@/lib/tenant"
 import { createTrialEndDate } from "@/lib/subscription"
 import { prisma } from "@/lib/prisma"
 import { toBarbershopApi } from "@/lib/prisma-barbershop"
-import { fetchBarbershopPlanContext } from "@/lib/barbershop-plan-server"
+import { resolveEffectivePlanForBarbershop } from "@/lib/barbershop-effective-plan-server"
 import type { Barbershop, BarbershopSettings } from "@/lib/db/types"
 import type { Prisma } from "@prisma/client"
+
+export const dynamic = "force-dynamic"
 
 function slugify(name: string): string {
   return name
@@ -37,10 +39,10 @@ export async function GET() {
         { status: 403 }
       )
     }
-    const ctx = await fetchBarbershopPlanContext(barbershopId)
+    const effectivePlan = await resolveEffectivePlanForBarbershop(barbershopId)
     return NextResponse.json({
       ...toBarbershopApi(barbershop),
-      effective_plan: ctx.plan,
+      effective_plan: effectivePlan,
     })
   } catch (e) {
     return NextResponse.json(
@@ -143,10 +145,10 @@ export async function PATCH(request: Request) {
         ...(mergedSettings !== undefined && { settings: mergedSettings }),
       },
     })
-    const ctx = await fetchBarbershopPlanContext(barbershopId)
+    const effectivePlan = await resolveEffectivePlanForBarbershop(barbershopId)
     return NextResponse.json({
       ...toBarbershopApi(barbershop),
-      effective_plan: ctx.plan,
+      effective_plan: effectivePlan,
     })
   } catch (e) {
     return NextResponse.json(

@@ -76,7 +76,13 @@ const emptyBarbearia: BarbeariaForm = {
 }
 
 export default function ConfiguracoesPage() {
-  const { plan, barbershop, loading: barbershopLoading, refetch } = useBarbershop()
+  const {
+    plan,
+    barbershop,
+    loading: barbershopLoading,
+    error: barbershopError,
+    refetch,
+  } = useBarbershop()
   const {
     units,
     selectedUnitId,
@@ -692,8 +698,24 @@ export default function ConfiguracoesPage() {
 
   if (!barbershop) {
     return (
-      <div className="p-6 text-center text-muted-foreground">
-        Não foi possível carregar a barbearia. Faça login novamente.
+      <div className="p-6 max-w-lg mx-auto text-center space-y-4">
+        <p className="text-muted-foreground">
+          {barbershopError ??
+            "Não foi possível carregar a barbearia. Verifique sua conexão ou faça login novamente."}
+        </p>
+        <div className="flex flex-col sm:flex-row gap-2 justify-center">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => void refetch()}
+            className="border-border"
+          >
+            Tentar novamente
+          </Button>
+          <Button type="button" asChild className="bg-primary text-primary-foreground">
+            <Link href="/login">Ir para o login</Link>
+          </Button>
+        </div>
       </div>
     )
   }
