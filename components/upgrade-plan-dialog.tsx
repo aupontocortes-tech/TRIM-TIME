@@ -74,7 +74,7 @@ export function UpgradePlanDialog({
               className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
               onClick={() => {
                 onOpenChange(false)
-                window.location.href = "/admin/configuracoes?tab=plan"
+                window.location.href = "/painel/configuracoes?tab=plan"
               }}
             >
               Ver planos

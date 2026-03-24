@@ -12,7 +12,7 @@ type Row = {
   appointments: number
 }
 
-export default function AdminRankingPage() {
+export default function PlataformaRankingPage() {
   const [allTime, setAllTime] = useState<Row[]>([])
   const [last30, setLast30] = useState<Row[]>([])
   const [loading, setLoading] = useState(true)

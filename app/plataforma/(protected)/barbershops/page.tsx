@@ -32,7 +32,7 @@ const ROLE_LABELS: Record<BarbershopRole, string> = {
   admin_barbershop: "Dono da barbearia",
 }
 
-export default function AdminBarbershopsPage() {
+export default function PlataformaBarbershopsPage() {
   const [list, setList] = useState<BarbershopWithSub[]>([])
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState<BarbershopWithSub | null>(null)
@@ -139,12 +139,18 @@ export default function AdminBarbershopsPage() {
                       </p>
                       <p className="text-sm text-zinc-400">{b.email}</p>
                       <p className="text-xs text-zinc-500">
-                        /b/{b.slug} • {ROLE_LABELS[b.role as BarbershopRole] ?? b.role} • Plano: {b.subscription?.plan ?? "—"} • {b.suspended_at ? "Suspensa" : "Ativa"}
+                        /b/{b.slug} • {ROLE_LABELS[b.role as BarbershopRole] ?? b.role} • Plano:{" "}
+                        {b.subscription?.plan ?? "—"} • {b.suspended_at ? "Suspensa" : "Ativa"}
                       </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" onClick={() => openEdit(b)} className="border-[#D4AF37]/40 text-white hover:bg-[#D4AF37]/10">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => openEdit(b)}
+                      className="border-[#D4AF37]/40 text-white hover:bg-[#D4AF37]/10"
+                    >
                       <Pencil className="w-4 h-4 mr-1" />
                       Editar
                     </Button>
@@ -210,7 +216,9 @@ export default function AdminBarbershopsPage() {
                   <SelectItem value="super_admin">{ROLE_LABELS.super_admin}</SelectItem>
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground mt-1">Super Admin acessa o painel /admin e tudo grátis.</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Super Admin entra em /plataforma/login (equipe da plataforma).
+              </p>
             </div>
             <div>
               <label className="text-sm font-medium text-foreground">Plano</label>

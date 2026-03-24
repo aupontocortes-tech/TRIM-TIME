@@ -54,8 +54,18 @@ export default function LoginPage() {
         credentials: "include",
       })
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        setError(err.error || "Email ou senha inválidos")
+        const err = (await res.json().catch(() => ({}))) as {
+          error?: string
+          usePlatformLogin?: boolean
+        }
+        if (err.usePlatformLogin) {
+          setError(
+            err.error ||
+              "Use o acesso Plataforma Trim Time (link abaixo) para este e-mail."
+          )
+        } else {
+          setError(err.error || "Email ou senha inválidos")
+        }
         setIsLoading(false)
         return
       }
@@ -190,11 +200,22 @@ export default function LoginPage() {
               </Button>
             </form>
 
-            <p className="text-center text-sm text-muted-foreground mt-6">
-              Ainda não tem conta?{" "}
-              <Link href="/cadastro?tipo=barbearia" className="text-primary hover:underline font-medium">
-                Cadastre sua barbearia
-              </Link>
+            <p className="text-center text-sm text-muted-foreground mt-6 space-y-2">
+              <span className="block">
+                Ainda não tem conta?{" "}
+                <Link href="/cadastro?tipo=barbearia" className="text-primary hover:underline font-medium">
+                  Cadastre sua barbearia
+                </Link>
+              </span>
+              <span className="block pt-1 border-t border-border/60 mt-3">
+                Equipe Trim Time (métricas globais)?{" "}
+                <Link
+                  href="/plataforma/login"
+                  className="text-primary hover:underline font-medium"
+                >
+                  Acesso plataforma
+                </Link>
+              </span>
             </p>
           </CardContent>
         </Card>

@@ -19,6 +19,7 @@ import {
   ChevronDown,
   Shield,
   MessageCircle,
+  Building2,
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -37,6 +38,12 @@ const menuItems: { href: string; label: string; icon: typeof LayoutDashboard; ro
   { href: "/painel/agenda", label: "Agenda", icon: Calendar },
   { href: "/painel/clientes", label: "Clientes", icon: Users },
   { href: "/painel/financeiro", label: "Financeiro", icon: DollarSign, roles: ["super_admin", "admin_barbershop"] },
+  {
+    href: "/painel/minha-rede",
+    label: "Minha rede",
+    icon: Building2,
+    roles: ["super_admin", "admin_barbershop"],
+  },
   { href: "/painel/configuracoes", label: "Configurações", icon: Settings, roles: ["super_admin", "admin_barbershop"] },
   { href: "/painel/suporte", label: "Suporte", icon: MessageCircle },
 ]
@@ -75,7 +82,7 @@ export default function PainelLayout({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({}),
-    }).then(() => router.push("/admin"))
+    }).then(() => router.push("/plataforma"))
   }
 
   const handleSair = () => {
@@ -184,12 +191,12 @@ export default function PainelLayout({
             })}
             {barbershop?.role === "super_admin" && (
               <Link
-                href="/admin"
+                href="/plataforma"
                 onClick={() => setSidebarOpen(false)}
                 className="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-primary hover:bg-primary/10"
               >
                 <Shield className="w-5 h-5" />
-                <span className="font-medium">Painel Admin</span>
+                <span className="font-medium">Plataforma Trim Time</span>
               </Link>
             )}
           </nav>
@@ -237,7 +244,7 @@ export default function PainelLayout({
               Você está acessando como esta barbearia (impersonação).
             </p>
             <Button variant="outline" size="sm" onClick={handleVoltarAdmin} className="border-primary text-primary hover:bg-primary/20">
-              Voltar ao Painel Admin
+              Voltar à plataforma
             </Button>
           </div>
         )}

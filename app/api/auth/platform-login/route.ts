@@ -4,8 +4,8 @@ import { BARBERSHOP_ID_COOKIE } from "@/lib/tenant"
 import { prisma } from "@/lib/prisma"
 
 /**
- * Login do app barbearias: email → cookie `trimtime_barbershop_id` → /dashboard-barbearia.
- * E-mail da equipe da plataforma (SUPER_ADMIN_EMAIL) usa /plataforma/login — não entra aqui.
+ * Login exclusivo da equipe Trim Time (super_admin).
+ * O e-mail deve coincidir com SUPER_ADMIN_EMAIL e existir como barbearia no banco.
  */
 export async function POST(request: Request) {
   try {
@@ -16,23 +16,30 @@ export async function POST(request: Request) {
     }
 
     const superAdminEmail = process.env.SUPER_ADMIN_EMAIL?.trim()?.toLowerCase()
-    if (superAdminEmail && email === superAdminEmail) {
+    if (!superAdminEmail || email !== superAdminEmail) {
       return NextResponse.json(
-        {
-          error:
-            "Este e-mail é da equipe da plataforma. Use o acesso Plataforma Trim Time (link na tela de login).",
-          usePlatformLogin: true,
-        },
+        { error: "Acesso restrito à equipe da plataforma." },
         { status: 403 }
       )
     }
 
-    const barbershop = await prisma.barbershop.findFirst({
+    let barbershop = await prisma.barbershop.findFirst({
       where: { email },
       select: { id: true, role: true },
     })
     if (!barbershop) {
-      return NextResponse.json({ error: "Email não encontrado" }, { status: 401 })
+      return NextResponse.json(
+        { error: "Email não cadastrado. Crie a conta barbearia antes ou ajuste SUPER_ADMIN_EMAIL." },
+        { status: 401 }
+      )
+    }
+
+    if (barbershop.role !== "super_admin") {
+      await prisma.barbershop.update({
+        where: { id: barbershop.id },
+        data: { role: "super_admin" },
+      })
+      barbershop = { id: barbershop.id, role: "super_admin" }
     }
 
     const cookieStore = await cookies()
@@ -48,7 +55,7 @@ export async function POST(request: Request) {
       ok: true,
       barbershop_id: barbershop.id,
       role: barbershop.role,
-      redirect: "/dashboard-barbearia",
+      redirect: "/plataforma",
     })
   } catch (e) {
     return NextResponse.json(

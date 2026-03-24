@@ -14,7 +14,7 @@ type Msg = {
   created_at: string
 }
 
-export default function AdminSuporteChatPage() {
+export default function PlataformaSuporteChatPage() {
   const params = useParams()
   const router = useRouter()
   const barbershopId = (params?.barbershopId as string) || ""
@@ -62,7 +62,7 @@ export default function AdminSuporteChatPage() {
           variant="ghost"
           size="sm"
           className="text-zinc-400 hover:text-[#D4AF37]"
-          onClick={() => router.push("/admin/suporte")}
+          onClick={() => router.push("/plataforma/suporte")}
         >
           <ArrowLeft className="w-4 h-4 mr-1" />
           Voltar

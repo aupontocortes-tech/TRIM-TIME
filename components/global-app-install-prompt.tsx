@@ -3,11 +3,11 @@
 import { usePathname } from "next/navigation"
 import { AppInstallPrompt } from "@/components/app-install-prompt"
 
-/** Sem aviso no painel/admin (app já é uso “instalado” do barbeiro). */
+/** Sem aviso no painel/plataforma (app já é uso “instalado” do barbeiro). */
 function hideInstallPrompt(pathname: string): boolean {
   if (!pathname) return false
   if (pathname.startsWith("/painel")) return true
-  if (pathname.startsWith("/admin")) return true
+  if (pathname.startsWith("/plataforma")) return true
   if (pathname.startsWith("/api")) return true
   if (pathname.startsWith("/_next")) return true
   return false

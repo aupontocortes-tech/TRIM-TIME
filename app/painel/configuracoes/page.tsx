@@ -1413,16 +1413,16 @@ export default function ConfiguracoesPage() {
                   <p>
                     <strong className="text-primary">Super Admin (Trim Time)</strong> — acesso total aos recursos do
                     sistema sem cobrança. Use o{" "}
-                    <Link href="/admin" className="text-primary underline underline-offset-2">
-                      Painel Admin
+                    <Link href="/plataforma" className="text-primary underline underline-offset-2">
+                      Plataforma Trim Time
                     </Link>{" "}
-                    para gerir barbearias, planos e suporte.
+                    (login em /plataforma/login) para gerir barbearias, planos e suporte.
                   </p>
                 ) : (
                   <p>
                     <strong className="text-foreground">Dono da barbearia</strong> — configura equipe, serviços e
                     agenda aqui. O Super Admin da plataforma gere contas globalmente em{" "}
-                    <span className="text-foreground">/admin</span> (apenas para a equipe Trim Time).
+                    <span className="text-foreground">/plataforma</span> (apenas para a equipe Trim Time).
                   </p>
                 )}
               </div>

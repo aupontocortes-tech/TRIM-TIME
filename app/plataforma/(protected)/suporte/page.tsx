@@ -13,7 +13,7 @@ type Thread = {
   last_message: { body: string; sender: string; created_at: string } | null
 }
 
-export default function AdminSuporteListPage() {
+export default function PlataformaSuporteListPage() {
   const [threads, setThreads] = useState<Thread[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -44,7 +44,7 @@ export default function AdminSuporteListPage() {
               {threads.map((t) => (
                 <li key={t.barbershop_id}>
                   <Link
-                    href={`/admin/suporte/${t.barbershop_id}`}
+                    href={`/plataforma/suporte/${t.barbershop_id}`}
                     className="flex items-start gap-3 p-4 hover:bg-zinc-900/80 transition-colors"
                   >
                     <div className="w-10 h-10 rounded-lg bg-[#D4AF37]/15 flex items-center justify-center shrink-0">

@@ -38,7 +38,7 @@ export async function POST(request: Request) {
 
     if (!body.barbershop_id) {
       cookieStore.delete(IMPERSONATE_COOKIE)
-      return NextResponse.json({ ok: true, redirect: "/admin" })
+      return NextResponse.json({ ok: true, redirect: "/plataforma" })
     }
 
     cookieStore.set(IMPERSONATE_COOKIE, body.barbershop_id, {

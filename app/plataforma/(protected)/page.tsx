@@ -57,7 +57,7 @@ function StatCard({
   )
 }
 
-export default function AdminDashboardPage() {
+export default function PlataformaDashboardPage() {
   const [stats, setStats] = useState<Stats | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -145,19 +145,19 @@ export default function AdminDashboardPage() {
           </p>
           <div className="flex flex-wrap gap-3">
             <Link
-              href="/admin/barbershops"
+              href="/plataforma/barbershops"
               className="inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-medium text-black bg-[#D4AF37] hover:bg-[#c9a227]"
             >
               Barbearias
             </Link>
             <Link
-              href="/admin/ranking"
+              href="/plataforma/ranking"
               className="inline-flex items-center justify-center rounded-md border border-[#D4AF37]/50 px-4 py-2 text-sm text-[#D4AF37] hover:bg-[#D4AF37]/10"
             >
               Ranking
             </Link>
             <Link
-              href="/admin/suporte"
+              href="/plataforma/suporte"
               className="inline-flex items-center justify-center rounded-md border border-[#D4AF37]/50 px-4 py-2 text-sm text-[#D4AF37] hover:bg-[#D4AF37]/10"
             >
               Suporte / chat
