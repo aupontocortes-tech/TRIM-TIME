@@ -1,69 +1,91 @@
 import { NextResponse } from "next/server"
-import { createServiceRoleClient } from "@/lib/supabase/server"
-import { getRealBarbershopIdFromRequest } from "@/lib/tenant"
-import type { Barbershop } from "@/lib/db/types"
+import { prisma } from "@/lib/prisma"
+import { requireSuperAdmin } from "@/lib/admin-auth"
 import type { SubscriptionPlan } from "@/lib/db/types"
 
-/** Atualizar barbearia (dados, plano, suspender/ativar, role). Apenas role=super_admin. */
+export const dynamic = "force-dynamic"
+
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireSuperAdmin()
+  if (!auth.ok) return auth.response
+
   try {
-    const barbershopId = await getRealBarbershopIdFromRequest()
-    if (!barbershopId) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
-
-    const supabase = createServiceRoleClient()
-    const { data: me } = await supabase
-      .from("barbershops")
-      .select("role")
-      .eq("id", barbershopId)
-      .single()
-    if (me?.role !== "super_admin") return NextResponse.json({ error: "Acesso negado" }, { status: 403 })
-
     const { id } = await params
-    const body = await request.json() as {
+    const body = (await request.json()) as {
       name?: string
       email?: string
-      phone?: string
+      phone?: string | null
       role?: "super_admin" | "admin_barbershop"
       suspended?: boolean
+      is_test?: boolean
       plan?: SubscriptionPlan
     }
 
-    if (body.name !== undefined || body.email !== undefined || body.phone !== undefined || body.role !== undefined) {
-      const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
-      if (body.name !== undefined) updates.name = body.name
-      if (body.email !== undefined) updates.email = body.email
-      if (body.phone !== undefined) updates.phone = body.phone
-      if (body.role !== undefined) updates.role = body.role
-      if (body.suspended !== undefined) updates.suspended_at = body.suspended ? new Date().toISOString() : null
-      const { error: errUp } = await supabase
-        .from("barbershops")
-        .update(updates)
-        .eq("id", id)
-      if (errUp) return NextResponse.json({ error: errUp.message }, { status: 500 })
+    const existing = await prisma.barbershop.findUnique({ where: { id } })
+    if (!existing) {
+      return NextResponse.json({ error: "Barbearia não encontrada" }, { status: 404 })
+    }
+
+    if (
+      body.name !== undefined ||
+      body.email !== undefined ||
+      body.phone !== undefined ||
+      body.role !== undefined ||
+      body.suspended !== undefined ||
+      body.is_test !== undefined
+    ) {
+      await prisma.barbershop.update({
+        where: { id },
+        data: {
+          ...(body.name !== undefined && { name: body.name.trim() }),
+          ...(body.email !== undefined && { email: body.email.trim().toLowerCase() }),
+          ...(body.phone !== undefined && { phone: body.phone?.trim() || null }),
+          ...(body.role !== undefined && { role: body.role }),
+          ...(body.suspended !== undefined && {
+            suspendedAt: body.suspended ? new Date() : null,
+          }),
+          ...(body.is_test !== undefined && { isTest: Boolean(body.is_test) }),
+        },
+      })
     }
 
     if (body.plan !== undefined) {
-      const { error: errSub } = await supabase
-        .from("subscriptions")
-        .update({
+      await prisma.subscription.updateMany({
+        where: { barbershopId: id },
+        data: {
           plan: body.plan,
           status: "active",
-          trial_end: null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("barbershop_id", id)
-      if (errSub) return NextResponse.json({ error: errSub.message }, { status: 500 })
+          trialEnd: null,
+        },
+      })
     }
 
-    const { data: updated } = await supabase
-      .from("barbershops")
-      .select("*")
-      .eq("id", id)
-      .single()
-    return NextResponse.json(updated as Barbershop)
+    const updated = await prisma.barbershop.findUnique({
+      where: { id },
+      include: { subscriptions: true },
+    })
+    if (!updated) {
+      return NextResponse.json({ error: "Erro ao recarregar" }, { status: 500 })
+    }
+    const sub = updated.subscriptions[0]
+    return NextResponse.json({
+      id: updated.id,
+      name: updated.name,
+      email: updated.email,
+      phone: updated.phone,
+      slug: updated.slug,
+      role: updated.role,
+      suspended_at: updated.suspendedAt?.toISOString() ?? null,
+      is_test: updated.isTest,
+      created_at: updated.createdAt.toISOString(),
+      updated_at: updated.updatedAt.toISOString(),
+      subscription: sub
+        ? { plan: sub.plan, status: sub.status }
+        : null,
+    })
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Erro" },

@@ -59,7 +59,9 @@ export default function LoginPage() {
         setIsLoading(false)
         return
       }
-      await res.json().catch(() => ({}))
+      const data = (await res.json().catch(() => ({}))) as {
+        redirect?: string
+      }
       if (typeof window !== "undefined") {
         if (rememberDevice) {
           const payload: SavedLogin = {
@@ -71,13 +73,15 @@ export default function LoginPage() {
           localStorage.removeItem(SAVED_LOGIN_KEY)
         }
       }
-      // Navegação completa: em vários celulares o cookie httpOnly ainda não entra
-      // a tempo do router.push; assim o /painel já carrega com a sessão.
+      const next =
+        typeof data.redirect === "string" && data.redirect.startsWith("/")
+          ? data.redirect
+          : "/dashboard-barbearia"
       if (typeof window !== "undefined") {
-        window.location.assign("/painel")
+        window.location.assign(next)
         return
       }
-      router.push("/painel")
+      router.push(next)
     } catch {
       setError("Erro ao entrar. Tente novamente.")
     } finally {

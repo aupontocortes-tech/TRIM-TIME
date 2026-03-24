@@ -31,11 +31,11 @@ export async function POST(request: Request) {
     const supabase = createServiceRoleClient()
 
     const [{ data: barbershop }, { data: sub }] = await Promise.all([
-      supabase.from("barbershops").select("role").eq("id", barbershopId).single(),
+      supabase.from("barbershops").select("role, is_test").eq("id", barbershopId).single(),
       supabase.from("subscriptions").select("plan, status, trial_end").eq("barbershop_id", barbershopId).single(),
     ])
     const plan = getEffectivePlanForBarbershop(
-      barbershop as { role?: string } | null,
+      barbershop as { role?: string; is_test?: boolean } | null,
       sub as { plan: "basic" | "pro" | "premium"; status: string; trial_end: string | null } | null
     )
     if (!plan) {

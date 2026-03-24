@@ -17,7 +17,8 @@ import {
   LogOut,
   Bell,
   ChevronDown,
-  Shield
+  Shield,
+  MessageCircle,
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -37,6 +38,7 @@ const menuItems: { href: string; label: string; icon: typeof LayoutDashboard; ro
   { href: "/painel/clientes", label: "Clientes", icon: Users },
   { href: "/painel/financeiro", label: "Financeiro", icon: DollarSign, roles: ["super_admin", "admin_barbershop"] },
   { href: "/painel/configuracoes", label: "Configurações", icon: Settings, roles: ["super_admin", "admin_barbershop"] },
+  { href: "/painel/suporte", label: "Suporte", icon: MessageCircle },
 ]
 
 export default function PainelLayout({

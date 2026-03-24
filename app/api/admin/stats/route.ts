@@ -1,31 +1,62 @@
 import { NextResponse } from "next/server"
-import { createServiceRoleClient } from "@/lib/supabase/server"
-import { getRealBarbershopIdFromRequest } from "@/lib/tenant"
+import { prisma } from "@/lib/prisma"
+import { requireSuperAdmin } from "@/lib/admin-auth"
 
-/** Apenas role=super_admin. Retorna totais para o dashboard do super admin. */
+export const dynamic = "force-dynamic"
+
+/** Métricas globais — apenas super_admin. Usa Prisma (não depende do cliente Supabase). */
 export async function GET() {
+  const auth = await requireSuperAdmin()
+  if (!auth.ok) return auth.response
+
   try {
-    const barbershopId = await getRealBarbershopIdFromRequest()
-    if (!barbershopId) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
-
-    const supabase = createServiceRoleClient()
-    const { data: me } = await supabase
-      .from("barbershops")
-      .select("role")
-      .eq("id", barbershopId)
-      .single()
-    if (me?.role !== "super_admin") return NextResponse.json({ error: "Acesso negado" }, { status: 403 })
-
-    const [countBarbershops, countSubscriptions] = await Promise.all([
-      supabase.from("barbershops").select("id", { count: "exact", head: true }),
-      supabase.from("subscriptions").select("id", { count: "exact", head: true }).in("status", ["trial", "active"]),
+    const [
+      totalBarbershopsAll,
+      totalBarbershopsTenants,
+      totalClients,
+      totalAppointments,
+      planRows,
+      revenueAgg,
+      activeSubs,
+    ] = await Promise.all([
+      prisma.barbershop.count(),
+      prisma.barbershop.count({ where: { NOT: { role: "super_admin" } } }),
+      prisma.client.count(),
+      prisma.appointment.count(),
+      prisma.subscription.groupBy({ by: ["plan"], _count: { _all: true } }),
+      prisma.financialLedgerEntry.aggregate({ _sum: { amount: true } }),
+      prisma.subscription.count({
+        where: { status: { in: ["trial", "active"] } },
+      }),
     ])
-    const totalBarbershops = countBarbershops.count ?? 0
-    const totalAssinaturasAtivas = countSubscriptions.count ?? 0
+
+    const planCounts: Record<string, number> = {}
+    for (const row of planRows) {
+      planCounts[row.plan] = row._count._all
+    }
+
+    const totalRevenue = revenueAgg._sum.amount
+      ? Number(revenueAgg._sum.amount)
+      : 0
+
+    const countBasic = planCounts["basic"] ?? 0
+    const countPro = planCounts["pro"] ?? 0
+    const countPremium = planCounts["premium"] ?? 0
+
     return NextResponse.json({
-      totalBarbershops,
-      totalUsuarios: totalBarbershops,
-      totalAssinaturasAtivas,
+      totalBarbershops: totalBarbershopsTenants,
+      totalBarbershopsIncludingAdmin: totalBarbershopsAll,
+      totalClients,
+      totalAppointments,
+      totalRevenue,
+      totalAssinaturasAtivas: activeSubs,
+      planBasic: countBasic,
+      planPro: countPro,
+      planPremium: countPremium,
+      /** No produto, “free” ≈ plano básico */
+      planFree: countBasic,
+      planPremiumTier: countPro + countPremium,
+      totalUsuarios: totalClients,
     })
   } catch (e) {
     return NextResponse.json(

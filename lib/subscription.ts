@@ -24,13 +24,14 @@ export function getEffectivePlan(subscription: Subscription | null): Subscriptio
   return null
 }
 
-/** Plano efetivo para limites e `hasFeature`: super_admin, env de desbloqueio, trial/assinatura. */
+/** Plano efetivo para limites e `hasFeature`: super_admin, conta teste, env, trial/assinatura. */
 export function getEffectivePlanForBarbershop(
-  barbershop: { role?: string } | null,
+  barbershop: { role?: string; is_test?: boolean } | null,
   subscription: Subscription | null
 ): SubscriptionPlan | null {
   if (isUnlockAllPlanFeaturesEnv()) return "premium"
   if (barbershop?.role === "super_admin") return "premium"
+  if (barbershop?.is_test === true) return "premium"
   return getEffectivePlan(subscription)
 }
 

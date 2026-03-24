@@ -1,41 +1,39 @@
 import { NextResponse } from "next/server"
-import { createServiceRoleClient } from "@/lib/supabase/server"
-import { getRealBarbershopIdFromRequest } from "@/lib/tenant"
-import type { Barbershop } from "@/lib/db/types"
+import { prisma } from "@/lib/prisma"
+import { requireSuperAdmin } from "@/lib/admin-auth"
 
-/** Lista todas as barbearias. Apenas role=super_admin. */
+export const dynamic = "force-dynamic"
+
+/** Lista barbearias + assinatura. Apenas super_admin. */
 export async function GET() {
+  const auth = await requireSuperAdmin()
+  if (!auth.ok) return auth.response
+
   try {
-    const barbershopId = await getRealBarbershopIdFromRequest()
-    if (!barbershopId) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+    const rows = await prisma.barbershop.findMany({
+      orderBy: { createdAt: "desc" },
+      include: { subscriptions: true },
+    })
 
-    const supabase = createServiceRoleClient()
-    const { data: me } = await supabase
-      .from("barbershops")
-      .select("role")
-      .eq("id", barbershopId)
-      .single()
-    if (me?.role !== "super_admin") return NextResponse.json({ error: "Acesso negado" }, { status: 403 })
+    const list = rows.map((b) => {
+      const sub = b.subscriptions[0]
+      return {
+        id: b.id,
+        name: b.name,
+        email: b.email,
+        phone: b.phone,
+        slug: b.slug,
+        role: b.role,
+        suspended_at: b.suspendedAt?.toISOString() ?? null,
+        is_test: b.isTest,
+        created_at: b.createdAt.toISOString(),
+        updated_at: b.updatedAt.toISOString(),
+        subscription: sub
+          ? { plan: sub.plan, status: sub.status }
+          : null,
+      }
+    })
 
-    const { data, error } = await supabase
-      .from("barbershops")
-      .select("id, name, email, phone, slug, role, suspended_at, created_at")
-      .order("created_at", { ascending: false })
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-
-    const ids = (data ?? []).map((b) => b.id)
-    if (ids.length === 0) return NextResponse.json(data ?? [])
-
-    const { data: subs } = await supabase
-      .from("subscriptions")
-      .select("barbershop_id, plan, status")
-      .in("barbershop_id", ids)
-    const subByBarbershop = new Map((subs ?? []).map((s) => [s.barbershop_id, s]))
-
-    const list = (data ?? []).map((b) => ({
-      ...b,
-      subscription: subByBarbershop.get(b.id) ?? null,
-    }))
     return NextResponse.json(list)
   } catch (e) {
     return NextResponse.json(

@@ -30,6 +30,8 @@ export interface Barbershop {
   slug: string
   role: BarbershopRole
   suspended_at: string | null
+  /** Conta de teste: recursos premium sem cobrança (definido pelo super admin). */
+  is_test?: boolean
   created_at: string
   updated_at: string
   /** Preferência da API GET /api/barbershops (merge de JSONB). */

@@ -92,9 +92,11 @@ export default function ConfiguracoesPage() {
   } = useUnits()
   const commissionFeature =
     barbershop?.role === "super_admin" ||
+    barbershop?.is_test === true ||
     (plan != null && hasFeature(plan, "barber_commission"))
   const multiUnitsFeature =
     barbershop?.role === "super_admin" ||
+    barbershop?.is_test === true ||
     (plan != null && hasFeature(plan, "multi_units"))
 
   const [barbearia, setBarbearia] = useState<BarbeariaForm>(emptyBarbearia)

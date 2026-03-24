@@ -2,13 +2,59 @@
 
 import { useState, useEffect } from "react"
 import { Card, CardContent } from "@/components/ui/card"
-import { Store, Users, CreditCard } from "lucide-react"
+import {
+  Store,
+  Users,
+  Calendar,
+  DollarSign,
+  CreditCard,
+  Crown,
+  Sparkles,
+} from "lucide-react"
 import Link from "next/link"
+
+const GOLD = "#D4AF37"
 
 type Stats = {
   totalBarbershops: number
-  totalUsuarios: number
+  totalClients: number
+  totalAppointments: number
+  totalRevenue: number
+  planFree: number
+  planPremiumTier: number
+  planBasic: number
+  planPro: number
+  planPremium: number
   totalAssinaturasAtivas: number
+}
+
+function StatCard({
+  label,
+  value,
+  icon: Icon,
+}: {
+  label: string
+  value: string | number
+  icon: typeof Store
+}) {
+  return (
+    <Card className="bg-zinc-950 border-[#D4AF37]/35 text-white shadow-none">
+      <CardContent className="p-5">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs uppercase tracking-wide text-zinc-500 mb-1">{label}</p>
+            <p className="text-2xl sm:text-3xl font-bold text-white tabular-nums">{value}</p>
+          </div>
+          <div
+            className="w-11 h-11 rounded-lg flex items-center justify-center shrink-0 border border-[#D4AF37]/30"
+            style={{ backgroundColor: `${GOLD}14` }}
+          >
+            <Icon className="w-5 h-5" style={{ color: GOLD }} />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  )
 }
 
 export default function AdminDashboardPage() {
@@ -22,78 +68,103 @@ export default function AdminDashboardPage() {
       .finally(() => setLoading(false))
   }, [])
 
+  const fmtMoney = (n: number) =>
+    new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(n)
+
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
-        <p className="text-muted-foreground">Visão geral do sistema Trim Time</p>
+        <h1 className="text-2xl font-bold text-white">Dashboard</h1>
+        <p className="text-zinc-400 text-sm mt-1">
+          Controle da plataforma Trim Time — métricas e ações rápidas
+        </p>
       </div>
 
-      <div className="grid sm:grid-cols-3 gap-4">
-        <Card className="bg-card border-border">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground mb-1">Total de barbearias</p>
-                <p className="text-3xl font-bold text-foreground">
-                  {loading ? "—" : (stats?.totalBarbershops ?? 0)}
-                </p>
-              </div>
-              <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
-                <Store className="w-6 h-6 text-primary" />
-              </div>
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <StatCard
+          label="Barbearias"
+          value={loading ? "—" : (stats?.totalBarbershops ?? 0)}
+          icon={Store}
+        />
+        <StatCard
+          label="Clientes (cadastro)"
+          value={loading ? "—" : (stats?.totalClients ?? 0)}
+          icon={Users}
+        />
+        <StatCard
+          label="Agendamentos"
+          value={loading ? "—" : (stats?.totalAppointments ?? 0)}
+          icon={Calendar}
+        />
+        <StatCard
+          label="Receita (ledger)"
+          value={loading ? "—" : fmtMoney(stats?.totalRevenue ?? 0)}
+          icon={DollarSign}
+        />
+        <StatCard
+          label="Plano básico (free)"
+          value={loading ? "—" : (stats?.planFree ?? 0)}
+          icon={CreditCard}
+        />
+        <StatCard
+          label="Pro + Premium"
+          value={loading ? "—" : (stats?.planPremiumTier ?? 0)}
+          icon={Crown}
+        />
+      </div>
+
+      <div className="grid sm:grid-cols-2 gap-4 text-sm text-zinc-400">
+        <Card className="bg-zinc-950 border-[#D4AF37]/35">
+          <CardContent className="p-4 flex items-center gap-3">
+            <Sparkles className="w-5 h-5 shrink-0" style={{ color: GOLD }} />
+            <div>
+              <p className="text-white font-medium">Assinaturas ativas / trial</p>
+              <p className="tabular-nums text-lg text-[#D4AF37]">
+                {loading ? "—" : stats?.totalAssinaturasAtivas ?? 0}
+              </p>
             </div>
           </CardContent>
         </Card>
-
-        <Card className="bg-card border-border">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground mb-1">Total de usuários</p>
-                <p className="text-3xl font-bold text-foreground">
-                  {loading ? "—" : (stats?.totalUsuarios ?? 0)}
-                </p>
-              </div>
-              <div className="w-12 h-12 rounded-lg bg-blue-500/10 flex items-center justify-center">
-                <Users className="w-6 h-6 text-blue-500" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-card border-border">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground mb-1">Assinaturas ativas</p>
-                <p className="text-3xl font-bold text-foreground">
-                  {loading ? "—" : (stats?.totalAssinaturasAtivas ?? 0)}
-                </p>
-              </div>
-              <div className="w-12 h-12 rounded-lg bg-green-500/10 flex items-center justify-center">
-                <CreditCard className="w-6 h-6 text-green-500" />
-              </div>
-            </div>
+        <Card className="bg-zinc-950 border-[#D4AF37]/35">
+          <CardContent className="p-4">
+            <p className="text-white font-medium mb-2">Detalhe dos planos</p>
+            <p>
+              Basic: {loading ? "—" : stats?.planBasic ?? 0} · Pro:{" "}
+              {loading ? "—" : stats?.planPro ?? 0} · Premium:{" "}
+              {loading ? "—" : stats?.planPremium ?? 0}
+            </p>
           </CardContent>
         </Card>
       </div>
 
-      <Card className="bg-card border-border">
+      <Card className="bg-zinc-950 border-[#D4AF37]/35">
         <CardContent className="p-6">
-          <h2 className="font-semibold text-foreground mb-2">Gerenciamento</h2>
-          <p className="text-muted-foreground text-sm mb-4">
-            Liste todas as barbearias, edite dados, altere plano, suspenda ou ative contas e entre como usuário para acessar a conta da barbearia.
+          <h2 className="font-semibold text-white mb-2">Gestão</h2>
+          <p className="text-zinc-400 text-sm mb-4">
+            Barbearias, planos, suspensão, conta de teste e impersonação.
           </p>
-          <Link
-            href="/admin/barbershops"
-            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-          >
-            Ver lista de barbearias
-          </Link>
+          <div className="flex flex-wrap gap-3">
+            <Link
+              href="/admin/barbershops"
+              className="inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-medium text-black bg-[#D4AF37] hover:bg-[#c9a227]"
+            >
+              Barbearias
+            </Link>
+            <Link
+              href="/admin/ranking"
+              className="inline-flex items-center justify-center rounded-md border border-[#D4AF37]/50 px-4 py-2 text-sm text-[#D4AF37] hover:bg-[#D4AF37]/10"
+            >
+              Ranking
+            </Link>
+            <Link
+              href="/admin/suporte"
+              className="inline-flex items-center justify-center rounded-md border border-[#D4AF37]/50 px-4 py-2 text-sm text-[#D4AF37] hover:bg-[#D4AF37]/10"
+            >
+              Suporte / chat
+            </Link>
+          </div>
         </CardContent>
       </Card>
     </div>
   )
 }
-

@@ -12,6 +12,7 @@ type PrismaBarbershop = {
   slug: string
   role: string
   suspendedAt: Date | null
+  isTest?: boolean
   settings: Prisma.JsonValue | null
   createdAt: Date
   updatedAt: Date
@@ -26,6 +27,7 @@ export function toBarbershopApi(b: PrismaBarbershop): Barbershop {
     slug: b.slug,
     role: b.role as Barbershop["role"],
     suspended_at: b.suspendedAt?.toISOString() ?? null,
+    is_test: b.isTest ?? false,
     settings: (b.settings && typeof b.settings === "object" ? (b.settings as BarbershopSettings) : null) ?? null,
     created_at: b.createdAt.toISOString(),
     updated_at: b.updatedAt.toISOString(),

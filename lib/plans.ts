@@ -103,9 +103,11 @@ export function hasFeature(plan: SubscriptionPlan, featureKey: keyof typeof FEAT
 /** Comissão por barbeiro: Pro/Premium, ou super_admin (acesso total ao SaaS). */
 export function canUseBarberCommission(
   plan: SubscriptionPlan | null,
-  barbershopRole?: string | null
+  barbershopRole?: string | null,
+  isTest?: boolean | null
 ): boolean {
   if (barbershopRole === "super_admin") return true
+  if (isTest === true) return true
   return !!(plan && hasFeature(plan, "barber_commission"))
 }
 

@@ -18,12 +18,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Store, Pencil, LogIn, Ban, CheckCircle } from "lucide-react"
+import { Store, Pencil, LogIn } from "lucide-react"
 import type { Barbershop, BarbershopRole } from "@/lib/db/types"
 import type { SubscriptionPlan } from "@/lib/db/types"
 
 type BarbershopWithSub = Barbershop & {
   subscription?: { plan: SubscriptionPlan; status: string } | null
+  is_test?: boolean
 }
 
 const ROLE_LABELS: Record<BarbershopRole, string> = {
@@ -42,6 +43,7 @@ export default function AdminBarbershopsPage() {
     plan: "basic" as SubscriptionPlan,
     role: "admin_barbershop" as BarbershopRole,
     suspended: false,
+    is_test: false,
   })
 
   const load = () => {
@@ -64,6 +66,7 @@ export default function AdminBarbershopsPage() {
       plan: b.subscription?.plan ?? "basic",
       role: (b.role === "super_admin" ? "super_admin" : "admin_barbershop") as BarbershopRole,
       suspended: !!b.suspended_at,
+      is_test: !!b.is_test,
     })
   }
 
@@ -79,6 +82,7 @@ export default function AdminBarbershopsPage() {
         plan: form.plan,
         role: form.role,
         suspended: form.suspended,
+        is_test: form.is_test,
       }),
     })
     if (res.ok) {
@@ -98,42 +102,49 @@ export default function AdminBarbershopsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 text-white">
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Barbearias</h1>
-        <p className="text-muted-foreground">Lista de todas as barbearias cadastradas</p>
+        <h1 className="text-2xl font-bold text-white">Barbearias</h1>
+        <p className="text-zinc-400">Lista de todas as barbearias cadastradas</p>
       </div>
 
-      <Card className="bg-card border-border">
+      <Card className="bg-zinc-950 border-[#D4AF37]/35">
         <CardHeader>
-          <CardTitle className="text-foreground">Gerenciamento</CardTitle>
+          <CardTitle className="text-white">Gerenciamento</CardTitle>
         </CardHeader>
         <CardContent>
           {loading ? (
-            <p className="text-muted-foreground">Carregando...</p>
+            <p className="text-zinc-500">Carregando...</p>
           ) : list.length === 0 ? (
-            <p className="text-muted-foreground">Nenhuma barbearia cadastrada.</p>
+            <p className="text-zinc-500">Nenhuma barbearia cadastrada.</p>
           ) : (
             <div className="space-y-3">
               {list.map((b) => (
                 <div
                   key={b.id}
-                  className="flex flex-wrap items-center justify-between gap-4 p-4 rounded-lg border border-border bg-secondary/20"
+                  className="flex flex-wrap items-center justify-between gap-4 p-4 rounded-lg border border-zinc-800 bg-zinc-900/50"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                      <Store className="w-5 h-5 text-primary" />
+                    <div className="w-10 h-10 rounded-lg bg-[#D4AF37]/15 flex items-center justify-center">
+                      <Store className="w-5 h-5 text-[#D4AF37]" />
                     </div>
                     <div>
-                      <p className="font-medium text-foreground">{b.name}</p>
-                      <p className="text-sm text-muted-foreground">{b.email}</p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="font-medium text-white flex items-center gap-2 flex-wrap">
+                        {b.name}
+                        {b.is_test ? (
+                          <span className="text-[10px] uppercase bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded">
+                            Teste
+                          </span>
+                        ) : null}
+                      </p>
+                      <p className="text-sm text-zinc-400">{b.email}</p>
+                      <p className="text-xs text-zinc-500">
                         /b/{b.slug} • {ROLE_LABELS[b.role as BarbershopRole] ?? b.role} • Plano: {b.subscription?.plan ?? "—"} • {b.suspended_at ? "Suspensa" : "Ativa"}
                       </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" onClick={() => openEdit(b)}>
+                    <Button variant="outline" size="sm" onClick={() => openEdit(b)} className="border-[#D4AF37]/40 text-white hover:bg-[#D4AF37]/10">
                       <Pencil className="w-4 h-4 mr-1" />
                       Editar
                     </Button>
@@ -141,6 +152,7 @@ export default function AdminBarbershopsPage() {
                       variant="outline"
                       size="sm"
                       onClick={() => impersonate(b.id)}
+                      className="border-zinc-600 text-zinc-200 hover:bg-zinc-800"
                     >
                       <LogIn className="w-4 h-4 mr-1" />
                       Entrar como usuário
@@ -154,13 +166,13 @@ export default function AdminBarbershopsPage() {
       </Card>
 
       <Dialog open={!!editing} onOpenChange={() => setEditing(null)}>
-        <DialogContent className="bg-card border-border max-w-md">
+        <DialogContent className="bg-zinc-950 border-[#D4AF37]/35 max-w-md text-white">
           <DialogHeader>
-            <DialogTitle className="text-foreground">Editar barbearia</DialogTitle>
+            <DialogTitle className="text-white">Editar barbearia</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div>
-              <label className="text-sm font-medium text-foreground">Nome</label>
+              <label className="text-sm font-medium text-zinc-200">Nome</label>
               <Input
                 value={form.name}
                 onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
@@ -222,18 +234,32 @@ export default function AdminBarbershopsPage() {
                 id="suspended"
                 checked={form.suspended}
                 onChange={(e) => setForm((f) => ({ ...f, suspended: e.target.checked }))}
-                className="rounded border-border"
+                className="rounded border-zinc-600"
               />
-              <label htmlFor="suspended" className="text-sm font-medium text-foreground">
-                Conta suspensa
+              <label htmlFor="suspended" className="text-sm font-medium text-zinc-200">
+                Conta suspensa (bloqueia acesso)
+              </label>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="is_test"
+                checked={form.is_test}
+                onChange={(e) => setForm((f) => ({ ...f, is_test: e.target.checked }))}
+                className="rounded border-zinc-600"
+              />
+              <label htmlFor="is_test" className="text-sm font-medium text-zinc-200">
+                Conta de teste (premium liberado, sem pagamento)
               </label>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditing(null)}>
+            <Button variant="outline" onClick={() => setEditing(null)} className="border-zinc-600 text-zinc-200">
               Cancelar
             </Button>
-            <Button onClick={saveEdit}>Salvar</Button>
+            <Button onClick={saveEdit} className="bg-[#D4AF37] text-black hover:bg-[#c9a227]">
+              Salvar
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
