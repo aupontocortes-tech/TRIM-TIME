@@ -88,8 +88,9 @@ export function AppInstallPrompt({
     if (isStandaloneMode()) return
 
     const forceShow = shouldForceFromUrl()
+    const skipLocalStorageHide = variant === "clientBooking"
 
-    if (!forceShow) {
+    if (!forceShow && !skipLocalStorageHide) {
       try {
         const raw = localStorage.getItem(hideKey)
         if (raw) {
@@ -104,7 +105,9 @@ export function AppInstallPrompt({
       }
     }
 
-    setPlatform(detectPlatform())
+    const detected = detectPlatform()
+    setPlatform(detected)
+    if (detected === "ios") setShowIosHelp(true)
     setShow(true)
 
     const onBip = (e: Event) => {
@@ -113,7 +116,7 @@ export function AppInstallPrompt({
     }
     window.addEventListener("beforeinstallprompt", onBip)
     return () => window.removeEventListener("beforeinstallprompt", onBip)
-  }, [hideKey])
+  }, [hideKey, variant])
 
   const dismiss = useCallback(() => {
     setShow(false)
