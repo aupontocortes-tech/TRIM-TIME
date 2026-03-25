@@ -4,8 +4,8 @@ import { BARBERSHOP_ID_COOKIE } from "@/lib/tenant"
 import { prisma } from "@/lib/prisma"
 
 /**
- * Login do app barbearias: email → cookie `trimtime_barbershop_id` → /dashboard-barbearia.
- * E-mail da equipe da plataforma (SUPER_ADMIN_EMAIL) usa /plataforma/login — não entra aqui.
+ * Login do app barbearias: email → cookie → /dashboard-barbearia.
+ * Conta com role super_admin (ou e-mail = SUPER_ADMIN_EMAIL) usa /plataforma/login — não entra aqui.
  */
 export async function POST(request: Request) {
   try {
@@ -15,8 +15,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Email é obrigatório" }, { status: 400 })
     }
 
+    const barbershop = await prisma.barbershop.findFirst({
+      where: { email },
+      select: { id: true, role: true },
+    })
+    if (!barbershop) {
+      return NextResponse.json({ error: "Email não encontrado" }, { status: 401 })
+    }
+
     const superAdminEmail = process.env.SUPER_ADMIN_EMAIL?.trim()?.toLowerCase()
-    if (superAdminEmail && email === superAdminEmail) {
+    const mustUsePlataforma =
+      barbershop.role === "super_admin" || (!!superAdminEmail && email === superAdminEmail)
+    if (mustUsePlataforma) {
       return NextResponse.json(
         {
           error:
@@ -25,14 +35,6 @@ export async function POST(request: Request) {
         },
         { status: 403 }
       )
-    }
-
-    const barbershop = await prisma.barbershop.findFirst({
-      where: { email },
-      select: { id: true, role: true },
-    })
-    if (!barbershop) {
-      return NextResponse.json({ error: "Email não encontrado" }, { status: 401 })
     }
 
     const cookieStore = await cookies()

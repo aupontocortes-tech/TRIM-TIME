@@ -100,7 +100,7 @@ export default function PlataformaLoginPage() {
                     id="platform-email"
                     type="email"
                     autoComplete="username"
-                    placeholder="configurado em SUPER_ADMIN_EMAIL"
+                    placeholder="seu e-mail de super admin"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required

@@ -4,8 +4,10 @@ import { BARBERSHOP_ID_COOKIE } from "@/lib/tenant"
 import { prisma } from "@/lib/prisma"
 
 /**
- * Login exclusivo da equipe Trim Time (super_admin).
- * O e-mail deve coincidir com SUPER_ADMIN_EMAIL e existir como barbearia no banco.
+ * Login da equipe Trim Time (super_admin).
+ * Entrada permitida se:
+ * - o e-mail coincide com SUPER_ADMIN_EMAIL (Vercel/local), ou
+ * - a barbearia já tem role super_admin no banco (útil quando SUPER_ADMIN_EMAIL não está na Vercel).
  */
 export async function POST(request: Request) {
   try {
@@ -16,12 +18,7 @@ export async function POST(request: Request) {
     }
 
     const superAdminEmail = process.env.SUPER_ADMIN_EMAIL?.trim()?.toLowerCase()
-    if (!superAdminEmail || email !== superAdminEmail) {
-      return NextResponse.json(
-        { error: "Acesso restrito à equipe da plataforma." },
-        { status: 403 }
-      )
-    }
+    const envMatch = !!superAdminEmail && email === superAdminEmail
 
     let barbershop = await prisma.barbershop.findFirst({
       where: { email },
@@ -29,12 +26,24 @@ export async function POST(request: Request) {
     })
     if (!barbershop) {
       return NextResponse.json(
-        { error: "Email não cadastrado. Crie a conta barbearia antes ou ajuste SUPER_ADMIN_EMAIL." },
+        { error: "Email não cadastrado. Crie a conta barbearia antes." },
         { status: 401 }
       )
     }
 
-    if (barbershop.role !== "super_admin") {
+    const dbSuperAdmin = barbershop.role === "super_admin"
+    if (!envMatch && !dbSuperAdmin) {
+      return NextResponse.json(
+        {
+          error:
+            "Acesso restrito à equipe da plataforma. Defina SUPER_ADMIN_EMAIL na Vercel (Production) com este e-mail, " +
+            "ou peça para marcar esta conta como super_admin no banco.",
+        },
+        { status: 403 }
+      )
+    }
+
+    if (envMatch && barbershop.role !== "super_admin") {
       await prisma.barbershop.update({
         where: { id: barbershop.id },
         data: { role: "super_admin" },
