@@ -46,6 +46,7 @@ export async function GET(
     const settings = (b.settings as BarbershopSettings | null) ?? null
 
     return NextResponse.json({
+      id: b.id,
       name: b.name,
       slug: b.slug,
       phone: b.phone,

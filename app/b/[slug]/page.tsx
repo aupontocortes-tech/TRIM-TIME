@@ -32,6 +32,7 @@ import {
 import { openingHoursFromSettings } from "@/lib/barbershop-settings-ui"
 import type { BarbershopSettings } from "@/lib/db/types"
 import { AppInstallPrompt } from "@/components/app-install-prompt"
+import { TrimPlayGame } from "@/components/trim-play/TrimPlayGame"
 
 // Dados mockados da barbearia (viriam do banco de dados pelo slug)
 const barbeariaData = {
@@ -117,6 +118,7 @@ type PublicUnit = {
 }
 
 type PublicShopPayload = {
+  id: string
   name: string
   slug: string
   phone: string | null
@@ -143,6 +145,8 @@ export default function BarbeariaPage() {
   const [horarioSelecionado, setHorarioSelecionado] = useState<string | null>(null)
   const [dadosCliente, setDadosCliente] = useState({ nome: "", telefone: "", email: "" })
   const [agendamentoConfirmado, setAgendamentoConfirmado] = useState(false)
+  const [trimPlayStage, setTrimPlayStage] = useState<"intro" | "game">("intro")
+  const [trimPlayCliente, setTrimPlayCliente] = useState<null | { id: string; nome: string }>(null)
 
   // Cadastro
   const [formCadastro, setFormCadastro] = useState({
@@ -201,6 +205,41 @@ export default function BarbeariaPage() {
       setAuthPhase("cadastro")
     }
   }, [slug])
+
+  useEffect(() => {
+    if (!agendamentoConfirmado) return
+    setTrimPlayStage("intro")
+
+    if (clienteLogado) {
+      setTrimPlayCliente({ id: clienteLogado.id, nome: clienteLogado.nome })
+      return
+    }
+
+    if (typeof window === "undefined") return
+    const key = `trimplay_game_cliente_${slug}`
+    try {
+      const raw = localStorage.getItem(key)
+      if (raw) {
+        const parsed = JSON.parse(raw) as { id: string; nome: string }
+        if (parsed?.id && parsed?.nome) {
+          setTrimPlayCliente({ id: parsed.id, nome: parsed.nome })
+          return
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    const id = `gp_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
+    const nome = dadosCliente.nome?.trim() || "Cliente"
+    const payload = { id, nome }
+    try {
+      localStorage.setItem(key, JSON.stringify(payload))
+    } catch {
+      // ignore
+    }
+    setTrimPlayCliente(payload)
+  }, [agendamentoConfirmado, clienteLogado, dadosCliente.nome, slug])
 
   const formatPhone = (value: string) => {
     const numbers = value.replace(/\D/g, "")
@@ -381,6 +420,8 @@ export default function BarbeariaPage() {
   const confirmarAgendamento = () => {
     setAgendamentoConfirmado(true)
   }
+
+  const barbershopId = publicMeta?.id ?? ""
 
   // —— Telas de acesso: loading, cadastro, login ——
   if (authPhase === "loading") {
@@ -569,63 +610,58 @@ export default function BarbeariaPage() {
   }
 
   if (agendamentoConfirmado) {
+    if (trimPlayStage === "game") {
+      if (!barbershopId || !trimPlayCliente) {
+        return (
+          <div className="min-h-screen bg-black flex items-center justify-center p-4 text-white">
+            Carregando Trim Play…
+          </div>
+        )
+      }
+      return (
+        <TrimPlayGame
+          barbershopId={barbershopId}
+          clienteId={trimPlayCliente.id}
+          clienteNome={trimPlayCliente.nome}
+          onExit={() => setTrimPlayStage("intro")}
+        />
+      )
+    }
+
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <Card className="max-w-md w-full border-primary/20">
+      <div className="min-h-screen bg-black flex items-center justify-center p-4 text-white">
+        <Card className="max-w-md w-full bg-black border-[#FFD700]/35 shadow-none">
           <CardContent className="p-8 text-center">
-            <div className="w-20 h-20 bg-primary/20 rounded-full flex items-center justify-center mx-auto mb-6">
-              <Check className="w-10 h-10 text-primary" />
+            <div className="w-20 h-20 bg-[#FFD700]/15 rounded-full flex items-center justify-center mx-auto mb-6 border border-[#FFD700]/25">
+              <Check className="w-10 h-10 text-[#FFD700]" />
             </div>
-            <h1 className="text-2xl font-bold text-foreground mb-2">Agendamento Confirmado!</h1>
-            <p className="text-muted-foreground mb-6">
-              Seu horário foi reservado com sucesso
-            </p>
-            
-            <div className="bg-secondary/50 rounded-lg p-4 text-left space-y-3 mb-6">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Barbearia</span>
-                <span className="text-foreground font-medium">{displayNome}</span>
-              </div>
-              {selectedUnit ? (
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Unidade</span>
-                  <span className="text-foreground font-medium text-right max-w-[60%]">
-                    {selectedUnit.name}
-                  </span>
-                </div>
-              ) : null}
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Profissional</span>
-                <span className="text-foreground font-medium">{profissionalData?.nome}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Data</span>
-                <span className="text-foreground font-medium">
-                  {dataSelecionada && `${dataSelecionada.getDate()} de ${meses[dataSelecionada.getMonth()]}`}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Horário</span>
-                <span className="text-foreground font-medium">{horarioSelecionado}</span>
-              </div>
-              <div className="border-t border-border pt-3 flex justify-between">
-                <span className="text-muted-foreground">Total</span>
-                <span className="text-primary font-bold">R$ {totalPreco}</span>
-              </div>
-            </div>
-
-            <p className="text-sm text-muted-foreground mb-6">
-              Você receberá uma confirmação no WhatsApp
+            <h1 className="text-2xl font-bold mb-2 text-[#FFD700]">💈 Agendamento confirmado!</h1>
+            <p className="text-white/80 mb-6">
+              ⏳ Enquanto espera, jogue Trim Play e suba no ranking da barbearia!
             </p>
 
-            <Button 
-              onClick={() => window.location.reload()}
-              className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
-            >
-              Fazer Novo Agendamento
-            </Button>
+            <div className="flex flex-col gap-3">
+              <Button
+                onClick={() => setTrimPlayStage("game")}
+                className="w-full bg-[#FFD700] text-black hover:opacity-95"
+              >
+                🎮 Jogar Trim Play
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => window.location.reload()}
+                className="w-full border-[#FFD700]/40 text-[#FFD700] hover:bg-[#FFD700]/10"
+              >
+                Voltar
+              </Button>
+            </div>
+
+            <p className="text-xs text-white/60 mt-4">
+              Ranking por barbearia. Pontuação salva mesmo offline.
+            </p>
           </CardContent>
         </Card>
+
         <AppInstallPrompt storageSuffix={storageSuffix} variant="clientBooking" />
       </div>
     )

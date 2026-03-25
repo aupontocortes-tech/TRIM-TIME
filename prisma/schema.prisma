@@ -82,6 +82,7 @@ model Barbershop {
   loyaltyLedgerEntries LoyaltyLedgerEntry[]
   marketingCampaigns   MarketingCampaign[]
   supportMessages      SupportMessage[]
+  trimPlayScores      TrimPlayScore[]
 
   @@index([email])
   @@index([role])
@@ -355,4 +356,20 @@ model NotificationLog {
 
   @@index([barbershopId])
   @@index([sentAt])
+}
+
+// ========== TRIM PLAY (MINI GAME) ==========
+model TrimPlayScore {
+  id            String     @id @default(uuid()) @db.Uuid
+  barbershopId  String     @map("barbershop_id") @db.Uuid
+  barbershop    Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  clienteId     String     @map("cliente_id")
+  clienteNome   String     @map("cliente_name")
+  bestScore     Int        @map("best_score") @default(0)
+  createdAt     DateTime   @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime   @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@unique([barbershopId, clienteId])
+  @@index([barbershopId, bestScore])
+  @@map("trim_play_scores")
 }
