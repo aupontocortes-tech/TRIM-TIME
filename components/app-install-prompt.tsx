@@ -49,14 +49,21 @@ function shouldForceFromUrl(): boolean {
   )
 }
 
+type InstallVariant = "default" | "clientBooking"
+
 type AppInstallPromptProps = {
   storageSuffix?: string
+  /** Página pública de agendamento (/b/slug): texto focado no cliente. */
+  variant?: InstallVariant
 }
 
 /**
  * Modal central + portal no body (não fica escondido atrás do header ou fora da tela).
  */
-export function AppInstallPrompt({ storageSuffix = "" }: AppInstallPromptProps) {
+export function AppInstallPrompt({
+  storageSuffix = "",
+  variant = "default",
+}: AppInstallPromptProps) {
   const hideKey = STORAGE_HIDE_KEY + storageSuffix
   const [show, setShow] = useState(false)
   const [mounted, setMounted] = useState(false)
@@ -142,6 +149,15 @@ export function AppInstallPrompt({ storageSuffix = "" }: AppInstallPromptProps) 
   const canInstallPwa = !!deferred
   const hasStoreLinks = !!(playStoreUrl || appStoreUrl)
 
+  const title =
+    variant === "clientBooking"
+      ? "Instale o app no celular"
+      : "Baixe o Trim Time"
+  const subtitle =
+    variant === "clientBooking"
+      ? "Abra o link da barbearia no navegador (Chrome ou Safari). Adicione à tela inicial e agende como em um aplicativo normal — ícone na home e tela cheia."
+      : "Instale como aplicativo no Android, iPhone ou computador — atalho na tela inicial e uso em tela cheia."
+
   const modal = (
     <div className="trimtime-install-root" data-trimtime-install="">
       {/* Fundo: cobre header fixo da landing (z-50) e o restante */}
@@ -180,15 +196,9 @@ export function AppInstallPrompt({ storageSuffix = "" }: AppInstallPromptProps) 
                   id="trimtime-install-title"
                   className="font-semibold text-foreground text-lg leading-tight"
                 >
-                  Baixe o Trim Time
+                  {title}
                 </h2>
-                <p className="text-sm text-muted-foreground leading-snug">
-                  Instale como aplicativo no{" "}
-                  <span className="text-foreground/90">Android</span>,{" "}
-                  <span className="text-foreground/90">iPhone</span> ou{" "}
-                  <span className="text-foreground/90">computador</span> — atalho
-                  na tela inicial e uso em tela cheia.
-                </p>
+                <p className="text-sm text-muted-foreground leading-snug">{subtitle}</p>
               </div>
             </div>
 
@@ -316,11 +326,13 @@ export function AppInstallPrompt({ storageSuffix = "" }: AppInstallPromptProps) 
             ) : null}
 
             <p className="mt-3 text-[11px] text-muted-foreground/80 text-center">
-              Não apareceu? Tente{" "}
-              <span className="text-foreground/90 font-medium">
-                ?instalar=1
-              </span>{" "}
-              no final do link.
+              {variant === "clientBooking"
+                ? "O aviso sumiu? Peça o link de novo e acrescente "
+                : "Não apareceu? Tente "}
+              <span className="text-foreground/90 font-medium">?instalar=1</span>
+              {variant === "clientBooking"
+                ? " no final da URL para mostrar esta mensagem de novo."
+                : " no final do link."}
             </p>
           </CardContent>
         </Card>

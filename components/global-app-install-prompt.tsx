@@ -20,5 +20,8 @@ function hideInstallPrompt(pathname: string): boolean {
 export function GlobalAppInstallPrompt() {
   const pathname = usePathname() || ""
   if (hideInstallPrompt(pathname)) return null
-  return <AppInstallPrompt />
+  const slugMatch = pathname.match(/^\/b\/([^/]+)/)
+  const storageSuffix = slugMatch ? `_${slugMatch[1]}` : ""
+  const variant = slugMatch ? "clientBooking" : "default"
+  return <AppInstallPrompt storageSuffix={storageSuffix} variant={variant} />
 }

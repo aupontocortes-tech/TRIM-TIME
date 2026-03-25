@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import { Inter, Playfair_Display, Cormorant_Garamond } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { GlobalAppInstallPrompt } from '@/components/global-app-install-prompt'
+import { PwaServiceWorkerRegister } from '@/components/pwa-service-worker-register'
 import './globals.css'
 
 const inter = Inter({ 
@@ -50,6 +51,7 @@ export default function RootLayout({
     <html lang="pt-BR" className="dark">
       <body className={`${inter.variable} ${playfair.variable} ${trimTimeWordmark.variable} font-sans antialiased`}>
         {children}
+        <PwaServiceWorkerRegister />
         <GlobalAppInstallPrompt />
         <Analytics />
       </body>
