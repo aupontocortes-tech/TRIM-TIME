@@ -53,6 +53,7 @@ export async function GET(
       city: settings?.city ?? null,
       state: settings?.state ?? null,
       cep: settings?.cep ?? null,
+      opening_hours: settings?.opening_hours ?? null,
       units: b.units,
     })
   } catch (e) {

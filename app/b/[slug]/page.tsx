@@ -29,6 +29,8 @@ import {
   logoutCliente,
   type ClienteAgendamento,
 } from "@/lib/cliente-auth"
+import { openingHoursFromSettings } from "@/lib/barbershop-settings-ui"
+import type { BarbershopSettings } from "@/lib/db/types"
 
 // Dados mockados da barbearia (viriam do banco de dados pelo slug)
 const barbeariaData = {
@@ -59,14 +61,33 @@ const barbeariaData = {
   ]
 }
 
-// Gerar horários disponíveis
-const gerarHorarios = () => {
-  const horarios = []
-  for (let h = 9; h <= 19; h++) {
-    horarios.push(`${h.toString().padStart(2, '0')}:00`)
-    if (h < 19) horarios.push(`${h.toString().padStart(2, '0')}:30`)
+function parseHHMM(v: string): number | null {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(v.trim())
+  if (!m) return null
+  const hh = Number(m[1])
+  const mm = Number(m[2])
+  if (Number.isNaN(hh) || Number.isNaN(mm)) return null
+  return hh * 60 + mm
+}
+
+function formatHHMM(minutes: number): string {
+  const hh = Math.floor(minutes / 60)
+  const mm = minutes % 60
+  return `${hh.toString().padStart(2, "0")}:${mm.toString().padStart(2, "0")}`
+}
+
+// Gerar horários disponíveis em incrementos de 30 min entre abertura e fechamento.
+function gerarHorarios(open: string, close: string, stepMinutes = 30): string[] {
+  const openMin = parseHHMM(open)
+  const closeMin = parseHHMM(close)
+  if (openMin === null || closeMin === null) return []
+  if (closeMin <= openMin) return []
+
+  const out: string[] = []
+  for (let t = openMin; t < closeMin; t += stepMinutes) {
+    out.push(formatHHMM(t))
   }
-  return horarios
+  return out
 }
 
 // Gerar próximos 14 dias
@@ -102,6 +123,7 @@ type PublicShopPayload = {
   city: string | null
   state: string | null
   cep: string | null
+  opening_hours?: BarbershopSettings["opening_hours"] | null
   units: PublicUnit[]
 }
 
@@ -233,25 +255,94 @@ export default function BarbeariaPage() {
   }
 
   const barbearia = barbeariaData
-  const horarios = gerarHorarios()
   const dias = gerarDias()
+  const openingHours = openingHoursFromSettings(publicMeta?.opening_hours ?? undefined)
+  const dayKeyByIndex = [
+    "domingo",
+    "segunda",
+    "terca",
+    "quarta",
+    "quinta",
+    "sexta",
+    "sabado",
+  ] as const
+
+  const dayKeyFromDate = (d: Date) => dayKeyByIndex[d.getDay()]
+
+  const horarios = (() => {
+    if (!dataSelecionada) return []
+    const key = dayKeyFromDate(dataSelecionada)
+    const day = openingHours[key]
+    if (!day?.ativo) return []
+    return gerarHorarios(day.abertura, day.fechamento)
+  })()
 
   const selectedUnit =
     publicMeta?.units?.find((u) => u.id === selectedUnitId) ?? null
   const displayNome = publicMeta?.name ?? barbeariaData.nome
   const displayPhone =
-    selectedUnit?.phone ?? publicMeta?.phone ?? barbeariaData.telefone
+    selectedUnit?.phone ?? publicMeta?.phone ?? null
   const displayAddress =
-    selectedUnit?.address ?? publicMeta?.address ?? barbeariaData.endereco
+    selectedUnit?.address ?? publicMeta?.address ?? null
   const cityStateUnit = [selectedUnit?.city, selectedUnit?.state]
     .filter(Boolean)
     .join(" - ")
   const cityStateBase = [publicMeta?.city, publicMeta?.state]
     .filter(Boolean)
     .join(" - ")
-  const displayCityLine =
-    cityStateUnit || cityStateBase || barbeariaData.cidade
+  const displayCityLine = cityStateUnit || cityStateBase || null
   const needsUnitChoice = !!(publicMeta?.units && publicMeta.units.length > 1)
+
+  const displayHorarioFuncionamento = (() => {
+    const short: Record<(typeof dayKeyByIndex)[number], string> = {
+      segunda: "Seg",
+      terca: "Ter",
+      quarta: "Qua",
+      quinta: "Qui",
+      sexta: "Sex",
+      sabado: "Sáb",
+      domingo: "Dom",
+    }
+
+    const order = [...dayKeyByIndex]
+    const segments: string[] = []
+
+    let i = 0
+    while (i < order.length) {
+      const key = order[i]
+      const day = openingHours[key]
+      if (!day?.ativo) {
+        i++
+        continue
+      }
+
+      const open = day.abertura
+      const close = day.fechamento
+      let j = i + 1
+      while (j < order.length) {
+        const k = order[j]
+        const dk = openingHours[k]
+        if (!dk?.ativo || dk.abertura !== open || dk.fechamento !== close) break
+        j++
+      }
+
+      const start = short[order[i]]
+      const end = short[order[j - 1]]
+      const label = j - i >= 2 ? `${start}-${end}` : start
+
+      const fmtHour = (t: string) => {
+        const m = /^(\d{1,2}):(\d{2})$/.exec(t.trim())
+        if (!m) return t
+        const hh = Number(m[1])
+        return Number.isNaN(hh) ? t : `${hh}h`
+      }
+
+      segments.push(`${label}: ${fmtHour(open)} às ${fmtHour(close)}`)
+      i = j
+    }
+
+    return segments.length ? segments.join(" · ") : null
+  })()
 
   const persistUnit = (id: string) => {
     setSelectedUnitId(id)
@@ -594,7 +685,7 @@ export default function BarbeariaPage() {
             ) : null}
             <div className="flex items-center gap-1">
               <Clock className="w-4 h-4" />
-              <span>{barbearia.horarioFuncionamento}</span>
+              <span>{displayHorarioFuncionamento ?? "—"}</span>
             </div>
           </div>
         </div>
@@ -755,15 +846,16 @@ export default function BarbeariaPage() {
                 {dias.map((dia, index) => {
                   const isHoje = index === 0
                   const isSelecionado = dataSelecionada?.toDateString() === dia.toDateString()
-                  const isDomingo = dia.getDay() === 0
+                  const key = dayKeyFromDate(dia)
+                  const isFechado = openingHours[key]?.ativo !== true
                   
                   return (
                     <button
                       key={index}
-                      disabled={isDomingo}
+                      disabled={isFechado}
                       onClick={() => setDataSelecionada(dia)}
                       className={`flex-shrink-0 w-16 py-3 rounded-lg text-center transition-all ${
-                        isDomingo 
+                        isFechado 
                           ? 'bg-secondary/50 text-muted-foreground/50 cursor-not-allowed'
                           : isSelecionado
                             ? 'bg-primary text-primary-foreground'
@@ -785,21 +877,17 @@ export default function BarbeariaPage() {
                 <p className="text-sm text-muted-foreground mb-3">Horário</p>
                 <div className="grid grid-cols-4 sm:grid-cols-5 gap-2">
                   {horarios.map((horario) => {
-                    // Simular alguns horários indisponíveis
-                    const indisponivel = ['10:00', '14:30', '16:00'].includes(horario)
                     const isSelecionado = horarioSelecionado === horario
                     
                     return (
                       <button
                         key={horario}
-                        disabled={indisponivel}
+                        disabled={false}
                         onClick={() => setHorarioSelecionado(horario)}
                         className={`py-2 px-3 rounded-lg text-sm font-medium transition-all ${
-                          indisponivel
-                            ? 'bg-secondary/50 text-muted-foreground/50 cursor-not-allowed line-through'
-                            : isSelecionado
-                              ? 'bg-primary text-primary-foreground'
-                              : 'bg-card hover:bg-primary/10 text-foreground'
+                          isSelecionado
+                            ? 'bg-primary text-primary-foreground'
+                            : 'bg-card hover:bg-primary/10 text-foreground'
                         }`}
                       >
                         {horario}
