@@ -637,7 +637,7 @@ export default function BarbeariaPage() {
             </div>
             <h1 className="text-2xl font-bold mb-2 text-[#FFD700]">💈 Agendamento confirmado!</h1>
             <p className="text-white/80 mb-6">
-              ⏳ Enquanto espera, jogue Trim Play e suba no ranking da barbearia!
+              ⏳ Enquanto espera, jogue o Trim Play (arraste as peças até o tabuleiro) e suba no ranking!
             </p>
 
             <div className="flex flex-col gap-3">

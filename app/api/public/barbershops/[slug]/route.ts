@@ -18,6 +18,7 @@ export async function GET(
     const b = await prisma.barbershop.findUnique({
       where: { slug: slug.trim() },
       select: {
+        id: true,
         name: true,
         slug: true,
         phone: true,
