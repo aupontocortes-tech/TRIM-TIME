@@ -6,6 +6,7 @@ import { AppInstallPrompt } from "@/components/app-install-prompt"
 /** Sem aviso no painel/plataforma (app já é uso “instalado” do barbeiro). */
 function hideInstallPrompt(pathname: string): boolean {
   if (!pathname) return false
+  if (pathname.startsWith("/b/")) return true
   if (pathname.startsWith("/painel")) return true
   if (pathname.startsWith("/plataforma")) return true
   if (pathname.startsWith("/api")) return true

@@ -31,6 +31,7 @@ import {
 } from "@/lib/cliente-auth"
 import { openingHoursFromSettings } from "@/lib/barbershop-settings-ui"
 import type { BarbershopSettings } from "@/lib/db/types"
+import { AppInstallPrompt } from "@/components/app-install-prompt"
 
 // Dados mockados da barbearia (viriam do banco de dados pelo slug)
 const barbeariaData = {
@@ -130,6 +131,7 @@ type PublicShopPayload = {
 export default function BarbeariaPage() {
   const params = useParams()
   const slug = (params?.slug as string) || "trim-time"
+  const storageSuffix = `_${slug}`
 
   const [authPhase, setAuthPhase] = useState<"loading" | "cadastro" | "login" | "logado">("loading")
   const [clienteLogado, setClienteLogado] = useState<ClienteAgendamento | null>(null)
@@ -385,6 +387,7 @@ export default function BarbeariaPage() {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <div className="text-muted-foreground">Carregando...</div>
+        <AppInstallPrompt storageSuffix={storageSuffix} variant="clientBooking" />
       </div>
     )
   }
@@ -488,6 +491,7 @@ export default function BarbeariaPage() {
             </CardContent>
           </Card>
         </div>
+        <AppInstallPrompt storageSuffix={storageSuffix} variant="clientBooking" />
       </div>
     )
   }
@@ -559,6 +563,7 @@ export default function BarbeariaPage() {
             </CardContent>
           </Card>
         </div>
+        <AppInstallPrompt storageSuffix={storageSuffix} variant="clientBooking" />
       </div>
     )
   }
@@ -621,12 +626,14 @@ export default function BarbeariaPage() {
             </Button>
           </CardContent>
         </Card>
+        <AppInstallPrompt storageSuffix={storageSuffix} variant="clientBooking" />
       </div>
     )
   }
 
   return (
     <div className="min-h-screen bg-background">
+      <AppInstallPrompt storageSuffix={storageSuffix} variant="clientBooking" />
       {/* Barra: Sair */}
       {clienteLogado && (
         <div className="sticky top-0 z-20 flex items-center justify-between px-4 py-2 bg-background/90 backdrop-blur border-b border-border">
