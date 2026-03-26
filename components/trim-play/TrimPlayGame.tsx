@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { Settings, Trophy, Volume2, VolumeX, X } from "lucide-react"
 import {
   DropdownMenu,
@@ -198,7 +198,32 @@ function shapeDims(cells: ShapeCell[]) {
 
 type BoardCell = { hue: number } | null
 type HandPiece = { id: string; cells: ShapeCell[]; hue: number; templateId: string }
-type ShapeTemplateDef = { id: string; cells: ShapeCell[]; difficulty: 1 | 2 | 3; weight: number }
+/** shapeBand: 1 = pequenas/simples (mono, dom, linha3, 2×2), 2 = L/Z médios, 3 = grandes/T/linha4 */
+type ShapeTemplateDef = { id: string; cells: ShapeCell[]; difficulty: 1 | 2 | 3; weight: number; shapeBand: 1 | 2 | 3 }
+
+/** Alinhado ao briefing: fácil → médio → difícil por pontuação */
+export type TrimPlayDifficultyStage = "facil" | "media" | "dificil"
+
+export function trimPlayDifficultyFromScore(score: number): TrimPlayDifficultyStage {
+  if (score < 300) return "facil"
+  if (score < 1000) return "media"
+  return "dificil"
+}
+
+function difficultyStageToTier(stage: TrimPlayDifficultyStage): 1 | 2 | 3 {
+  return stage === "facil" ? 1 : stage === "media" ? 2 : 3
+}
+
+/** Progresso 0..1 dentro do segmento atual (suaviza transição entre faixas) */
+function difficultyProgress(score: number): { stage: TrimPlayDifficultyStage; tier: 1 | 2 | 3; segmentT: number } {
+  const stage = trimPlayDifficultyFromScore(score)
+  const tier = difficultyStageToTier(stage)
+  let segmentT = 0
+  if (score < 300) segmentT = score / 300
+  else if (score < 1000) segmentT = (score - 300) / 700
+  else segmentT = Math.min(1, (score - 1000) / 4500)
+  return { stage, tier, segmentT }
+}
 
 type DragPayload = {
   slot: number
@@ -213,6 +238,9 @@ function emptyBoard(): BoardCell[][] {
   return Array.from({ length: SIZE }, () => Array.from({ length: SIZE }, () => null))
 }
 
+/** Uma banda por template (mesma ordem que SHAPE_TEMPLATES) */
+const SHAPE_BAND_BY_INDEX: (1 | 2 | 3)[] = [1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3]
+
 const SHAPE_LIBRARY: ShapeTemplateDef[] = SHAPE_TEMPLATES.map((cells, i) => {
   const area = cells.length
   const { h, w } = shapeDims(cells)
@@ -220,7 +248,14 @@ const SHAPE_LIBRARY: ShapeTemplateDef[] = SHAPE_TEMPLATES.map((cells, i) => {
   const isLine4 = area === 4 && (h === 1 || w === 1)
   const difficulty: 1 | 2 | 3 =
     area <= 2 ? 1 : area >= 4 || span >= 4 || isLine4 ? 3 : area === 3 && span >= 3 ? 2 : 2
-  return { id: `s${i + 1}`, cells, difficulty, weight: difficulty === 1 ? 1.2 : difficulty === 2 ? 1 : 0.85 }
+  const shapeBand = SHAPE_BAND_BY_INDEX[i] ?? 2
+  return {
+    id: `s${i + 1}`,
+    cells,
+    difficulty,
+    shapeBand,
+    weight: difficulty === 1 ? 1.2 : difficulty === 2 ? 1 : 0.85,
+  }
 })
 
 function countPlacements(board: BoardCell[][], cells: ShapeCell[]) {
@@ -250,10 +285,32 @@ function isBoardEmpty(board: BoardCell[][]) {
   return true
 }
 
-function targetDifficultyFromState(score: number, fillRatio: number): 1 | 2 | 3 {
-  const scoreTier = score >= 3600 ? 3 : score >= 1500 ? 2 : 1
-  const pressure = fillRatio >= 0.58 ? 1 : fillRatio <= 0.22 ? -1 : 0
-  return Math.max(1, Math.min(3, scoreTier + pressure)) as 1 | 2 | 3
+/** Peso relativo por banda geométrica conforme o estágio do jogo (pontuação) */
+function shapeBandPreference(shapeBand: 1 | 2 | 3, gameTier: 1 | 2 | 3): number {
+  if (gameTier === 1) {
+    if (shapeBand === 1) return 2.35
+    if (shapeBand === 2) return 0.52
+    return 0.14
+  }
+  if (gameTier === 2) {
+    if (shapeBand === 1) return 1.2
+    if (shapeBand === 2) return 1.45
+    return 0.62
+  }
+  if (shapeBand === 1) return 0.32
+  if (shapeBand === 2) return 0.92
+  return 1.95
+}
+
+/** Anti-frustração: reduz tier efetivo e favorece encaixes quando o tabuleiro aperta */
+function effectiveGameTier(score: number, fillRatio: number, fitTemplateCount: number): 1 | 2 | 3 {
+  const { tier } = difficultyProgress(score)
+  const crowded = fillRatio >= 0.62
+  const fewOptions = fitTemplateCount <= 5
+  const critical = fillRatio >= 0.72 || fitTemplateCount <= 3
+  if (critical) return 1
+  if (crowded || fewOptions) return Math.max(1, tier - 1) as 1 | 2 | 3
+  return tier
 }
 
 function weightedPick<T>(entries: { item: T; weight: number }[]): T {
@@ -278,37 +335,72 @@ function makePiece(template: ShapeTemplateDef): HandPiece {
 
 function pickTemplateForBoard(board: BoardCell[][], score: number, recentIds: string[]): ShapeTemplateDef {
   const fillRatio = boardFillRatio(board)
-  const targetDifficulty = targetDifficultyFromState(score, fillRatio)
+  const { tier, segmentT } = difficultyProgress(score)
 
   const fitData = SHAPE_LIBRARY.map((t) => ({ t, fits: countPlacements(board, t.cells) }))
   const fitCandidates = fitData.filter((x) => x.fits > 0)
-  const nearLosing = fillRatio >= 0.68 || fitCandidates.length <= 4
+  const gameTier = effectiveGameTier(score, fillRatio, fitCandidates.length)
 
-  if (nearLosing && Math.random() < 0.32) {
-    const saver = fitCandidates.filter((x) => x.t.difficulty === 1 || x.t.cells.length <= 3)
+  const nearLosing = fillRatio >= 0.62 || fitCandidates.length <= 5
+  const critical = fillRatio >= 0.72 || fitCandidates.length <= 3
+  const saverChance = critical ? 0.58 : nearLosing ? 0.38 : 0.12
+
+  if (Math.random() < saverChance) {
+    const saver = fitCandidates.filter((x) => x.t.shapeBand === 1 || x.t.cells.length <= 3)
     if (saver.length > 0) {
       return weightedPick(
         saver.map((x) => ({
           item: x.t,
-          weight: x.fits * (recentIds.includes(x.t.id) ? 0.45 : 1),
+          weight: x.fits * x.fits * (recentIds.includes(x.t.id) ? 0.5 : 1),
         }))
       )
     }
   }
 
+  // Tendência suave no fim de cada faixa de pontos (meio-termo → próximo estágio)
+  const bandBoost =
+    segmentT *
+    0.22 *
+    (tier === 1 ? 0.85 : tier === 2 ? 1 : 1.05)
   const source = fitCandidates.length > 0 ? fitCandidates : fitData
+
   return weightedPick(
     source.map((x) => {
-      const diffDistance = Math.abs(x.t.difficulty - targetDifficulty)
-      const difficultyWeight = diffDistance === 0 ? 1.5 : diffDistance === 1 ? 1 : 0.65
-      const fitWeight = Math.max(1, Math.min(14, x.fits + 1))
-      const repeatPenalty = recentIds.includes(x.t.id) ? 0.42 : 1
+      const basePref = shapeBandPreference(x.t.shapeBand, gameTier)
+      const nudgeHard =
+        x.t.shapeBand >= 2
+          ? basePref * (1 + bandBoost * (x.t.shapeBand - 1))
+          : basePref * (1 - bandBoost * 0.35)
+      const bandWeight = Math.max(0.08, nudgeHard)
+      const diffDistance = Math.abs(x.t.difficulty - tier)
+      const difficultyWeight = diffDistance === 0 ? 1.45 : diffDistance === 1 ? 1 : 0.68
+      const fitWeight = Math.max(1, Math.min(18, nearLosing ? x.fits * x.fits + 2 : x.fits + 1))
+      const repeatPenalty = recentIds.includes(x.t.id) ? 0.48 : 1
       return {
         item: x.t,
-        weight: x.t.weight * difficultyWeight * fitWeight * repeatPenalty,
+        weight: x.t.weight * bandWeight * difficultyWeight * fitWeight * repeatPenalty,
       }
     })
   )
+}
+
+/** Garante ao menos uma peça encaixável no tabuleiro atual (evita mão morta só por RNG). */
+function ensureAtLeastOnePlacement(board: BoardCell[][], hand: HandPiece[]): HandPiece[] {
+  if (canPlaceAnyPiece(board, hand)) return hand
+
+  const ranked = SHAPE_LIBRARY.map((t) => ({ t, fits: countPlacements(board, t.cells) }))
+    .filter((x) => x.fits > 0)
+    .sort((a, b) => b.fits - a.fits)
+
+  if (ranked.length === 0) return hand
+
+  const preferEasy = ranked.filter((x) => x.t.shapeBand === 1)
+  const pickFrom = preferEasy.length > 0 ? preferEasy : ranked
+  const best = pickFrom[0]!.t
+  const slot = Math.floor(Math.random() * 3)
+  const copy = hand.slice()
+  copy[slot] = makePiece(best)
+  return copy
 }
 
 function dealHand(board: BoardCell[][], score: number, recentIds: string[]): (HandPiece | null)[] {
@@ -320,7 +412,7 @@ function dealHand(board: BoardCell[][], score: number, recentIds: string[]): (Ha
     recent.push(template.id)
     if (recent.length > 8) recent.shift()
   }
-  return next
+  return ensureAtLeastOnePlacement(board, next)
 }
 
 function canPlace(board: BoardCell[][], cells: ShapeCell[], ar: number, ac: number) {
@@ -568,6 +660,10 @@ export function TrimPlayGame({
     return dealHand(base, 0, [])
   })
   const [score, setScore] = useState(0)
+  const difficultyUiLabel = useMemo(() => {
+    const s = trimPlayDifficultyFromScore(score)
+    return s === "facil" ? "Fácil" : s === "media" ? "Médio" : "Difícil"
+  }, [score])
   const [moves, setMoves] = useState(0)
   const [comboStreak, setComboStreak] = useState(0)
   const [state, setState] = useState<"playing" | "over">("playing")
@@ -1426,6 +1522,9 @@ export function TrimPlayGame({
           <div className="flex flex-col items-center gap-1.5">
             <span className="text-5xl sm:text-6xl leading-none font-semibold tracking-tight text-white/90 tabular-nums">
               {score}
+            </span>
+            <span className="text-[10px] sm:text-xs uppercase tracking-[0.2em] text-white/40">
+              Dificuldade · {difficultyUiLabel}
             </span>
             {comboStreak >= 2 ? (
               <span className="text-[11px] sm:text-xs px-2 py-0.5 rounded-full border border-amber-400/40 bg-amber-500/15 text-amber-200 font-semibold">
