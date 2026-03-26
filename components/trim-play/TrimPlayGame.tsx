@@ -1167,7 +1167,7 @@ export function TrimPlayGame({
         <div className="shrink-0 h-5 sm:h-8" />
 
         {/* Três peças sempre na mesma linha; altura fixa enxuta */}
-        <section className="shrink-0 border-t border-[#3d3520]/50 bg-[#060605]/90 px-1.5 sm:px-3 pt-2 pb-[max(0.35rem,env(safe-area-inset-bottom))]">
+        <section className="shrink-0 mt-[5mm] border-t border-[#3d3520]/50 bg-[#060605]/90 px-1.5 sm:px-3 pt-2 pb-[max(0.35rem,env(safe-area-inset-bottom))]">
           <div className="flex flex-nowrap justify-center items-stretch gap-1 sm:gap-2 max-w-md mx-auto w-full">
             {hand.map((piece, slot) => {
               if (!piece) {
