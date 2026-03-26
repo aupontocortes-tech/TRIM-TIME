@@ -39,6 +39,7 @@ import { openingHoursFromSettings } from "@/lib/barbershop-settings-ui"
 import type { BarbershopSettings } from "@/lib/db/types"
 import { AppInstallPrompt } from "@/components/app-install-prompt"
 import { TrimPlayGame } from "@/components/trim-play/TrimPlayGame"
+import { TrimPlaySplash } from "@/components/trim-play/TrimPlaySplash"
 
 // Dados mockados da barbearia (viriam do banco de dados pelo slug)
 const barbeariaData = {
@@ -152,7 +153,7 @@ export default function BarbeariaPage() {
   const [dadosCliente, setDadosCliente] = useState({ nome: "", telefone: "", email: "" })
   const [agendamentoConfirmado, setAgendamentoConfirmado] = useState(false)
   const [bookingSummary, setBookingSummary] = useState<PersistedClientBookingV1 | null>(null)
-  const [trimPlayStage, setTrimPlayStage] = useState<"intro" | "game">("intro")
+  const [trimPlayStage, setTrimPlayStage] = useState<"intro" | "splash" | "game">("intro")
   const [trimPlayCliente, setTrimPlayCliente] = useState<null | { id: string; nome: string }>(null)
 
   // Cadastro
@@ -671,6 +672,9 @@ export default function BarbeariaPage() {
   }
 
   if (agendamentoConfirmado) {
+    if (trimPlayStage === "splash") {
+      return <TrimPlaySplash onComplete={() => setTrimPlayStage("game")} />
+    }
     if (trimPlayStage === "game") {
       if (!barbershopId || !trimPlayCliente) {
         return (
@@ -765,7 +769,7 @@ export default function BarbeariaPage() {
 
             <div className="flex flex-col gap-3">
               <Button
-                onClick={() => setTrimPlayStage("game")}
+                onClick={() => setTrimPlayStage("splash")}
                 className="w-full bg-[#FFD700] text-black hover:opacity-95 font-semibold"
               >
                 Jogar Trim Play

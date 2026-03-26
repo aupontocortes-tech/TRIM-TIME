@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { TrimPlayGame } from "@/components/trim-play/TrimPlayGame"
+import { TrimPlaySplash } from "@/components/trim-play/TrimPlaySplash"
 import { Button } from "@/components/ui/button"
 
 type PublicShopPayload = {
@@ -22,6 +23,7 @@ export default function TrimPlayStandalonePage() {
   const [shop, setShop] = useState<PublicShopPayload | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [cliente, setCliente] = useState<{ id: string; nome: string } | null>(null)
+  const [splashDone, setSplashDone] = useState(false)
 
   useEffect(() => {
     if (!slug) return
@@ -89,6 +91,10 @@ export default function TrimPlayStandalonePage() {
         Carregando Trim Play…
       </div>
     )
+  }
+
+  if (!splashDone) {
+    return <TrimPlaySplash onComplete={() => setSplashDone(true)} />
   }
 
   return (
