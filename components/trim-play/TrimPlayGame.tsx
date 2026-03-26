@@ -1,7 +1,15 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react"
-import { Trophy, Volume2, VolumeX, X } from "lucide-react"
+import { Settings, Trophy, Volume2, VolumeX, X } from "lucide-react"
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { TrimPlayRankingPanel } from "./TrimPlayRankingPanel"
 import { fetchTrimPlayRanking, submitTrimPlayScore } from "./trimplayApi"
 import {
@@ -23,6 +31,9 @@ import {
 } from "./trimPlayHowler"
 
 const SIZE = 8
+
+/** iOS/Android: permite preventDefault no arrasto e evita scroll “roubar” o gesto */
+const POINTER_MOVE_OPTS: AddEventListenerOptions = { passive: false }
 
 type ShapeCell = { r: number; c: number }
 
@@ -393,6 +404,21 @@ export function TrimPlayGame({
   const [soundMuted, setSoundMuted] = useState(false)
   const [rankingOpen, setRankingOpen] = useState(false)
 
+  /** Layout estreito (celular): peças e ghost menores; desktop sm+ mais folgado */
+  const [compactUi, setCompactUi] = useState(true)
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const mq = window.matchMedia("(min-width: 640px)")
+    const apply = () => setCompactUi(!mq.matches)
+    apply()
+    mq.addEventListener("change", apply)
+    return () => mq.removeEventListener("change", apply)
+  }, [])
+  const trayCellPx = compactUi ? 16 : 22
+  const trayGapPx = compactUi ? 2 : 3
+  const ghostCellPx = compactUi ? 18 : 22
+  const ghostGapPx = compactUi ? 2 : 3
+
   useEffect(() => {
     setSoundMuted(getTrimPlayMuted())
   }, [])
@@ -426,6 +452,8 @@ export function TrimPlayGame({
   const movesRef = useRef(moves)
   const stateRef = useRef(state)
   const dragRef = useRef<DragPayload | null>(null)
+  const pointerCaptureRef = useRef<{ el: HTMLElement; id: number } | null>(null)
+  const dragPointerListenersCleanupRef = useRef<(() => void) | null>(null)
 
   boardRef.current = board
   handRef.current = hand
@@ -597,6 +625,17 @@ export function TrimPlayGame({
     unlockTrimPlayAudio()
 
     const el = e.currentTarget as HTMLElement
+    try {
+      el.setPointerCapture(e.pointerId)
+      pointerCaptureRef.current = { el, id: e.pointerId }
+    } catch {
+      pointerCaptureRef.current = null
+    }
+    if (typeof document !== "undefined") {
+      document.body.style.touchAction = "none"
+      document.documentElement.style.touchAction = "none"
+      document.documentElement.style.overscrollBehavior = "none"
+    }
     const shapeEl = el.querySelector("[data-trimplay-shape]") as HTMLElement | null
     const rect = (shapeEl ?? el).getBoundingClientRect()
     const offsetX = e.clientX - rect.left
@@ -614,19 +653,54 @@ export function TrimPlayGame({
     setDrag(payload)
     updatePreviewRef.current(e.clientX, e.clientY, payload)
 
+    const pointerId = e.pointerId
+    let capturedOk = pointerCaptureRef.current !== null
+
     const onMove = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointerId) return
       const d = dragRef.current
       if (!d) return
+      ev.preventDefault()
       const next = { ...d, x: ev.clientX, y: ev.clientY }
       dragRef.current = next
       setDrag(next)
       updatePreviewRef.current(ev.clientX, ev.clientY, next)
     }
 
+    const releaseDragChrome = () => {
+      const cap = pointerCaptureRef.current
+      pointerCaptureRef.current = null
+      if (cap) {
+        try {
+          cap.el.releasePointerCapture(cap.id)
+        } catch {
+          /* ignore */
+        }
+      }
+      if (typeof document !== "undefined") {
+        document.body.style.touchAction = ""
+        document.documentElement.style.touchAction = ""
+        document.documentElement.style.overscrollBehavior = ""
+      }
+    }
+
+    const detachPointerListeners = () => {
+      if (capturedOk) {
+        el.removeEventListener("pointermove", onMove, POINTER_MOVE_OPTS)
+        el.removeEventListener("pointerup", onUp)
+        el.removeEventListener("pointercancel", onUp)
+      } else {
+        window.removeEventListener("pointermove", onMove, POINTER_MOVE_OPTS)
+        window.removeEventListener("pointerup", onUp)
+        window.removeEventListener("pointercancel", onUp)
+      }
+      dragPointerListenersCleanupRef.current = null
+    }
+
     const onUp = (ev: PointerEvent) => {
-      window.removeEventListener("pointermove", onMove)
-      window.removeEventListener("pointerup", onUp)
-      window.removeEventListener("pointercancel", onUp)
+      if (ev.pointerId !== pointerId) return
+      detachPointerListeners()
+      releaseDragChrome()
 
       const d = dragRef.current
       dragRef.current = null
@@ -655,12 +729,39 @@ export function TrimPlayGame({
       void commitPlacementRef.current(d.slot, d.piece, anchor.ar, anchor.ac)
     }
 
-    window.addEventListener("pointermove", onMove)
-    window.addEventListener("pointerup", onUp)
-    window.addEventListener("pointercancel", onUp)
+    /**
+     * Com setPointerCapture, pointermove/up/cancel são entregues ao elemento que capturou — não à window.
+     * Sem isso, no iOS/Android o arrasto nunca “solta” e a peça não encaixa.
+     */
+    dragPointerListenersCleanupRef.current = detachPointerListeners
+    if (capturedOk) {
+      el.addEventListener("pointermove", onMove, POINTER_MOVE_OPTS)
+      el.addEventListener("pointerup", onUp)
+      el.addEventListener("pointercancel", onUp)
+    } else {
+      window.addEventListener("pointermove", onMove, POINTER_MOVE_OPTS)
+      window.addEventListener("pointerup", onUp)
+      window.addEventListener("pointercancel", onUp)
+    }
   }, [])
 
   const reset = () => {
+    dragPointerListenersCleanupRef.current?.()
+    dragPointerListenersCleanupRef.current = null
+    const cap = pointerCaptureRef.current
+    pointerCaptureRef.current = null
+    if (cap) {
+      try {
+        cap.el.releasePointerCapture(cap.id)
+      } catch {
+        /* ignore */
+      }
+    }
+    if (typeof document !== "undefined") {
+      document.body.style.touchAction = ""
+      document.documentElement.style.touchAction = ""
+      document.documentElement.style.overscrollBehavior = ""
+    }
     setBoard(emptyBoard())
     setHand(dealHand())
     setScore(0)
@@ -674,7 +775,7 @@ export function TrimPlayGame({
   }
 
   return (
-    <div className="relative min-h-screen text-white flex flex-col overflow-x-hidden">
+    <div className="relative h-[100dvh] min-h-[100dvh] max-h-[100dvh] text-white flex flex-col overflow-hidden">
       <div
         className="pointer-events-none fixed inset-0 -z-10"
         style={{
@@ -708,7 +809,7 @@ export function TrimPlayGame({
       ) : null}
 
       {toast ? (
-        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[2147483647] max-w-[min(100%-2rem,24rem)] px-4 py-2.5 rounded-xl bg-[#141414]/95 border border-[#c9a227]/45 text-sm text-white/95 text-center shadow-[0_12px_40px_rgba(0,0,0,0.55)] backdrop-blur-md">
+        <div className="fixed left-1/2 -translate-x-1/2 z-[2147483647] max-w-[min(100%-2rem,24rem)] px-4 py-2.5 rounded-xl bg-[#141414]/95 border border-[#c9a227]/45 text-sm text-white/95 text-center shadow-[0_12px_40px_rgba(0,0,0,0.55)] backdrop-blur-md top-[max(4.5rem,env(safe-area-inset-top)+3rem)]">
           {toast}
         </div>
       ) : null}
@@ -723,7 +824,7 @@ export function TrimPlayGame({
           }}
           aria-hidden
         >
-          <ShapePreview cells={drag.piece.cells} hue={drag.piece.hue} cellPx={22} gapPx={3} />
+          <ShapePreview cells={drag.piece.cells} hue={drag.piece.hue} cellPx={ghostCellPx} gapPx={ghostGapPx} />
         </div>
       ) : null}
 
@@ -769,170 +870,151 @@ export function TrimPlayGame({
         </div>
       ) : null}
 
-      <main className="relative z-0 flex-1 flex flex-col px-3 sm:px-4 py-4 pb-12 max-w-xl mx-auto w-full gap-4">
-        <section
-          className="relative overflow-hidden rounded-2xl border border-[#a68b2e]/50 bg-[#0b0b0a]/95 p-4 sm:p-5 backdrop-blur-sm"
-          style={{
-            boxShadow:
-              "0 0 0 1px rgba(0,0,0,0.7), 0 20px 64px rgba(0,0,0,0.55), 0 0 80px rgba(212,175,55,0.06), inset 0 1px 0 rgba(255,215,0,0.09)",
-          }}
-        >
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-amber-400/10 to-transparent rounded-t-2xl"
-          />
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-amber-500/8 to-transparent rounded-b-2xl"
-          />
-
-          <div className="relative flex flex-wrap items-start justify-between gap-3 gap-y-4 mb-4">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="w-12 h-12 shrink-0 rounded-xl border border-[#d4af37]/55 bg-gradient-to-br from-[#3d3318] via-[#1f1a0d] to-[#0c0b08] flex items-center justify-center shadow-[inset_0_1px_0_rgba(255,220,120,0.25),0_0_24px_rgba(212,175,55,0.2)]">
-                <span className="text-[#ffdf6b] text-2xl font-black leading-none drop-shadow-[0_0_8px_rgba(255,215,0,0.45)]">
-                  ▦
-                </span>
-              </div>
-              <div className="min-w-0">
-                <h1 className="text-white font-semibold text-xl sm:text-2xl tracking-tight leading-tight">
-                  Trim Play
-                </h1>
-                <p className="text-[#e0b84a] text-sm mt-0.5">
-                  {state === "over" ? "Fim de jogo" : "Arraste até o tabuleiro"}
-                </p>
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center justify-end gap-2 w-full sm:w-auto">
-              <button
-                type="button"
-                onClick={() => {
-                  unlockTrimPlayAudio()
-                  setRankingOpen(true)
-                }}
-                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-[#b8860b]/55 bg-black/35 text-[#f5d78a] text-sm font-medium hover:bg-amber-500/10 hover:border-[#d4af37]/55 transition-colors shadow-[0_0_20px_rgba(212,175,55,0.06)]"
-              >
-                <Trophy className="w-4 h-4" />
-                Ranking
-              </button>
-              <button
-                type="button"
-                onClick={reset}
-                className="px-4 py-2.5 rounded-xl border border-[#9a7b2d]/55 text-[#e8c547] text-sm font-medium hover:bg-[#ffd700]/8 transition-colors"
-              >
-                {state === "over" ? "Jogar de novo" : "Reiniciar"}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const next = !soundMuted
-                  setTrimPlayMuted(next)
-                  setSoundMuted(next)
-                }}
-                className="p-2.5 rounded-xl border border-[#6b5a28]/55 bg-black/30 text-[#e8c547] hover:bg-[#ffd700]/10 transition-colors"
-                aria-label={soundMuted ? "Ativar som" : "Silenciar"}
-              >
-                {soundMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
-              </button>
-              <button
-                type="button"
-                onClick={onExit}
-                className="px-4 py-2.5 rounded-xl border border-[#5c4d22]/55 text-white/80 text-sm hover:bg-white/5 transition-colors"
-              >
-                Voltar
-              </button>
-            </div>
-          </div>
-
-          <div className="relative flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-white/55 mb-5 pb-4 border-b border-[#3d3520]/70">
-            <span>
-              Melhor: <span className="text-[#f0d060] font-semibold tabular-nums">{bestLocal}</span>
+      <header className="relative z-20 shrink-0 flex items-center gap-2 px-2 sm:px-3 pt-[max(0.25rem,env(safe-area-inset-top))] pb-2 border-b border-[#3d3520]/55 bg-[#080807]/85 backdrop-blur-md">
+        <div className="flex-1 min-w-0 pr-1">
+          <p className="text-[11px] sm:text-xs text-[#e0b84a] font-medium leading-tight truncate">
+            Trim Play
+            <span className="text-white/35 font-normal"> · </span>
+            <span className="text-white/50 font-normal">
+              {state === "over" ? "Fim" : "arraste ao quadro"}
             </span>
-            <span className="text-white/25">·</span>
-            <span>
-              Jogadas: <span className="text-white/80 tabular-nums">{moves}</span>
-            </span>
-            <span className="text-white/25">·</span>
-            <span>
-              Pontos: <span className="text-[#e8c547] font-semibold tabular-nums">{score}</span>
-            </span>
-          </div>
-
-          <div className="relative flex justify-center">
-            <div
-              className="select-none rounded-2xl p-[3px] w-fit"
-              style={{
-                background: "linear-gradient(145deg, rgba(212,175,55,0.45), rgba(80,60,15,0.5))",
-                boxShadow: "0 0 48px rgba(212,175,55,0.12), inset 0 1px 0 rgba(255,255,255,0.12)",
-              }}
+          </p>
+          <p className="text-[10px] sm:text-[11px] text-white/65 tabular-nums leading-tight truncate mt-0.5">
+            <span className="text-[#f0d060] font-semibold">{bestLocal}</span>
+            <span className="text-white/30"> melhor · </span>
+            <span>{moves} j.</span>
+            <span className="text-white/30"> · </span>
+            <span className="text-[#e8c547] font-semibold">{score} pts</span>
+          </p>
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            type="button"
+            onClick={() => {
+              unlockTrimPlayAudio()
+              setRankingOpen(true)
+            }}
+            className="inline-flex items-center gap-1 px-2 py-1.5 sm:px-2.5 sm:py-2 rounded-lg border border-[#b8860b]/50 bg-black/35 text-[10px] sm:text-xs text-[#f5d78a] hover:bg-amber-500/10 transition-colors"
+            aria-label="Abrir ranking"
+          >
+            <Trophy className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+            <span className="hidden min-[360px]:inline">Ranking</span>
+          </button>
+          <button
+            type="button"
+            onClick={onExit}
+            className="px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-lg border border-[#7a6828]/60 text-[11px] sm:text-xs text-[#f5e6a8] hover:bg-white/5 transition-colors"
+          >
+            Voltar
+          </button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="p-2 rounded-lg border border-[#8a7328]/55 bg-black/40 text-[#e8c547] hover:bg-[#ffd700]/10 transition-colors"
+                aria-label="Mais opções"
+              >
+                <Settings className="w-[18px] h-[18px] sm:w-5 sm:h-5" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              sideOffset={6}
+              className="z-[300] w-52 border-[#5c4d22] bg-[#12100c] text-white shadow-xl"
             >
-              <div className="rounded-[13px] bg-gradient-to-b from-[#0a0a0a] via-[#060606] to-[#030303] p-3 sm:p-4 shadow-[inset_0_2px_24px_rgba(0,0,0,0.65)]">
-                <div
-                  ref={boardGridRef}
-                  className="grid gap-1 sm:gap-1.5 mx-auto w-fit touch-none"
-                  style={{
-                    gridTemplateColumns: `repeat(${SIZE}, minmax(0, 1fr))`,
-                  }}
-                >
-                  {board.map((row, r) =>
-                    row.map((cell, c) => {
-                      const hs = cell ? HUE_STYLES[cell.hue % HUE_STYLES.length]! : null
-                      const inPreview =
-                        dropPreview &&
-                        drag?.piece.cells.some((p) => p.r + dropPreview.ar === r && p.c + dropPreview.ac === c)
-                      const previewClass = inPreview
-                        ? dropPreview.ok
-                          ? "ring-2 ring-emerald-400/95 ring-offset-2 ring-offset-[#050505] bg-emerald-500/28 shadow-[0_0_22px_rgba(52,211,153,0.35)]"
-                          : "ring-2 ring-red-500/85 ring-offset-2 ring-offset-[#050505] bg-red-500/2"
-                        : ""
+              <DropdownMenuItem className="focus:bg-[#2a2418] focus:text-[#f0d060] cursor-pointer" onSelect={() => reset()}>
+                {state === "over" ? "Jogar de novo" : "Reiniciar partida"}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator className="bg-[#3d3520]" />
+              <DropdownMenuCheckboxItem
+                className="focus:bg-[#2a2418] focus:text-[#f0d060]"
+                checked={!soundMuted}
+                onCheckedChange={(somLigado) => {
+                  setTrimPlayMuted(!somLigado)
+                  setSoundMuted(!somLigado)
+                }}
+              >
+                Som ligado
+              </DropdownMenuCheckboxItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </header>
 
-                      return (
-                        <div
-                          key={`${r}_${c}`}
-                          data-board-cell
-                          data-br={r}
-                          data-bc={c}
-                          className={[
-                            "aspect-square w-[min(11vw,48px)] sm:w-12 rounded-[10px] border transition-all duration-150 ease-out",
-                            cell ? "" : "",
-                            !cell
-                              ? "bg-gradient-to-br from-[#1c1c1c] to-[#0e0e0e] border-[#2e2818]/95 shadow-[inset_0_3px_10px_rgba(0,0,0,0.55)]"
-                              : "",
-                            !cell ? previewClass : "",
-                          ].join(" ")}
-                          style={
-                            hs
-                              ? {
-                                  ...glossyBlockStyle(hs),
-                                  borderWidth: 1,
-                                  borderStyle: "solid",
-                                }
-                              : undefined
-                          }
-                          aria-label={`Célula ${r + 1},${c + 1}`}
-                        />
-                      )
-                    })
-                  )}
-                </div>
+      <main className="relative z-0 flex-1 min-h-0 flex flex-col w-full max-w-lg mx-auto touch-pan-y">
+        {/* Tabuleiro quadrado: encaixa na altura/largura úteis do viewport */}
+        <div className="flex-1 min-h-0 flex items-center justify-center px-1 py-1 sm:py-2">
+          <div
+            className="select-none rounded-xl sm:rounded-2xl p-[2px] sm:p-[3px] shrink-0 w-[min(100%,min(92vw,calc(100dvh-11.5rem)))] aspect-square max-w-[min(92vw,calc(100dvh-11.5rem))]"
+            style={{
+              background: "linear-gradient(145deg, rgba(212,175,55,0.45), rgba(80,60,15,0.5))",
+              boxShadow: "0 0 32px rgba(212,175,55,0.1), inset 0 1px 0 rgba(255,255,255,0.1)",
+            }}
+          >
+            <div className="rounded-[11px] sm:rounded-[13px] bg-gradient-to-b from-[#0a0a0a] via-[#060606] to-[#030303] h-full w-full p-1 sm:p-2.5 shadow-[inset_0_2px_20px_rgba(0,0,0,0.65)] flex items-center justify-center">
+              <div
+                ref={boardGridRef}
+                className="grid touch-none h-full w-full gap-0.5 sm:gap-1.5"
+                style={{
+                  gridTemplateColumns: `repeat(${SIZE}, minmax(0, 1fr))`,
+                  gridTemplateRows: `repeat(${SIZE}, minmax(0, 1fr))`,
+                }}
+              >
+                {board.map((row, r) =>
+                  row.map((cell, c) => {
+                    const hs = cell ? HUE_STYLES[cell.hue % HUE_STYLES.length]! : null
+                    const inPreview =
+                      dropPreview &&
+                      drag?.piece.cells.some((p) => p.r + dropPreview.ar === r && p.c + dropPreview.ac === c)
+                    const previewClass = inPreview
+                      ? dropPreview.ok
+                        ? "ring-1 sm:ring-2 ring-emerald-400/95 ring-offset-1 sm:ring-offset-2 ring-offset-[#050505] bg-emerald-500/28 shadow-[0_0_12px_rgba(52,211,153,0.3)]"
+                        : "ring-1 sm:ring-2 ring-red-500/85 ring-offset-1 sm:ring-offset-2 ring-offset-[#050505] bg-red-500/2"
+                      : ""
+
+                    return (
+                      <div
+                        key={`${r}_${c}`}
+                        data-board-cell
+                        data-br={r}
+                        data-bc={c}
+                        className={[
+                          "min-h-0 min-w-0 rounded-[5px] sm:rounded-[10px] border transition-all duration-150 ease-out",
+                          !cell
+                            ? "bg-gradient-to-br from-[#1c1c1c] to-[#0e0e0e] border-[#2e2818]/95 shadow-[inset_0_2px_8px_rgba(0,0,0,0.55)]"
+                            : "",
+                          !cell ? previewClass : "",
+                        ].join(" ")}
+                        style={
+                          hs
+                            ? {
+                                ...glossyBlockStyle(hs),
+                                borderWidth: 1,
+                                borderStyle: "solid",
+                              }
+                            : undefined
+                        }
+                        aria-label={`Célula ${r + 1},${c + 1}`}
+                      />
+                    )
+                  })
+                )}
               </div>
             </div>
           </div>
-        </section>
+        </div>
 
-        <section
-          className="rounded-2xl border border-[#8a7328]/45 bg-[#0a0a09]/95 p-4 sm:p-5 shadow-[0_16px_48px_rgba(0,0,0,0.4),0_0_40px_rgba(212,175,55,0.04)]"
-          style={{ boxShadow: "0 16px 48px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,215,0,0.05)" }}
-        >
-          <h2 className="text-sm font-semibold text-[#f0d060] tracking-wide mb-4">Peças</h2>
-          <div className="flex flex-wrap gap-4 justify-center items-end">
+        {/* Três peças sempre na mesma linha; altura fixa enxuta */}
+        <section className="shrink-0 border-t border-[#3d3520]/50 bg-[#060605]/90 px-1.5 sm:px-3 pt-2 pb-[max(0.35rem,env(safe-area-inset-bottom))]">
+          <div className="flex flex-nowrap justify-center items-stretch gap-1 sm:gap-2 max-w-md mx-auto w-full">
             {hand.map((piece, slot) => {
               if (!piece) {
                 return (
                   <div
                     key={`empty_${slot}`}
-                    className="w-[108px] h-[108px] rounded-xl border border-dashed border-[#4a4020]/65 bg-[#080807]/90 flex items-center justify-center text-white/18 text-xs tracking-wide"
+                    className="flex-1 min-w-0 max-w-[32vw] sm:max-w-[7.5rem] h-[4.75rem] sm:h-[6.75rem] rounded-lg border border-dashed border-[#4a4020]/65 bg-[#080807]/90 flex items-center justify-center text-white/15 text-[10px] sm:text-xs"
                   >
-                    vazio
+                    —
                   </div>
                 )
               }
@@ -943,21 +1025,26 @@ export function TrimPlayGame({
                   role="presentation"
                   onPointerDown={(e) => onPiecePointerDown(e, slot)}
                   className={[
-                    "p-3 rounded-xl border transition-all duration-200 flex items-center justify-center min-h-[108px] min-w-[108px] touch-none cursor-grab active:cursor-grabbing select-none",
+                    "flex-1 min-w-0 max-w-[32vw] sm:max-w-[7.5rem] h-[4.75rem] sm:h-[6.75rem] rounded-lg border transition-all duration-200 flex items-center justify-center p-1 sm:p-2 touch-none cursor-grab active:cursor-grabbing select-none",
                     draggingThis
                       ? "opacity-35 border-[#5c4d22]/35 scale-[0.98]"
-                      : "border-[#8a7328]/45 bg-gradient-to-b from-[#15130e] to-[#080807] shadow-[0_0_24px_rgba(212,175,55,0.06),inset_0_1px_0_rgba(255,215,0,0.06)] hover:border-[#c9a227]/55",
+                      : "border-[#8a7328]/45 bg-gradient-to-b from-[#15130e] to-[#080807] shadow-[inset_0_1px_0_rgba(255,215,0,0.06)]",
                   ].join(" ")}
                   style={{ touchAction: "none" }}
                 >
-                  <ShapePreview cells={piece.cells} hue={piece.hue} cellPx={22} gapPx={3} dimmed={draggingThis} />
+                  <ShapePreview
+                    cells={piece.cells}
+                    hue={piece.hue}
+                    cellPx={trayCellPx}
+                    gapPx={trayGapPx}
+                    dimmed={draggingThis}
+                  />
                 </div>
               )
             })}
           </div>
-          <p className="mt-4 text-xs sm:text-sm text-white/45 leading-relaxed break-words">
-            Arraste pelos blocos dourados até o quadro. Verde no preview = encaixa ao soltar. Linhas e colunas cheias
-            somem.
+          <p className="hidden sm:block mt-2 text-center text-[11px] text-white/40 leading-snug px-1">
+            Arraste até o quadro. Preview verde = encaixa. Linhas e colunas cheias somem.
           </p>
         </section>
       </main>

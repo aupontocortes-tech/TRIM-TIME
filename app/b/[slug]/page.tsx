@@ -29,6 +29,12 @@ import {
   logoutCliente,
   type ClienteAgendamento,
 } from "@/lib/cliente-auth"
+import {
+  clearConfirmedBooking,
+  loadConfirmedBooking,
+  saveConfirmedBooking,
+  type PersistedClientBookingV1,
+} from "@/lib/cliente-booking-persist"
 import { openingHoursFromSettings } from "@/lib/barbershop-settings-ui"
 import type { BarbershopSettings } from "@/lib/db/types"
 import { AppInstallPrompt } from "@/components/app-install-prompt"
@@ -145,6 +151,7 @@ export default function BarbeariaPage() {
   const [horarioSelecionado, setHorarioSelecionado] = useState<string | null>(null)
   const [dadosCliente, setDadosCliente] = useState({ nome: "", telefone: "", email: "" })
   const [agendamentoConfirmado, setAgendamentoConfirmado] = useState(false)
+  const [bookingSummary, setBookingSummary] = useState<PersistedClientBookingV1 | null>(null)
   const [trimPlayStage, setTrimPlayStage] = useState<"intro" | "game">("intro")
   const [trimPlayCliente, setTrimPlayCliente] = useState<null | { id: string; nome: string }>(null)
 
@@ -205,6 +212,23 @@ export default function BarbeariaPage() {
       setAuthPhase("cadastro")
     }
   }, [slug])
+
+  /** Reabrir o link: mostra resumo do último agendamento confirmado deste cliente */
+  useEffect(() => {
+    if (authPhase !== "logado") return
+    const c = getClienteLogado(slug)
+    if (!c) return
+    const p = loadConfirmedBooking(slug)
+    if (!p || p.clienteId !== c.id) return
+    setBookingSummary(p)
+    setAgendamentoConfirmado(true)
+    setTrimPlayStage("intro")
+    setDadosCliente({
+      nome: p.nomeExibicao || c.nome,
+      telefone: c.telefone,
+      email: c.email,
+    })
+  }, [authPhase, slug])
 
   useEffect(() => {
     if (!agendamentoConfirmado) return
@@ -418,7 +442,44 @@ export default function BarbeariaPage() {
   }
 
   const confirmarAgendamento = () => {
+    if (!clienteLogado || !dataSelecionada || !horarioSelecionado || profissionalSelecionado === null) return
+    const prof = barbearia.profissionais.find((p) => p.id === profissionalSelecionado)
+    if (!prof) return
+    const summary: PersistedClientBookingV1 = {
+      v: 1,
+      clienteId: clienteLogado.id,
+      confirmedAt: new Date().toISOString(),
+      unitId: selectedUnitId,
+      unitName: selectedUnit?.name ?? null,
+      dataIso: dataSelecionada.toISOString(),
+      horario: horarioSelecionado,
+      profissionalId: profissionalSelecionado,
+      profissionalNome: prof.nome,
+      servicos: servicosSelecionadosData.map((s) => ({
+        id: s.id,
+        nome: s.nome,
+        preco: s.preco,
+        duracao: s.duracao,
+      })),
+      nomeExibicao: dadosCliente.nome.trim() || clienteLogado.nome,
+      totalPreco,
+      totalDuracao,
+    }
+    saveConfirmedBooking(slug, summary)
+    setBookingSummary(summary)
     setAgendamentoConfirmado(true)
+  }
+
+  const iniciarNovoAgendamento = () => {
+    clearConfirmedBooking(slug)
+    setBookingSummary(null)
+    setAgendamentoConfirmado(false)
+    setTrimPlayStage("intro")
+    setEtapa(1)
+    setServicosSelecionados([])
+    setProfissionalSelecionado(null)
+    setDataSelecionada(null)
+    setHorarioSelecionado(null)
   }
 
   const barbershopId = publicMeta?.id ?? ""
@@ -628,37 +689,95 @@ export default function BarbeariaPage() {
       )
     }
 
+    const resumoData = bookingSummary ? new Date(bookingSummary.dataIso) : null
+
     return (
       <div className="min-h-screen bg-black flex items-center justify-center p-4 text-white">
-        <Card className="max-w-md w-full bg-black border-[#FFD700]/35 shadow-none">
-          <CardContent className="p-8 text-center">
-            <div className="w-20 h-20 bg-[#FFD700]/15 rounded-full flex items-center justify-center mx-auto mb-6 border border-[#FFD700]/25">
-              <Check className="w-10 h-10 text-[#FFD700]" />
+        <Card className="max-w-md w-full bg-black border-[#FFD700]/35 shadow-none max-h-[min(100dvh-2rem,720px)] overflow-y-auto">
+          <CardContent className="p-6 sm:p-8 text-left">
+            <div className="text-center mb-5">
+              <div className="w-16 h-16 bg-[#FFD700]/15 rounded-full flex items-center justify-center mx-auto mb-4 border border-[#FFD700]/25">
+                <Check className="w-8 h-8 text-[#FFD700]" />
+              </div>
+              <h1 className="text-xl sm:text-2xl font-bold text-[#FFD700]">Agendamento confirmado</h1>
+              <p className="text-white/55 text-xs mt-1">
+                {bookingSummary
+                  ? `Confirmado em ${new Date(bookingSummary.confirmedAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}`
+                  : null}
+              </p>
             </div>
-            <h1 className="text-2xl font-bold mb-2 text-[#FFD700]">💈 Agendamento confirmado!</h1>
-            <p className="text-white/80 mb-6">
-              ⏳ Enquanto espera, jogue o Trim Play (arraste as peças até o tabuleiro) e suba no ranking!
+
+            {bookingSummary && resumoData ? (
+              <div className="space-y-3 mb-6 text-sm border border-[#FFD700]/20 rounded-xl p-4 bg-white/[0.03]">
+                <div className="flex gap-3">
+                  <Calendar className="w-5 h-5 text-[#FFD700] shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-white/50 text-xs">Data e horário</p>
+                    <p className="text-white font-medium">
+                      {diasSemana[resumoData.getDay()]}, {resumoData.getDate()} de {meses[resumoData.getMonth()]} às{" "}
+                      {bookingSummary.horario}
+                    </p>
+                  </div>
+                </div>
+                {bookingSummary.unitName ? (
+                  <div className="flex gap-3">
+                    <Building2 className="w-5 h-5 text-[#FFD700] shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-white/50 text-xs">Unidade</p>
+                      <p className="text-white font-medium">{bookingSummary.unitName}</p>
+                    </div>
+                  </div>
+                ) : null}
+                <div className="flex gap-3">
+                  <Scissors className="w-5 h-5 text-[#FFD700] shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-white/50 text-xs">Serviços</p>
+                    <p className="text-white font-medium">{bookingSummary.servicos.map((s) => s.nome).join(", ")}</p>
+                    <p className="text-[#FFD700]/80 text-xs mt-1">
+                      {bookingSummary.totalDuracao} min · R$ {bookingSummary.totalPreco}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex gap-3">
+                  <Avatar className="w-10 h-10 shrink-0">
+                    <AvatarFallback className="bg-[#FFD700]/20 text-[#FFD700] text-sm">
+                      {bookingSummary.profissionalNome
+                        .split(" ")
+                        .map((n) => n[0])
+                        .join("")}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <p className="text-white/50 text-xs">Profissional</p>
+                    <p className="text-white font-medium">{bookingSummary.profissionalNome}</p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <p className="text-white/75 text-sm text-center mb-6">
+                Seu horário está reservado. Jogue o Trim Play enquanto espera!
+              </p>
+            )}
+
+            <p className="text-white/70 text-sm text-center mb-4">
+              🎮 Suba no ranking da barbearia — pontuação salva mesmo offline.
             </p>
 
             <div className="flex flex-col gap-3">
               <Button
                 onClick={() => setTrimPlayStage("game")}
-                className="w-full bg-[#FFD700] text-black hover:opacity-95"
+                className="w-full bg-[#FFD700] text-black hover:opacity-95 font-semibold"
               >
-                🎮 Jogar Trim Play
+                Jogar Trim Play
               </Button>
               <Button
                 variant="outline"
-                onClick={() => window.location.reload()}
+                onClick={iniciarNovoAgendamento}
                 className="w-full border-[#FFD700]/40 text-[#FFD700] hover:bg-[#FFD700]/10"
               >
-                Voltar
+                Fazer novo agendamento
               </Button>
             </div>
-
-            <p className="text-xs text-white/60 mt-4">
-              Ranking por barbearia. Pontuação salva mesmo offline.
-            </p>
           </CardContent>
         </Card>
 
