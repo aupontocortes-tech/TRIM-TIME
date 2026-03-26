@@ -27,6 +27,7 @@ import {
   cadastrarCliente,
   loginCliente,
   logoutCliente,
+  criarClienteConvidado,
   type ClienteAgendamento,
 } from "@/lib/cliente-auth"
 import {
@@ -320,6 +321,21 @@ export default function BarbeariaPage() {
     setDadosCliente({ nome: "", telefone: "", email: "" })
   }
 
+  const entrarComoConvidado = () => {
+    const convidado = criarClienteConvidado(slug, "Convidado")
+    setClienteLogado(convidado)
+    setAuthPhase("logado")
+    setDadosCliente({ nome: convidado.nome, telefone: "", email: "" })
+    setEtapa(1)
+    setServicosSelecionados([])
+    setProfissionalSelecionado(null)
+    setDataSelecionada(null)
+    setHorarioSelecionado(null)
+    setAgendamentoConfirmado(false)
+    setBookingSummary(null)
+    setTrimPlayStage("intro")
+  }
+
   const barbearia = barbeariaData
   const dias = gerarDias()
   const openingHours = openingHoursFromSettings(publicMeta?.opening_hours ?? undefined)
@@ -517,7 +533,7 @@ export default function BarbeariaPage() {
               <div className="flex justify-center mb-4">
                 <img src={barbearia.logo} alt="" className="w-14 h-14 rounded-xl object-contain bg-background" />
               </div>
-              <h1 className="text-xl font-bold text-foreground text-center mb-1">Cadastre-se</h1>
+              <h1 className="text-xl font-bold text-foreground text-center mb-1">Cadastre-se (opcional)</h1>
               <p className="text-sm text-muted-foreground text-center mb-6">
                 {displayNome} — preencha para agendar
               </p>
@@ -603,6 +619,17 @@ export default function BarbeariaPage() {
                   Entrar
                 </button>
               </p>
+
+              <div className="mt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full border-border text-foreground hover:bg-secondary"
+                  onClick={entrarComoConvidado}
+                >
+                  Agendar sem conta
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -675,6 +702,17 @@ export default function BarbeariaPage() {
                   Cadastre-se
                 </button>
               </p>
+
+              <div className="mt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full border-border text-foreground hover:bg-secondary"
+                  onClick={entrarComoConvidado}
+                >
+                  Agendar sem conta
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </div>

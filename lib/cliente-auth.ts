@@ -78,6 +78,31 @@ export function cadastrarCliente(
   return cliente
 }
 
+/**
+ * Cria um "cliente convidado" só para permitir agendamento sem e-mail/senha.
+ * Persiste no localStorage para este `slug`.
+ */
+export function criarClienteConvidado(slug: string, nome?: string): ClienteAgendamento {
+  const id = `g_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
+  const cliente: ClienteAgendamento = {
+    id,
+    nome: (nome ?? "Convidado").trim() || "Convidado",
+    email: "",
+    telefone: "",
+    senhaHash: "",
+    barbeariaSlug: slug,
+    criadoEm: new Date().toISOString(),
+  }
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.setItem(keyCliente(slug), JSON.stringify(cliente))
+    } catch {
+      /* ignore */
+    }
+  }
+  return cliente
+}
+
 /** Login por email ou telefone + senha */
 export function loginCliente(
   slug: string,
