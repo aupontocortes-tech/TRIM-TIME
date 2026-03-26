@@ -30,7 +30,7 @@ function isMissingTableError(e: unknown) {
 
 function validateTrim(start: number, end: number) {
   if (!(end > start)) return "tempoFinal deve ser maior que tempoInicial"
-  if (end - start > 3) return "Trecho muito longo: máximo 3 segundos"
+  if (end - start > 5) return "Trecho muito longo: máximo 5 segundos"
   return null
 }
 

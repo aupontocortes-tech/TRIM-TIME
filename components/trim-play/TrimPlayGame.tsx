@@ -730,8 +730,8 @@ export function TrimPlayGame({
       setComboStreak(nextCombo)
 
       if (clearedThisMove) {
-        if (nextCombo >= 2 || rounds >= 2) playTrimPlayCombo(Math.max(nextCombo, rounds))
-        else playTrimPlayLineClear()
+        const comboAudioLevel = Math.max(1, Math.min(4, Math.max(nextCombo, rounds)))
+        playTrimPlayCombo(comboAudioLevel)
         if (nextCombo >= 2) showToast(`${nextCombo}x combo`)
       }
       if (boardJustCleared) {

@@ -36,8 +36,10 @@ export default function TrimPlayerAdminPage() {
   const [msg, setMsg] = useState("")
   const [msgTipo, setMsgTipo] = useState<"ok" | "erro" | "info">("info")
   const [lastAddedId, setLastAddedId] = useState<string | null>(null)
+  const [lastSavedId, setLastSavedId] = useState<string | null>(null)
   const previewRef = useRef<HTMLAudioElement | null>(null)
   const stopTimerRef = useRef<number | null>(null)
+  const savedTimerRef = useRef<number | null>(null)
 
   const grouped = useMemo(() => {
     const map = new Map<string, AudioAsset[]>()
@@ -76,6 +78,7 @@ export default function TrimPlayerAdminPage() {
     void load()
     return () => {
       if (stopTimerRef.current) window.clearTimeout(stopTimerRef.current)
+      if (savedTimerRef.current) window.clearTimeout(savedTimerRef.current)
       previewRef.current?.pause()
     }
   }, [])
@@ -90,8 +93,8 @@ export default function TrimPlayerAdminPage() {
       setMsg("tempoFinal deve ser maior que tempoInicial")
       return
     }
-    if (asset.trim_end_sec - asset.trim_start_sec > 3) {
-      setMsg("Trecho máximo de 3 segundos")
+    if (asset.trim_end_sec - asset.trim_start_sec > 5) {
+      setMsg("Trecho máximo de 5 segundos")
       return
     }
     if (stopTimerRef.current) window.clearTimeout(stopTimerRef.current)
@@ -180,6 +183,11 @@ export default function TrimPlayerAdminPage() {
       if (!r.ok) throw new Error(typeof j.error === "string" ? j.error : "Erro ao salvar")
       setMsg("Áudio salvo")
       setMsgTipo("ok")
+      setLastSavedId(asset.id)
+      if (savedTimerRef.current) window.clearTimeout(savedTimerRef.current)
+      savedTimerRef.current = window.setTimeout(() => {
+        setLastSavedId((id) => (id === asset.id ? null : id))
+      }, 3000)
       await load()
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "Erro ao salvar")
@@ -347,7 +355,7 @@ export default function TrimPlayerAdminPage() {
                           onChange={(e) => updateLocal(asset.id, { trim_start_sec: Math.max(0, Number(e.target.value) || 0) })}
                           className={[
                             "bg-zinc-900",
-                            asset.trim_end_sec > asset.trim_start_sec && asset.trim_end_sec - asset.trim_start_sec <= 3
+                            asset.trim_end_sec > asset.trim_start_sec && asset.trim_end_sec - asset.trim_start_sec <= 5
                               ? "border-emerald-500/45"
                               : "border-red-500/50",
                           ].join(" ")}
@@ -361,7 +369,7 @@ export default function TrimPlayerAdminPage() {
                           onChange={(e) => updateLocal(asset.id, { trim_end_sec: Math.max(0, Number(e.target.value) || 0) })}
                           className={[
                             "bg-zinc-900",
-                            asset.trim_end_sec > asset.trim_start_sec && asset.trim_end_sec - asset.trim_start_sec <= 3
+                            asset.trim_end_sec > asset.trim_start_sec && asset.trim_end_sec - asset.trim_start_sec <= 5
                               ? "border-emerald-500/45"
                               : "border-red-500/50",
                           ].join(" ")}
@@ -381,7 +389,7 @@ export default function TrimPlayerAdminPage() {
                       <div
                         className={[
                           "text-xs",
-                          asset.trim_end_sec > asset.trim_start_sec && asset.trim_end_sec - asset.trim_start_sec <= 3
+                          asset.trim_end_sec > asset.trim_start_sec && asset.trim_end_sec - asset.trim_start_sec <= 5
                             ? "text-emerald-300"
                             : "text-red-300",
                         ].join(" ")}
@@ -389,8 +397,8 @@ export default function TrimPlayerAdminPage() {
                         Duração do corte: {(asset.trim_end_sec - asset.trim_start_sec).toFixed(2)}s{" "}
                         {asset.trim_end_sec <= asset.trim_start_sec
                           ? "(tempoFinal precisa ser maior)"
-                          : asset.trim_end_sec - asset.trim_start_sec > 3
-                            ? "(máximo 3s)"
+                          : asset.trim_end_sec - asset.trim_start_sec > 5
+                            ? "(máximo 5s)"
                             : "(ok)"}
                       </div>
 
@@ -421,7 +429,12 @@ export default function TrimPlayerAdminPage() {
                           onClick={() => void saveAsset(asset)}
                           disabled={busyId === asset.id}
                         >
-                          <Save className="w-4 h-4 mr-1.5" />
+                          <Save
+                            className={[
+                              "w-4 h-4 mr-1.5 transition-colors",
+                              lastSavedId === asset.id ? "text-emerald-600" : "text-black",
+                            ].join(" ")}
+                          />
                           Salvar
                         </Button>
                         <Button

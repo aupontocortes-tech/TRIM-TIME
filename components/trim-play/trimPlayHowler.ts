@@ -344,16 +344,19 @@ export function playTrimPlayLineClear() {
 export function playTrimPlayCombo(level: number) {
   ensureHowls()
   if (muted) return
-  const L = Math.min(5, Math.max(2, level))
+  const comboLevel = Math.min(4, Math.max(1, Math.floor(level || 1)))
   void loadRemoteAudioAssets()
-  const comboKey: RemoteCategory = L >= 4 ? "combo4" : L === 3 ? "combo3" : L === 2 ? "combo2" : "combo1"
+  const comboKey: RemoteCategory = comboLevel >= 4 ? "combo4" : comboLevel === 3 ? "combo3" : comboLevel === 2 ? "combo2" : "combo1"
   if (tryPlayRemote(comboKey)) return
   if (TRIMPLAY_USE_FILE_SOUNDS) {
     play(fileComboHowl)
     return
   }
+  // Fallback procedural não possui versão dedicada para nível 1.
+  // Para manter o "primeiro combo" audível, usamos a intensidade mínima procedural.
+  const proceduralLevel = Math.max(2, comboLevel)
   proceduralComboHowl?.unload()
-  proceduralComboHowl = makeHowlFromPcm(() => genCombo(L), 0.48 + L * 0.028)
+  proceduralComboHowl = makeHowlFromPcm(() => genCombo(proceduralLevel), 0.48 + comboLevel * 0.028)
   try {
     proceduralComboHowl.play()
   } catch {
