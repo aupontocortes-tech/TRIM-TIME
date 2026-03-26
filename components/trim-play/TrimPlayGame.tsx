@@ -897,15 +897,6 @@ export function TrimPlayGame({
 
       <header className="relative z-20 shrink-0 flex items-center gap-2 px-2 sm:px-3 pt-[max(0.25rem,env(safe-area-inset-top))] pb-2 border-b border-[#3d3520]/55 bg-[#080807]/85 backdrop-blur-md">
         <div className="flex-1 min-w-0 pr-1">
-          <div className="mb-1 flex items-center gap-1.5 text-[10px] sm:text-[11px]">
-            <span className="inline-flex items-center gap-1 rounded-md border border-[#8a7328]/55 bg-black/35 px-1.5 py-0.5 text-[#f0d060]">
-              <Trophy className="h-3 w-3" />
-              <span className="tabular-nums">#{myRanking?.rank ?? "--"}</span>
-            </span>
-            <span className="inline-flex items-center rounded-md border border-emerald-500/35 bg-emerald-500/12 px-1.5 py-0.5 text-emerald-300 tabular-nums">
-              {score} pts
-            </span>
-          </div>
           <p className="text-[11px] sm:text-xs text-[#e0b84a] font-medium leading-tight truncate">
             Trim Play
             <span className="text-white/35 font-normal"> · </span>
@@ -914,6 +905,11 @@ export function TrimPlayGame({
             </span>
           </p>
           <p className="text-[10px] sm:text-[11px] text-white/65 tabular-nums leading-tight truncate mt-0.5">
+            <span className="inline-flex items-center gap-1 text-[#f0d060] font-semibold">
+              <Trophy className="h-3 w-3" />
+              <span>#{myRanking?.rank ?? "--"}</span>
+            </span>
+            <span className="text-white/30"> · </span>
             <span className="text-[#f0d060] font-semibold">{bestLocal}</span>
             <span className="text-white/30"> melhor · </span>
             <span>{moves} j.</span>
@@ -974,8 +970,13 @@ export function TrimPlayGame({
       </header>
 
       <main className="relative z-0 flex-1 min-h-0 flex flex-col w-full max-w-lg mx-auto touch-pan-y">
+        <div className="shrink-0 flex justify-center pt-2 pb-1">
+          <span className="inline-flex items-center rounded-md border border-emerald-500/35 bg-emerald-500/12 px-2 py-0.5 text-emerald-300 text-xs sm:text-sm font-semibold tabular-nums">
+            {score} pts
+          </span>
+        </div>
         {/* Tabuleiro quadrado: encaixa na altura/largura úteis do viewport */}
-        <div className="flex-1 min-h-0 flex items-start justify-center px-1 pt-1 pb-1 sm:pt-2 sm:pb-1">
+        <div className="shrink-0 flex items-start justify-center px-1 pt-0.5 pb-1 sm:pt-1 sm:pb-1">
           <div
             className="select-none rounded-xl sm:rounded-2xl p-[2px] sm:p-[3px] shrink-0 w-[min(100%,min(92vw,calc(100dvh-11.5rem)))] aspect-square max-w-[min(92vw,calc(100dvh-11.5rem))]"
             style={{
@@ -1037,7 +1038,7 @@ export function TrimPlayGame({
         </div>
 
         {/* Três peças sempre na mesma linha; altura fixa enxuta */}
-        <section className="shrink-0 border-t border-[#3d3520]/50 bg-[#060605]/90 px-1.5 sm:px-3 pt-2 pb-[max(0.35rem,env(safe-area-inset-bottom))] -mt-1 sm:-mt-2">
+        <section className="shrink-0 border-t border-[#3d3520]/50 bg-[#060605]/90 px-1.5 sm:px-3 pt-2 pb-[max(0.35rem,env(safe-area-inset-bottom))] -mt-2 sm:-mt-3">
           <div className="flex flex-nowrap justify-center items-stretch gap-1 sm:gap-2 max-w-md mx-auto w-full">
             {hand.map((piece, slot) => {
               if (!piece) {
