@@ -406,6 +406,7 @@ export function TrimPlayGame({
   const [syncError, setSyncError] = useState<string | null>(null)
   const [soundMuted, setSoundMuted] = useState(false)
   const [rankingOpen, setRankingOpen] = useState(false)
+  const [myRanking, setMyRanking] = useState<null | { rank: number; score: number }>(null)
 
   /** Layout estreito (celular): peças e ghost menores; desktop sm+ mais folgado */
   const [compactUi, setCompactUi] = useState(true)
@@ -470,6 +471,25 @@ export function TrimPlayGame({
     setBestLocal(best)
   }, [barbershopId, clienteId])
 
+  useEffect(() => {
+    let cancelled = false
+    async function loadMyRanking() {
+      try {
+        if (!navigator.onLine) return
+        const ranking = await fetchTrimPlayRanking({ barbershopId, clienteId })
+        if (cancelled) return
+        saveCachedRanking(barbershopId, { top: ranking.top, my: ranking.my })
+        setMyRanking(ranking.my ? { rank: ranking.my.rank, score: ranking.my.score } : null)
+      } catch {
+        // Sem bloquear o jogo caso o ranking esteja indisponível.
+      }
+    }
+    void loadMyRanking()
+    return () => {
+      cancelled = true
+    }
+  }, [barbershopId, clienteId])
+
   const syncPending = async () => {
     const pending = loadPendingScore(barbershopId, clienteId)
     if (pending === null) return
@@ -484,6 +504,7 @@ export function TrimPlayGame({
       clearPendingScore(barbershopId, clienteId)
       const ranking = await fetchTrimPlayRanking({ barbershopId, clienteId })
       saveCachedRanking(barbershopId, { top: ranking.top, my: ranking.my })
+      setMyRanking(ranking.my ? { rank: ranking.my.rank, score: ranking.my.score } : null)
       setSyncError(null)
     } catch (e) {
       setSyncError(e instanceof Error ? e.message : "Erro ao sincronizar")
@@ -513,26 +534,27 @@ export function TrimPlayGame({
       if (finalScore > storedBest) {
         setBestLocal(finalScore)
         saveBestLocal(barbershopId, clienteId, finalScore)
-        if (navigator.onLine) {
-          try {
-            await submitTrimPlayScore({
-              barbershopId,
-              clienteId,
-              clienteName: clienteNome,
-              score: finalScore,
-            })
-            clearPendingScore(barbershopId, clienteId)
-            const ranking = await fetchTrimPlayRanking({ barbershopId, clienteId })
-            saveCachedRanking(barbershopId, { top: ranking.top, my: ranking.my })
-            setSyncError(null)
-          } catch (e) {
-            savePendingScore(barbershopId, clienteId, finalScore)
-            setSyncError(e instanceof Error ? e.message : "Sem conexão para sincronizar")
-          }
-        } else {
+      }
+      if (navigator.onLine) {
+        try {
+          await submitTrimPlayScore({
+            barbershopId,
+            clienteId,
+            clienteName: clienteNome,
+            score: finalScore,
+          })
+          clearPendingScore(barbershopId, clienteId)
+          const ranking = await fetchTrimPlayRanking({ barbershopId, clienteId })
+          saveCachedRanking(barbershopId, { top: ranking.top, my: ranking.my })
+          setMyRanking(ranking.my ? { rank: ranking.my.rank, score: ranking.my.score } : null)
+          setSyncError(null)
+        } catch (e) {
           savePendingScore(barbershopId, clienteId, finalScore)
-          setSyncError("Sem internet: pontuação será enviada quando voltar.")
+          setSyncError(e instanceof Error ? e.message : "Sem conexão para sincronizar")
         }
+      } else {
+        savePendingScore(barbershopId, clienteId, finalScore)
+        setSyncError("Sem internet: pontuação será enviada quando voltar.")
       }
     },
     [barbershopId, clienteId, clienteNome]
@@ -875,6 +897,15 @@ export function TrimPlayGame({
 
       <header className="relative z-20 shrink-0 flex items-center gap-2 px-2 sm:px-3 pt-[max(0.25rem,env(safe-area-inset-top))] pb-2 border-b border-[#3d3520]/55 bg-[#080807]/85 backdrop-blur-md">
         <div className="flex-1 min-w-0 pr-1">
+          <div className="mb-1 flex items-center gap-1.5 text-[10px] sm:text-[11px]">
+            <span className="inline-flex items-center gap-1 rounded-md border border-[#8a7328]/55 bg-black/35 px-1.5 py-0.5 text-[#f0d060]">
+              <Trophy className="h-3 w-3" />
+              <span className="tabular-nums">#{myRanking?.rank ?? "--"}</span>
+            </span>
+            <span className="inline-flex items-center rounded-md border border-emerald-500/35 bg-emerald-500/12 px-1.5 py-0.5 text-emerald-300 tabular-nums">
+              {score} pts
+            </span>
+          </div>
           <p className="text-[11px] sm:text-xs text-[#e0b84a] font-medium leading-tight truncate">
             Trim Play
             <span className="text-white/35 font-normal"> · </span>
@@ -886,8 +917,6 @@ export function TrimPlayGame({
             <span className="text-[#f0d060] font-semibold">{bestLocal}</span>
             <span className="text-white/30"> melhor · </span>
             <span>{moves} j.</span>
-            <span className="text-white/30"> · </span>
-            <span className="text-[#e8c547] font-semibold">{score} pts</span>
           </p>
         </div>
         <div className="flex items-center gap-1 shrink-0">
@@ -946,7 +975,7 @@ export function TrimPlayGame({
 
       <main className="relative z-0 flex-1 min-h-0 flex flex-col w-full max-w-lg mx-auto touch-pan-y">
         {/* Tabuleiro quadrado: encaixa na altura/largura úteis do viewport */}
-        <div className="flex-1 min-h-0 flex items-center justify-center px-1 py-1 sm:py-2">
+        <div className="flex-1 min-h-0 flex items-start justify-center px-1 pt-1 pb-1 sm:pt-2 sm:pb-1">
           <div
             className="select-none rounded-xl sm:rounded-2xl p-[2px] sm:p-[3px] shrink-0 w-[min(100%,min(92vw,calc(100dvh-11.5rem)))] aspect-square max-w-[min(92vw,calc(100dvh-11.5rem))]"
             style={{
@@ -1008,7 +1037,7 @@ export function TrimPlayGame({
         </div>
 
         {/* Três peças sempre na mesma linha; altura fixa enxuta */}
-        <section className="shrink-0 border-t border-[#3d3520]/50 bg-[#060605]/90 px-1.5 sm:px-3 pt-2 pb-[max(0.35rem,env(safe-area-inset-bottom))]">
+        <section className="shrink-0 border-t border-[#3d3520]/50 bg-[#060605]/90 px-1.5 sm:px-3 pt-2 pb-[max(0.35rem,env(safe-area-inset-bottom))] -mt-1 sm:-mt-2">
           <div className="flex flex-nowrap justify-center items-stretch gap-1 sm:gap-2 max-w-md mx-auto w-full">
             {hand.map((piece, slot) => {
               if (!piece) {

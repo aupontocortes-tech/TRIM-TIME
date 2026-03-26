@@ -56,7 +56,9 @@ export function loadPendingScore(barbershopId: string, clienteId: string): numbe
 export function savePendingScore(barbershopId: string, clienteId: string, score: number) {
   if (typeof window === "undefined") return
   try {
-    localStorage.setItem(pendingKey(barbershopId, clienteId), String(Math.max(0, Math.floor(score))))
+    const next = Math.max(0, Math.floor(score))
+    const current = loadPendingScore(barbershopId, clienteId) ?? 0
+    localStorage.setItem(pendingKey(barbershopId, clienteId), String(current + next))
   } catch {
     /* ignore */
   }

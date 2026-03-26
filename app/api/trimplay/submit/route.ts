@@ -32,14 +32,10 @@ export async function POST(request: Request) {
     })
 
     if (existing) {
-      if (score > existing.bestScore) {
-        await prisma.trimPlayScore.update({
-          where: { id: existing.id },
-          data: { bestScore: score, clienteNome: clienteName },
-        })
-      } else {
-        // Mantém o recorde atual.
-      }
+      await prisma.trimPlayScore.update({
+        where: { id: existing.id },
+        data: { bestScore: existing.bestScore + score, clienteNome: clienteName },
+      })
     } else {
       await prisma.trimPlayScore.create({
         data: {
