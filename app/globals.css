@@ -140,3 +140,25 @@
   font-feature-settings: 'kern' 1, 'liga' 1;
   -webkit-font-smoothing: antialiased;
 }
+
+@keyframes trimplay-splash-bar {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.trimplay-splash-progress {
+  transform: scaleX(0);
+  transform-origin: left center;
+  animation: trimplay-splash-bar 2.4s ease-out forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .trimplay-splash-progress {
+    animation: none;
+    transform: scaleX(1);
+  }
+}
