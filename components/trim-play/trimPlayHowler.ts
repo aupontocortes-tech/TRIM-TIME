@@ -150,6 +150,46 @@ function genGameOver(): Int16Array {
   return out
 }
 
+/** Vitória (tabuleiro limpo): fanfarra curta em Howl separado — não mexe no howl do combo. */
+function genVictoryFanfare(): Int16Array {
+  const notes = [523.25, 659.25, 783.99, 1046.5]
+  const noteDur = 0.1
+  const gap = 0.04
+  const tail = 0.35
+  const dur = notes.length * (noteDur + gap) + tail
+  const len = Math.floor(SAMPLE_RATE * dur)
+  const out = new Int16Array(len)
+  for (let n = 0; n < notes.length; n++) {
+    const f = notes[n]!
+    const start = Math.floor(SAMPLE_RATE * n * (noteDur + gap))
+    const noteLen = Math.floor(SAMPLE_RATE * noteDur)
+    for (let i = 0; i < noteLen; i++) {
+      const j = start + i
+      if (j >= len) break
+      const t = i / SAMPLE_RATE
+      const env = Math.sin(Math.PI * (i / noteLen)) * (0.38 + n * 0.05)
+      const s = Math.sin(2 * Math.PI * f * t) * env
+      let acc = s
+      acc += Math.sin(2 * Math.PI * f * 2 * t) * env * 0.22
+      out[j] += Math.round(acc * 24000)
+    }
+  }
+  const chordStart = Math.floor(SAMPLE_RATE * (notes.length * (noteDur + gap) + 0.02))
+  const chordLen = Math.floor(SAMPLE_RATE * tail)
+  for (let i = 0; i < chordLen; i++) {
+    const j = chordStart + i
+    if (j >= len) break
+    const t = i / SAMPLE_RATE
+    const env = Math.sin((Math.PI * i) / chordLen) * Math.exp(-t * 2.4)
+    let s = 0
+    for (const f of [523.25, 659.25, 783.99]) {
+      s += Math.sin(2 * Math.PI * f * t) * 0.2
+    }
+    out[j] += Math.round(s * env * 28000)
+  }
+  return out
+}
+
 function makeHowlFromPcm(gen: () => Int16Array, volume: number): Howl {
   const url = URL.createObjectURL(new Blob([pcm16ToWav(gen())], { type: "audio/wav" }))
   return new Howl({
@@ -174,6 +214,7 @@ let placeHowl: Howl | null = null
 let lineHowl: Howl | null = null
 let fileComboHowl: Howl | null = null
 let proceduralComboHowl: Howl | null = null
+let victoryHowl: Howl | null = null
 let gameOverHowl: Howl | null = null
 let unlocked = false
 let remoteCategories: Record<RemoteCategory, RemoteAudioAsset[]> = {
@@ -293,6 +334,7 @@ function tryPlayRemote(category: RemoteCategory): boolean {
 
 function ensureHowls() {
   if (placeHowl) return
+  victoryHowl = makeHowlFromPcm(genVictoryFanfare, 0.5)
   if (TRIMPLAY_USE_FILE_SOUNDS) {
     placeHowl = makeHowlFromFile("place", 0.4)
     lineHowl = makeHowlFromFile("line-clear", 0.5)
@@ -375,5 +417,5 @@ export function playTrimPlayVictory() {
   ensureHowls()
   void loadRemoteAudioAssets()
   if (tryPlayRemote("victory")) return
-  playTrimPlayCombo(5)
+  play(victoryHowl)
 }

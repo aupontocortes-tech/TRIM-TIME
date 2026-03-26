@@ -1014,7 +1014,8 @@ export function TrimPlayGame({
         if (nextCombo >= 2) showToast(`${nextCombo}x combo`)
       }
       if (boardJustCleared) {
-        playTrimPlayVictory()
+        // Vitória usa Howl próprio (não reutiliza combo), assim o áudio do último combo não é cortado.
+        window.setTimeout(() => playTrimPlayVictory(), 240)
         showToast("AUGE! Tabuleiro limpo!")
         launchImpact(impactSpecVictory(Date.now() + Math.random()))
       } else if (clearedThisMove) {
