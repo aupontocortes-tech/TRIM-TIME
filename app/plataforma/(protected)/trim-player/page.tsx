@@ -495,7 +495,9 @@ export default function TrimPlayerAdminPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-white">Trim Player</h1>
-        <p className="text-zinc-400 text-sm mt-1">Envio, corte e teste de áudio por categoria (combos, vitória e fim de jogo).</p>
+        <p className="text-zinc-400 text-sm mt-1">
+          Áudio e efeitos visuais: em telas largas, configuração de som à esquerda e efeitos na tela à direita; no celular, uma coluna abaixo da outra.
+        </p>
       </div>
       {msg ? (
         <div
@@ -511,9 +513,17 @@ export default function TrimPlayerAdminPage() {
           {msg}
         </div>
       ) : null}
-      {loading ? <p className="text-zinc-400">Carregando…</p> : null}
+      {loading || visualLoading ? (
+        <p className="text-zinc-400">Carregando…</p>
+      ) : null}
 
-      <div className="grid gap-4">
+      <div className="grid gap-8 lg:grid-cols-2 lg:gap-10 lg:items-start">
+        <section className="space-y-4 min-w-0">
+          <div className="rounded-lg border border-[#D4AF37]/25 bg-zinc-950/80 px-4 py-3">
+            <h2 className="text-sm font-semibold text-[#D4AF37] tracking-wide">Áudio (admin)</h2>
+            <p className="text-xs text-zinc-500 mt-1">Upload, corte e teste por categoria (combos, vitória e fim de jogo).</p>
+          </div>
+          <div className="grid gap-4">
         {ORDER.map((category) => (
           <Card key={category} className="bg-zinc-950 border-[#D4AF37]/35 text-white">
             <CardContent className="p-5 space-y-4">
@@ -692,18 +702,18 @@ export default function TrimPlayerAdminPage() {
             </CardContent>
           </Card>
         ))}
-      </div>
-
-      <div className="border-t border-[#D4AF37]/20 pt-6">
-        <div className="flex items-start justify-between gap-3 flex-wrap">
-          <div>
-            <h2 className="text-xl font-bold text-white">Efeitos visuais (Trim Play)</h2>
-            <p className="text-zinc-400 text-sm mt-1">Cada evento executa efeitos em sequência (loop) e alterna automaticamente.</p>
           </div>
-          {visualLoading ? <p className="text-zinc-400">Carregando…</p> : null}
-        </div>
+        </section>
 
-        <div className="grid gap-4 mt-4">
+        <section className="space-y-4 min-w-0 lg:border-l lg:border-[#D4AF37]/20 lg:pl-8 lg:sticky lg:top-6">
+          <div className="rounded-lg border border-[#D4AF37]/25 bg-zinc-950/80 px-4 py-3">
+            <h2 className="text-sm font-semibold text-[#D4AF37] tracking-wide">Efeitos visuais</h2>
+            <p className="text-xs text-zinc-500 mt-1">
+              Cada evento executa efeitos em sequência (loop). O jogo alterna automaticamente entre os itens da lista.
+            </p>
+          </div>
+
+        <div className="grid gap-4">
           {VISUAL_EVENTS.map((eventKey) => (
             <Card key={eventKey} className="bg-zinc-950 border-[#D4AF37]/35 text-white">
               <CardContent className="p-5 space-y-4">
@@ -836,6 +846,7 @@ export default function TrimPlayerAdminPage() {
             </Card>
           ))}
         </div>
+        </section>
       </div>
     </div>
   )
