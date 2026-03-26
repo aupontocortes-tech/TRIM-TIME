@@ -201,28 +201,42 @@ type HandPiece = { id: string; cells: ShapeCell[]; hue: number; templateId: stri
 /** shapeBand: 1 = pequenas/simples (mono, dom, linha3, 2×2), 2 = L/Z médios, 3 = grandes/T/linha4 */
 type ShapeTemplateDef = { id: string; cells: ShapeCell[]; difficulty: 1 | 2 | 3; weight: number; shapeBand: 1 | 2 | 3 }
 
-/** Alinhado ao briefing: fácil → médio → difícil por pontuação */
 export type TrimPlayDifficultyStage = "facil" | "media" | "dificil"
 
+/** Fase sobe com pontuação, linhas limpas no total e melhor combo já feito — início bem longo e fácil. */
+export function trimPlayPhaseFromStats(score: number, linesLifetime: number, maxComboEver: number): number {
+  const progress =
+    score * 0.88 +
+    linesLifetime * 44 +
+    Math.max(0, maxComboEver - 1) * 130
+  const step = 520
+  return Math.min(45, 1 + Math.floor(progress / step))
+}
+
+function tierFromPhase(phase: number): 1 | 2 | 3 {
+  if (phase <= 4) return 1
+  if (phase <= 10) return 2
+  return 3
+}
+
+export function trimPlayStageFromPhase(phase: number): TrimPlayDifficultyStage {
+  const t = tierFromPhase(phase)
+  return t === 1 ? "facil" : t === 2 ? "media" : "dificil"
+}
+
+/** Legado: ainda útil para telas que só têm score */
 export function trimPlayDifficultyFromScore(score: number): TrimPlayDifficultyStage {
-  if (score < 300) return "facil"
-  if (score < 1000) return "media"
-  return "dificil"
+  const ph = trimPlayPhaseFromStats(score, 0, 0)
+  return trimPlayStageFromPhase(ph)
 }
 
-function difficultyStageToTier(stage: TrimPlayDifficultyStage): 1 | 2 | 3 {
-  return stage === "facil" ? 1 : stage === "media" ? 2 : 3
-}
-
-/** Progresso 0..1 dentro do segmento atual (suaviza transição entre faixas) */
-function difficultyProgress(score: number): { stage: TrimPlayDifficultyStage; tier: 1 | 2 | 3; segmentT: number } {
-  const stage = trimPlayDifficultyFromScore(score)
-  const tier = difficultyStageToTier(stage)
-  let segmentT = 0
-  if (score < 300) segmentT = score / 300
-  else if (score < 1000) segmentT = (score - 300) / 700
-  else segmentT = Math.min(1, (score - 1000) / 4500)
-  return { stage, tier, segmentT }
+/** Progresso 0..1 dentro do tier atual (fases) */
+function difficultyProgressFromPhase(phase: number): { tier: 1 | 2 | 3; segmentT: number } {
+  const tier = tierFromPhase(phase)
+  const lo = tier === 1 ? 1 : tier === 2 ? 5 : 11
+  const hi = tier === 1 ? 4 : tier === 2 ? 10 : 45
+  const segmentT = hi > lo ? Math.min(1, Math.max(0, (phase - lo) / (hi - lo))) : 0
+  return { tier, segmentT }
 }
 
 type DragPayload = {
@@ -303,8 +317,8 @@ function shapeBandPreference(shapeBand: 1 | 2 | 3, gameTier: 1 | 2 | 3): number 
 }
 
 /** Anti-frustração: reduz tier efetivo e favorece encaixes quando o tabuleiro aperta */
-function effectiveGameTier(score: number, fillRatio: number, fitTemplateCount: number): 1 | 2 | 3 {
-  const { tier } = difficultyProgress(score)
+function effectiveGameTier(phase: number, fillRatio: number, fitTemplateCount: number): 1 | 2 | 3 {
+  const tier = tierFromPhase(phase)
   const crowded = fillRatio >= 0.62
   const fewOptions = fitTemplateCount <= 5
   const critical = fillRatio >= 0.72 || fitTemplateCount <= 3
@@ -312,6 +326,8 @@ function effectiveGameTier(score: number, fillRatio: number, fitTemplateCount: n
   if (crowded || fewOptions) return Math.max(1, tier - 1) as 1 | 2 | 3
   return tier
 }
+
+export type TrimPlayDealContext = { score: number; linesLifetime: number; maxComboEver: number }
 
 function weightedPick<T>(entries: { item: T; weight: number }[]): T {
   const total = entries.reduce((acc, e) => acc + Math.max(0, e.weight), 0)
@@ -333,36 +349,44 @@ function makePiece(template: ShapeTemplateDef): HandPiece {
   }
 }
 
-function pickTemplateForBoard(board: BoardCell[][], score: number, recentIds: string[]): ShapeTemplateDef {
+function pickTemplateForBoard(board: BoardCell[][], ctx: TrimPlayDealContext, recentIds: string[]): ShapeTemplateDef {
+  const phase = trimPlayPhaseFromStats(ctx.score, ctx.linesLifetime, ctx.maxComboEver)
+  const { maxComboEver } = ctx
   const fillRatio = boardFillRatio(board)
-  const { tier, segmentT } = difficultyProgress(score)
+  const { tier, segmentT } = difficultyProgressFromPhase(phase)
 
   const fitData = SHAPE_LIBRARY.map((t) => ({ t, fits: countPlacements(board, t.cells) }))
   const fitCandidates = fitData.filter((x) => x.fits > 0)
-  const gameTier = effectiveGameTier(score, fillRatio, fitCandidates.length)
+  const gameTier = effectiveGameTier(phase, fillRatio, fitCandidates.length)
 
   const nearLosing = fillRatio >= 0.62 || fitCandidates.length <= 5
   const critical = fillRatio >= 0.72 || fitCandidates.length <= 3
-  const saverChance = critical ? 0.58 : nearLosing ? 0.38 : 0.12
+  const earlyPhaseHelp = phase <= 2 ? 0.34 : phase <= 4 ? 0.2 : phase <= 7 ? 0.08 : 0
+  let saverChance = critical ? 0.58 : nearLosing ? 0.38 : 0.12
+  saverChance = Math.min(0.72, saverChance + earlyPhaseHelp)
 
   if (Math.random() < saverChance) {
     const saver = fitCandidates.filter((x) => x.t.shapeBand === 1 || x.t.cells.length <= 3)
     if (saver.length > 0) {
+      const fitPow = phase <= 2 ? 1.65 : 1.35
       return weightedPick(
         saver.map((x) => ({
           item: x.t,
-          weight: x.fits * x.fits * (recentIds.includes(x.t.id) ? 0.5 : 1),
+          weight: Math.pow(x.fits, fitPow) * (x.fits + 2) * (recentIds.includes(x.t.id) ? 0.52 : 1),
         }))
       )
     }
   }
 
-  // Tendência suave no fim de cada faixa de pontos (meio-termo → próximo estágio)
+  // Quem faz combos fortes acelera um pouco a “sensação” de dificuldade (sem pular fases inteiras).
+  const comboMomentum = Math.min(0.22, Math.max(0, maxComboEver - 2) * 0.045)
+
   const bandBoost =
-    segmentT *
-    0.22 *
-    (tier === 1 ? 0.85 : tier === 2 ? 1 : 1.05)
+    (segmentT * 0.24 + comboMomentum) * (tier === 1 ? 0.82 : tier === 2 ? 1 : 1.08)
   const source = fitCandidates.length > 0 ? fitCandidates : fitData
+
+  const fitPowPick = phase <= 2 ? 1.45 : phase <= 5 ? 1.22 : 1
+  const earlyFitBoost = phase <= 2 ? 2.85 : phase <= 4 ? 1.75 : phase <= 7 ? 1.28 : 1
 
   return weightedPick(
     source.map((x) => {
@@ -374,7 +398,8 @@ function pickTemplateForBoard(board: BoardCell[][], score: number, recentIds: st
       const bandWeight = Math.max(0.08, nudgeHard)
       const diffDistance = Math.abs(x.t.difficulty - tier)
       const difficultyWeight = diffDistance === 0 ? 1.45 : diffDistance === 1 ? 1 : 0.68
-      const fitWeight = Math.max(1, Math.min(18, nearLosing ? x.fits * x.fits + 2 : x.fits + 1))
+      const rawFit = nearLosing ? x.fits * x.fits + 2 : Math.pow(Math.max(1, x.fits), fitPowPick) + 1
+      const fitWeight = Math.max(1, Math.min(26, rawFit * earlyFitBoost))
       const repeatPenalty = recentIds.includes(x.t.id) ? 0.48 : 1
       return {
         item: x.t,
@@ -403,11 +428,11 @@ function ensureAtLeastOnePlacement(board: BoardCell[][], hand: HandPiece[]): Han
   return copy
 }
 
-function dealHand(board: BoardCell[][], score: number, recentIds: string[]): (HandPiece | null)[] {
+function dealHand(board: BoardCell[][], ctx: TrimPlayDealContext, recentIds: string[]): (HandPiece | null)[] {
   const next: HandPiece[] = []
   const recent = [...recentIds]
   for (let i = 0; i < 3; i++) {
-    const template = pickTemplateForBoard(board, score, recent)
+    const template = pickTemplateForBoard(board, ctx, recent)
     next.push(makePiece(template))
     recent.push(template.id)
     if (recent.length > 8) recent.shift()
@@ -655,15 +680,22 @@ export function TrimPlayGame({
   onExit: () => void
 }) {
   const [board, setBoard] = useState<BoardCell[][]>(() => emptyBoard())
+  const [linesLifetime, setLinesLifetime] = useState(0)
+  const [maxComboEver, setMaxComboEver] = useState(0)
   const [hand, setHand] = useState<(HandPiece | null)[]>(() => {
     const base = emptyBoard()
-    return dealHand(base, 0, [])
+    const ctx: TrimPlayDealContext = { score: 0, linesLifetime: 0, maxComboEver: 0 }
+    return dealHand(base, ctx, [])
   })
   const [score, setScore] = useState(0)
+  const phase = useMemo(
+    () => trimPlayPhaseFromStats(score, linesLifetime, maxComboEver),
+    [score, linesLifetime, maxComboEver]
+  )
   const difficultyUiLabel = useMemo(() => {
-    const s = trimPlayDifficultyFromScore(score)
+    const s = trimPlayStageFromPhase(phase)
     return s === "facil" ? "Fácil" : s === "media" ? "Médio" : "Difícil"
-  }, [score])
+  }, [phase])
   const [moves, setMoves] = useState(0)
   const [comboStreak, setComboStreak] = useState(0)
   const [state, setState] = useState<"playing" | "over">("playing")
@@ -1104,7 +1136,20 @@ export function TrimPlayGame({
         const roundDelta = unsyncedRoundPointsRef.current
         unsyncedRoundPointsRef.current = 0
         void submitProgress(roundDelta)
-        filledHand = dealHand(afterClear, nextScore, recentTemplatesRef.current)
+        const nextLines = linesLifetime + linesTotal
+        const nextMaxCombo = clearedThisMove ? Math.max(maxComboEver, nextCombo) : maxComboEver
+        if (clearedThisMove) setMaxComboEver((m) => Math.max(m, nextCombo))
+        if (linesTotal > 0) setLinesLifetime((l) => l + linesTotal)
+
+        filledHand = dealHand(
+          afterClear,
+          {
+            score: nextScore,
+            linesLifetime: nextLines,
+            maxComboEver: nextMaxCombo,
+          },
+          recentTemplatesRef.current
+        )
         recentTemplatesRef.current = [...recentTemplatesRef.current, ...filledHand.filter(Boolean).map((x) => x!.templateId)].slice(
           -8
         )
@@ -1127,7 +1172,7 @@ export function TrimPlayGame({
         await endGame(nextScore)
       }
     },
-    [endGame, showToast, submitProgress, triggerVisualEvent]
+    [endGame, showToast, submitProgress, triggerVisualEvent, linesLifetime, maxComboEver]
   )
 
   const updatePreviewRef = useRef(updatePreview)
@@ -1285,10 +1330,12 @@ export function TrimPlayGame({
     }
     setBoard(emptyBoard())
     const freshBoard = emptyBoard()
-    const freshHand = dealHand(freshBoard, 0, [])
+    const freshHand = dealHand(freshBoard, { score: 0, linesLifetime: 0, maxComboEver: 0 }, [])
     recentTemplatesRef.current = freshHand.filter(Boolean).map((x) => x!.templateId)
     setHand(freshHand)
     setScore(0)
+    setLinesLifetime(0)
+    setMaxComboEver(0)
     setMoves(0)
     setComboStreak(0)
     setState("playing")
@@ -1523,8 +1570,8 @@ export function TrimPlayGame({
             <span className="text-5xl sm:text-6xl leading-none font-semibold tracking-tight text-white/90 tabular-nums">
               {score}
             </span>
-            <span className="text-[10px] sm:text-xs uppercase tracking-[0.2em] text-white/40">
-              Dificuldade · {difficultyUiLabel}
+            <span className="text-[10px] sm:text-xs uppercase tracking-[0.2em] text-white/40 text-center leading-tight">
+              Fase {phase} · {difficultyUiLabel}
             </span>
             {comboStreak >= 2 ? (
               <span className="text-[11px] sm:text-xs px-2 py-0.5 rounded-full border border-amber-400/40 bg-amber-500/15 text-amber-200 font-semibold">
