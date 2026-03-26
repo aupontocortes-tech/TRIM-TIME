@@ -9,7 +9,12 @@ import { useEffect } from "react"
 export function PwaServiceWorkerRegister() {
   useEffect(() => {
     if (typeof window === "undefined" || !("serviceWorker" in navigator)) return
-    navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => {
+    const path = window.location.pathname || "/"
+    // Para evitar conflito entre os PWAs ("/painel" vs "/b/[slug]"),
+    // registramos o mesmo SW com escopo dedicado no fluxo público do cliente.
+    const m = /^\/b\/([^/]+)\/?$/i.exec(path)
+    const scope = m ? `/b/${encodeURIComponent(m[1])}` : "/"
+    navigator.serviceWorker.register("/sw.js", { scope }).catch(() => {
       /* ignore */
     })
   }, [])
