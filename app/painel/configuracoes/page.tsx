@@ -125,7 +125,7 @@ export default function ConfiguracoesPage() {
   const [barbersLoading, setBarbersLoading] = useState(true)
   const [equipeError, setEquipeError] = useState<string | null>(null)
   const [equipeBusy, setEquipeBusy] = useState(false)
-  const [origin, setOrigin] = useState("")
+  const [origin, setOrigin] = useState(() => (typeof window !== "undefined" ? window.location.origin : ""))
   const [addOpen, setAddOpen] = useState(false)
   const [newName, setNewName] = useState("")
   const [newPhone, setNewPhone] = useState("")
@@ -166,6 +166,7 @@ export default function ConfiguracoesPage() {
   const [editUnitCep, setEditUnitCep] = useState("")
 
   useEffect(() => {
+    // Garante que o origin já venha correto mesmo após navegações dentro do painel.
     setOrigin(typeof window !== "undefined" ? window.location.origin : "")
   }, [])
 
@@ -276,7 +277,8 @@ export default function ConfiguracoesPage() {
       : ""
 
   const copiarLink = () => {
-    const full = origin && barbershop?.slug ? `${origin}/b/${barbershop.slug}` : ""
+    const o = typeof window !== "undefined" ? window.location.origin : origin
+    const full = o && barbershop?.slug ? `${o}/b/${barbershop.slug}` : ""
     if (full) void navigator.clipboard.writeText(full)
     setLinkCopiado(true)
     setTimeout(() => setLinkCopiado(false), 2000)
@@ -291,7 +293,8 @@ export default function ConfiguracoesPage() {
   }
 
   const compartilharLink = async () => {
-    const full = origin && barbershop?.slug ? `${origin}/b/${barbershop.slug}` : ""
+    const o = typeof window !== "undefined" ? window.location.origin : origin
+    const full = o && barbershop?.slug ? `${o}/b/${barbershop.slug}` : ""
     if (!full) return
     try {
       if (typeof navigator !== "undefined" && "share" in navigator) {
