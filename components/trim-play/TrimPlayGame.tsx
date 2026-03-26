@@ -47,6 +47,51 @@ type VisualEffectKey =
 
 type VisualEffectAsset = { id: string; effectKey: string }
 
+/** Alinha com o admin/API: aceita `texto`, `efeito_texto`, etc. */
+function toVisualEffectKey(raw: unknown): VisualEffectKey | null {
+  const s = String(raw ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]/g, "_")
+  const map: Record<string, VisualEffectKey> = {
+    texto: "efeito_texto",
+    efeito_texto: "efeito_texto",
+    brilho: "efeito_brilho",
+    efeito_brilho: "efeito_brilho",
+    tremer: "efeito_tremer",
+    efeito_tremer: "efeito_tremer",
+    flash: "efeito_flash",
+    efeito_flash: "efeito_flash",
+    particulas: "efeito_particulas",
+    particula: "efeito_particulas",
+    efeito_particulas: "efeito_particulas",
+    explosao: "efeito_explosao",
+    efeito_explosao: "efeito_explosao",
+    raio: "efeito_raio",
+    efeito_raio: "efeito_raio",
+    escurecer: "efeito_escurecer",
+    efeito_escurecer: "efeito_escurecer",
+  }
+  return map[s] ?? null
+}
+
+const FALLBACK_VISUAL_EVENTS: Record<VisualEventKey, VisualEffectAsset[]> = {
+  combo1: [{ id: "fallback_combo1_0", effectKey: "efeito_texto" }],
+  combo2: [{ id: "fallback_combo2_0", effectKey: "efeito_flash" }],
+  combo3: [{ id: "fallback_combo3_0", effectKey: "efeito_tremer" }],
+  combo4: [{ id: "fallback_combo4_0", effectKey: "efeito_explosao" }],
+  victory: [{ id: "fallback_victory_0", effectKey: "efeito_raio" }],
+  gameover: [{ id: "fallback_gameover_0", effectKey: "efeito_escurecer" }],
+}
+
+function normalizeVisualAssets(list: VisualEffectAsset[] | undefined): VisualEffectAsset[] {
+  if (!Array.isArray(list)) return []
+  return list.map((a) => {
+    const k = toVisualEffectKey(a?.effectKey)
+    return { id: a.id, effectKey: k ?? "efeito_texto" }
+  })
+}
+
 type Particle = {
   id: string
   sizePx: number
@@ -735,7 +780,7 @@ export function TrimPlayGame({
       case "efeito_tremer":
         return 450
       case "efeito_flash":
-        return 350
+        return 480
       case "efeito_particulas":
         return 650
       case "efeito_explosao":
@@ -749,60 +794,57 @@ export function TrimPlayGame({
     }
   }
 
-  const isValidVisualEffectKey = (k: unknown): k is VisualEffectKey => {
-    return (
-      k === "efeito_texto" ||
-      k === "efeito_brilho" ||
-      k === "efeito_tremer" ||
-      k === "efeito_flash" ||
-      k === "efeito_particulas" ||
-      k === "efeito_explosao" ||
-      k === "efeito_raio" ||
-      k === "efeito_escurecer"
-    )
-  }
+  const visualsFetchPromiseRef = useRef<Promise<void> | null>(null)
 
   const unlockVisualEffects = useCallback(async () => {
     if (visualsLoadedRef.current) return
-    visualsLoadedRef.current = true
-    try {
-      const r = await fetch("/api/trimplay/visual-effects", { credentials: "include" })
-      const j = await r.json().catch(() => ({}))
-      const categories = (j?.categories ?? {}) as Partial<Record<VisualEventKey, VisualEffectAsset[]>>
-
-      const allEmpty =
-        (categories.combo1?.length ?? 0) === 0 &&
-        (categories.combo2?.length ?? 0) === 0 &&
-        (categories.combo3?.length ?? 0) === 0 &&
-        (categories.combo4?.length ?? 0) === 0 &&
-        (categories.victory?.length ?? 0) === 0 &&
-        (categories.gameover?.length ?? 0) === 0
-
-      if (allEmpty) {
-        // Fallback: garante que o jogo tenha efeitos mesmo se o banco estiver vazio.
-        setVisualEvents({
-          combo1: [{ id: "fallback_combo1_0", effectKey: "efeito_texto" }],
-          combo2: [{ id: "fallback_combo2_0", effectKey: "efeito_texto" }],
-          combo3: [{ id: "fallback_combo3_0", effectKey: "efeito_tremer" }],
-          combo4: [{ id: "fallback_combo4_0", effectKey: "efeito_explosao" }],
-          victory: [{ id: "fallback_victory_0", effectKey: "efeito_raio" }],
-          gameover: [{ id: "fallback_gameover_0", effectKey: "efeito_escurecer" }],
-        })
-        return
-      }
-
-      setVisualEvents({
-        combo1: Array.isArray(categories.combo1) ? categories.combo1 : [],
-        combo2: Array.isArray(categories.combo2) ? categories.combo2 : [],
-        combo3: Array.isArray(categories.combo3) ? categories.combo3 : [],
-        combo4: Array.isArray(categories.combo4) ? categories.combo4 : [],
-        victory: Array.isArray(categories.victory) ? categories.victory : [],
-        gameover: Array.isArray(categories.gameover) ? categories.gameover : [],
-      })
-    } catch {
-      // fallback silencioso: sem efeitos visuais
+    if (visualsFetchPromiseRef.current) {
+      await visualsFetchPromiseRef.current
+      return
     }
+    visualsFetchPromiseRef.current = (async () => {
+      const applyFallback = () => setVisualEvents(FALLBACK_VISUAL_EVENTS)
+      try {
+        const r = await fetch("/api/trimplay/visual-effects", { credentials: "include" })
+        const j = await r.json().catch(() => ({}))
+        const categories = (j?.categories ?? {}) as Partial<Record<VisualEventKey, VisualEffectAsset[]>>
+
+        const allEmpty =
+          (categories.combo1?.length ?? 0) === 0 &&
+          (categories.combo2?.length ?? 0) === 0 &&
+          (categories.combo3?.length ?? 0) === 0 &&
+          (categories.combo4?.length ?? 0) === 0 &&
+          (categories.victory?.length ?? 0) === 0 &&
+          (categories.gameover?.length ?? 0) === 0
+
+        if (allEmpty) {
+          applyFallback()
+          visualsLoadedRef.current = true
+          return
+        }
+
+        setVisualEvents({
+          combo1: normalizeVisualAssets(categories.combo1),
+          combo2: normalizeVisualAssets(categories.combo2),
+          combo3: normalizeVisualAssets(categories.combo3),
+          combo4: normalizeVisualAssets(categories.combo4),
+          victory: normalizeVisualAssets(categories.victory),
+          gameover: normalizeVisualAssets(categories.gameover),
+        })
+        visualsLoadedRef.current = true
+      } catch {
+        applyFallback()
+        visualsLoadedRef.current = true
+      } finally {
+        visualsFetchPromiseRef.current = null
+      }
+    })()
+    await visualsFetchPromiseRef.current
   }, [])
+
+  useEffect(() => {
+    void unlockVisualEffects()
+  }, [unlockVisualEffects])
 
   const triggerVisualEvent = useCallback(
     (eventKey: VisualEventKey, ctx?: { comboLevel?: number }) => {
@@ -812,9 +854,8 @@ export function TrimPlayGame({
       const idx = visualIdxRef.current[eventKey] % list.length
       visualIdxRef.current[eventKey] += 1
 
-      const effectKeyRaw = list[idx]?.effectKey
-      if (!isValidVisualEffectKey(effectKeyRaw)) return
-      const effectKey = effectKeyRaw
+      const effectKey = toVisualEffectKey(list[idx]?.effectKey)
+      if (!effectKey) return
       const token = Date.now() + Math.random()
 
       const durationMs = visualEffectDurationMs(effectKey)
@@ -838,7 +879,7 @@ export function TrimPlayGame({
           const y2Pct = Math.max(5, Math.min(95, y1Pct + Math.sin(a) * dist))
           return {
             id: `${eventKey}_${token}_${i}`,
-            sizePx: effectKey === "efeito_explosao" ? 4 + Math.random() * 4 : 2.5 + Math.random() * 3.2,
+            sizePx: effectKey === "efeito_explosao" ? 6 + Math.random() * 6 : 4 + Math.random() * 5,
             x1Pct,
             y1Pct,
             x2Pct,
@@ -872,7 +913,7 @@ export function TrimPlayGame({
         setVisualEffectActive((cur) => (cur?.token === token ? null : cur))
       }, durationMs + 60)
     },
-    [visualEventsRef, visualEffectDurationMs, isValidVisualEffectKey]
+    [visualEffectDurationMs]
   )
 
   const endGame = useCallback(
@@ -1231,7 +1272,7 @@ export function TrimPlayGame({
       {visualEffectActive?.effectKey === "efeito_flash" ? (
         <div
           key={visualEffectActive.token}
-          className="fixed inset-0 z-[2147483643] pointer-events-none bg-white/25 trimplay-viz-flash"
+          className="fixed inset-0 z-[2147483646] pointer-events-none bg-gradient-to-b from-white/55 via-amber-100/25 to-transparent trimplay-viz-flash mix-blend-screen"
           style={{ ["--dur" as any]: `${visualEffectDurationMs("efeito_flash")}ms` } as CSSProperties}
         />
       ) : null}
