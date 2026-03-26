@@ -26,6 +26,7 @@ import {
   playTrimPlayGameOver,
   playTrimPlayLineClear,
   playTrimPlayPlace,
+  playTrimPlayVictory,
   setTrimPlayMuted,
   unlockTrimPlayAudio,
 } from "./trimPlayHowler"
@@ -167,6 +168,15 @@ function boardFillRatio(board: BoardCell[][]) {
     for (const cell of row) if (cell) occupied++
   }
   return occupied / (SIZE * SIZE)
+}
+
+function isBoardEmpty(board: BoardCell[][]) {
+  for (const row of board) {
+    for (const cell of row) {
+      if (cell) return false
+    }
+  }
+  return true
 }
 
 function targetDifficultyFromState(score: number, fillRatio: number): 1 | 2 | 3 {
@@ -491,6 +501,7 @@ export function TrimPlayGame({
   const [comboStreak, setComboStreak] = useState(0)
   const [state, setState] = useState<"playing" | "over">("playing")
   const [toast, setToast] = useState<string | null>(null)
+  const [peakBanner, setPeakBanner] = useState(false)
   const [drag, setDrag] = useState<DragPayload | null>(null)
   const [dropPreview, setDropPreview] = useState<{ ar: number; ac: number; ok: boolean } | null>(null)
 
@@ -714,6 +725,7 @@ export function TrimPlayGame({
       const next = placePiece(boardNow, piece.cells, ar, ac, piece.hue)
       const { board: afterClear, cellsCleared, linesTotal, rounds } = resolveClears(next)
       const clearedThisMove = linesTotal > 0
+      const boardJustCleared = isBoardEmpty(afterClear)
       const nextCombo = clearedThisMove ? comboStreakRef.current + 1 : 0
       setComboStreak(nextCombo)
 
@@ -722,12 +734,19 @@ export function TrimPlayGame({
         else playTrimPlayLineClear()
         if (nextCombo >= 2) showToast(`${nextCombo}x combo`)
       }
+      if (boardJustCleared) {
+        playTrimPlayVictory()
+        showToast("AUGE! Tabuleiro limpo!")
+        setPeakBanner(true)
+        window.setTimeout(() => setPeakBanner(false), 1700)
+      }
 
       const placePoints = piece.cells.length * 3
       const clearPoints = clearedThisMove ? cellsCleared * 12 + linesTotal * 90 : 0
       const multiLineBonus = linesTotal >= 2 ? linesTotal * 70 : 0
       const comboBonus = clearedThisMove ? Math.max(0, nextCombo - 1) * 55 + (nextCombo >= 3 ? nextCombo * 20 : 0) : 0
-      const points = placePoints + clearPoints + multiLineBonus + comboBonus
+      const boardClearBonus = boardJustCleared ? 320 : 0
+      const points = placePoints + clearPoints + multiLineBonus + comboBonus + boardClearBonus
       unsyncedRoundPointsRef.current += points
       const nextScore = scoreNow + points
       const nextMoves = movesNow + 1
@@ -972,6 +991,18 @@ export function TrimPlayGame({
       {toast ? (
         <div className="fixed left-1/2 -translate-x-1/2 z-[2147483647] max-w-[min(100%-2rem,24rem)] px-4 py-2.5 rounded-xl bg-[#141414]/95 border border-[#c9a227]/45 text-sm text-white/95 text-center shadow-[0_12px_40px_rgba(0,0,0,0.55)] backdrop-blur-md top-[max(4.5rem,env(safe-area-inset-top)+3rem)]">
           {toast}
+        </div>
+      ) : null}
+
+      {peakBanner ? (
+        <div className="fixed inset-0 z-[2147483644] pointer-events-none flex items-center justify-center px-6">
+          <div className="rounded-2xl border border-amber-300/70 bg-black/78 backdrop-blur-md px-7 py-5 shadow-[0_0_42px_rgba(245,158,11,0.45)] animate-in zoom-in-95 fade-in duration-200">
+            <p className="text-amber-200 text-xs tracking-[0.28em] text-center">MOMENTO</p>
+            <p className="text-[#ffd86b] text-3xl sm:text-4xl font-extrabold tracking-wide text-center drop-shadow-[0_0_18px_rgba(245,158,11,0.7)]">
+              AUGE!
+            </p>
+            <p className="text-white/85 text-sm text-center mt-1">Tabuleiro limpo</p>
+          </div>
         </div>
       ) : null}
 

@@ -9,8 +9,18 @@ import { Howl, Howler } from "howler"
 
 const SAMPLE_RATE = 22050
 const TRIMPLAY_USE_FILE_SOUNDS = false
+const REMOTE_CONFIG_TTL_MS = 15000
 
 const FILE_BASE = "/sounds/trim-play"
+type RemoteCategory = "combo1" | "combo2" | "combo3" | "combo4" | "gameover" | "victory"
+type RemoteAudioAsset = {
+  id: string
+  file: string
+  name: string
+  start: number
+  end: number
+  volume: number
+}
 
 let muted = false
 try {
@@ -166,6 +176,120 @@ let fileComboHowl: Howl | null = null
 let proceduralComboHowl: Howl | null = null
 let gameOverHowl: Howl | null = null
 let unlocked = false
+let remoteCategories: Record<RemoteCategory, RemoteAudioAsset[]> = {
+  combo1: [],
+  combo2: [],
+  combo3: [],
+  combo4: [],
+  gameover: [],
+  victory: [],
+}
+const remoteNextIndex: Record<RemoteCategory, number> = {
+  combo1: 0,
+  combo2: 0,
+  combo3: 0,
+  combo4: 0,
+  gameover: 0,
+  victory: 0,
+}
+const remoteLastRandomIndex: Partial<Record<RemoteCategory, number>> = {}
+let remoteCfgLoadedAt = 0
+const remoteHowls = new Map<string, Howl>()
+
+function configSig(x: RemoteAudioAsset) {
+  return [x.id, x.file, x.start, x.end, x.volume].join("|")
+}
+
+async function loadRemoteAudioConfig() {
+  const now = Date.now()
+  if (now - remoteCfgLoadedAt < REMOTE_CONFIG_TTL_MS) return
+  remoteCfgLoadedAt = now
+  try {
+    const res = await fetch("/api/trimplay/audio-config", { credentials: "include" })
+    if (!res.ok) return
+    const data = (await res.json().catch(() => ({}))) as {
+      categories?: Partial<Record<RemoteCategory, RemoteAudioAsset[]>>
+    }
+    remoteCategories = {
+      combo1: Array.isArray(data.categories?.combo1) ? data.categories!.combo1! : [],
+      combo2: Array.isArray(data.categories?.combo2) ? data.categories!.combo2! : [],
+      combo3: Array.isArray(data.categories?.combo3) ? data.categories!.combo3! : [],
+      combo4: Array.isArray(data.categories?.combo4) ? data.categories!.combo4! : [],
+      gameover: Array.isArray(data.categories?.gameover) ? data.categories!.gameover! : [],
+      victory: Array.isArray(data.categories?.victory) ? data.categories!.victory! : [],
+    }
+  } catch {
+    // fallback para áudio procedural/file local
+  }
+}
+
+async function loadRemoteAudioAssets() {
+  const now = Date.now()
+  if (now - remoteCfgLoadedAt < REMOTE_CONFIG_TTL_MS) return
+  remoteCfgLoadedAt = now
+  try {
+    const res = await fetch("/api/trimplay/audio-assets", { credentials: "include" })
+    if (!res.ok) return
+    const data = (await res.json().catch(() => ({}))) as {
+      categories?: Partial<Record<RemoteCategory, RemoteAudioAsset[]>>
+    }
+    remoteCategories = {
+      combo1: Array.isArray(data.categories?.combo1) ? data.categories!.combo1! : [],
+      combo2: Array.isArray(data.categories?.combo2) ? data.categories!.combo2! : [],
+      combo3: Array.isArray(data.categories?.combo3) ? data.categories!.combo3! : [],
+      combo4: Array.isArray(data.categories?.combo4) ? data.categories!.combo4! : [],
+      gameover: Array.isArray(data.categories?.gameover) ? data.categories!.gameover! : [],
+      victory: Array.isArray(data.categories?.victory) ? data.categories!.victory! : [],
+    }
+  } catch {
+    // fallback para áudio procedural/file local
+  }
+}
+
+function tryPlayRemote(category: RemoteCategory): boolean {
+  const assets = remoteCategories[category] ?? []
+  if (assets.length === 0) return false
+  let idx = remoteNextIndex[category] % assets.length
+  if (category === "gameover") {
+    if (assets.length === 1) {
+      idx = 0
+    } else {
+      const prev = remoteLastRandomIndex.gameover
+      let next = Math.floor(Math.random() * assets.length)
+      if (prev !== undefined && next === prev) {
+        next = (next + 1 + Math.floor(Math.random() * (assets.length - 1))) % assets.length
+      }
+      idx = next
+      remoteLastRandomIndex.gameover = idx
+    }
+  }
+  const cfg = assets[idx]!
+  remoteNextIndex[category] = (idx + 1) % assets.length
+
+  const sig = configSig(cfg)
+  let howl = remoteHowls.get(sig)
+  if (!howl) {
+    const start = Math.max(0, Math.floor((cfg.start || 0) * 1000))
+    const end = Math.max(0, Math.floor((cfg.end || 0) * 1000))
+    const hasTrim = end > start
+    howl = new Howl({
+      src: [cfg.file],
+      html5: true,
+      preload: true,
+      volume: Math.max(0, Math.min(1.5, cfg.volume || 1)),
+      sprite: hasTrim ? { clip: [start, end - start] } : undefined,
+    })
+    remoteHowls.set(sig, howl)
+  }
+  try {
+    const hasTrim = Math.max(0, cfg.end || 0) > Math.max(0, cfg.start || 0)
+    if (hasTrim) howl.play("clip")
+    else howl.play()
+    return true
+  } catch {
+    return false
+  }
+}
 
 function ensureHowls() {
   if (placeHowl) return
@@ -186,6 +310,7 @@ export function unlockTrimPlayAudio() {
   if (unlocked) return
   unlocked = true
   ensureHowls()
+  void loadRemoteAudioAssets()
   try {
     const ctx = Howler.ctx as AudioContext | undefined
     if (ctx?.state === "suspended") void ctx.resume()
@@ -206,11 +331,13 @@ function play(howl: Howl | null) {
 
 export function playTrimPlayPlace() {
   ensureHowls()
+  void loadRemoteAudioAssets()
   play(placeHowl)
 }
 
 export function playTrimPlayLineClear() {
   ensureHowls()
+  void loadRemoteAudioAssets()
   play(lineHowl)
 }
 
@@ -218,6 +345,9 @@ export function playTrimPlayCombo(level: number) {
   ensureHowls()
   if (muted) return
   const L = Math.min(5, Math.max(2, level))
+  void loadRemoteAudioAssets()
+  const comboKey: RemoteCategory = L >= 4 ? "combo4" : L === 3 ? "combo3" : L === 2 ? "combo2" : "combo1"
+  if (tryPlayRemote(comboKey)) return
   if (TRIMPLAY_USE_FILE_SOUNDS) {
     play(fileComboHowl)
     return
@@ -233,5 +363,14 @@ export function playTrimPlayCombo(level: number) {
 
 export function playTrimPlayGameOver() {
   ensureHowls()
+  void loadRemoteAudioAssets()
+  if (tryPlayRemote("gameover")) return
   play(gameOverHowl)
+}
+
+export function playTrimPlayVictory() {
+  ensureHowls()
+  void loadRemoteAudioAssets()
+  if (tryPlayRemote("victory")) return
+  playTrimPlayCombo(5)
 }

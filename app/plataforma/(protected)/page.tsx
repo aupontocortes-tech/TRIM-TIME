@@ -162,6 +162,12 @@ export default function PlataformaDashboardPage() {
             >
               Suporte / chat
             </Link>
+            <Link
+              href="/plataforma/trim-player"
+              className="inline-flex items-center justify-center rounded-md border border-[#D4AF37]/50 px-4 py-2 text-sm text-[#D4AF37] hover:bg-[#D4AF37]/10"
+            >
+              Trim Player
+            </Link>
           </div>
         </CardContent>
       </Card>

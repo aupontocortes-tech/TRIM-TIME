@@ -87,6 +87,7 @@ export default function PlataformaConsoleLayout({
               )}
               {link("/plataforma/ranking", "Ranking", pathname.startsWith("/plataforma/ranking"))}
               {link("/plataforma/suporte", "Suporte", pathname.startsWith("/plataforma/suporte"))}
+              {link("/plataforma/trim-player", "Trim Player", pathname.startsWith("/plataforma/trim-player"))}
             </nav>
           </div>
           <div className="flex items-center gap-3">
@@ -112,6 +113,7 @@ export default function PlataformaConsoleLayout({
           {link("/plataforma/barbershops", "Lojas", pathname.startsWith("/plataforma/barbershops"))}
           {link("/plataforma/ranking", "Ranking", pathname.startsWith("/plataforma/ranking"))}
           {link("/plataforma/suporte", "Chat", pathname.startsWith("/plataforma/suporte"))}
+          {link("/plataforma/trim-player", "Trim Player", pathname.startsWith("/plataforma/trim-player"))}
         </div>
       </header>
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">{children}</main>

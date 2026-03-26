@@ -373,3 +373,34 @@ model TrimPlayScore {
   @@index([barbershopId, bestScore])
   @@map("trim_play_scores")
 }
+
+model TrimPlayAudioConfig {
+  id          String   @id @default(uuid()) @db.Uuid
+  key         String   @unique
+  fileUrl     String?  @map("file_url")
+  trimStartMs Int      @default(0) @map("trim_start_ms")
+  trimEndMs   Int      @default(0) @map("trim_end_ms")
+  volume      Decimal  @default(1) @db.Decimal(3, 2)
+  enabled     Boolean  @default(false)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@map("trim_play_audio_configs")
+}
+
+model TrimPlayAudioAsset {
+  id           String   @id @default(uuid()) @db.Uuid
+  category     String   @map("category")
+  fileUrl      String   @map("file_url")
+  fileName     String   @map("file_name")
+  trimStartSec Decimal  @default(0) @map("trim_start_sec") @db.Decimal(6, 3)
+  trimEndSec   Decimal  @default(2) @map("trim_end_sec") @db.Decimal(6, 3)
+  volume       Decimal  @default(1) @db.Decimal(3, 2)
+  enabled      Boolean  @default(true)
+  sortOrder    Int      @default(0) @map("sort_order")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([category, enabled, sortOrder])
+  @@map("trim_play_audio_assets")
+}
