@@ -404,3 +404,18 @@ model TrimPlayAudioAsset {
   @@index([category, enabled, sortOrder])
   @@map("trim_play_audio_assets")
 }
+
+// ========== TRIM PLAY (VISUAL) ==========
+// Lista de efeitos visuais alternados por evento no jogo (combo/vitória/game over).
+model TrimPlayVisualEffectAsset {
+  id         String   @id @default(uuid()) @db.Uuid
+  eventKey   String   @map("event_key") // combo1..combo4, victory, gameover
+  effectKey  String   @map("effect_key") // efeito_texto, efeito_flash, ...
+  enabled    Boolean  @default(true)
+  sortOrder  Int      @default(0) @map("sort_order")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([eventKey, enabled, sortOrder])
+  @@map("trim_play_visual_effect_assets")
+}

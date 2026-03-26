@@ -162,3 +162,114 @@
     transform: scaleX(1);
   }
 }
+
+/* Trim Play - efeitos visuais configuráveis (rápidos e leves) */
+@keyframes trimplay-viz-shake {
+  0% { transform: translate3d(0,0,0); }
+  20% { transform: translate3d(-2px,0,0); }
+  40% { transform: translate3d(2px,0,0); }
+  60% { transform: translate3d(-1px,0,0); }
+  80% { transform: translate3d(1px,0,0); }
+  100% { transform: translate3d(0,0,0); }
+}
+
+.trimplay-viz-shake {
+  animation-name: trimplay-viz-shake;
+  animation-duration: var(--dur, 450ms);
+  animation-timing-function: ease-in-out;
+}
+
+@keyframes trimplay-viz-flash {
+  from { opacity: 0; transform: scale(1); }
+  20% { opacity: 0.65; }
+  to { opacity: 0; transform: scale(1.02); }
+}
+
+.trimplay-viz-flash {
+  animation: trimplay-viz-flash var(--dur, 350ms) ease-out forwards;
+}
+
+@keyframes trimplay-viz-darken {
+  from { opacity: 0; }
+  10% { opacity: 0.55; }
+  to { opacity: 0; }
+}
+
+.trimplay-viz-darken {
+  animation: trimplay-viz-darken var(--dur, 700ms) ease-out forwards;
+}
+
+@keyframes trimplay-viz-ray {
+  from { opacity: 0; transform: scale(0.98) rotate(-8deg); }
+  25% { opacity: 0.55; }
+  to { opacity: 0; transform: scale(1.02) rotate(0deg); }
+}
+
+.trimplay-viz-ray {
+  animation: trimplay-viz-ray var(--dur, 520ms) ease-out forwards;
+}
+
+@keyframes trimplay-particle-fly {
+  from {
+    left: var(--x1);
+    top: var(--y1);
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    left: var(--x2);
+    top: var(--y2);
+    opacity: 0;
+    transform: scale(0);
+  }
+}
+
+.trimplay-particle-fly {
+  position: absolute;
+  width: var(--size, 4px);
+  height: var(--size, 4px);
+  border-radius: 9999px;
+  background: hsla(var(--h, 45), 100%, 60%, 0.95);
+  animation-name: trimplay-particle-fly;
+  animation-duration: var(--dur, 650ms);
+  animation-timing-function: ease-out;
+  animation-delay: var(--delay, 0ms);
+  animation-fill-mode: both;
+  pointer-events: none;
+}
+
+@keyframes trimplay-explosion-ring {
+  from { opacity: 0; transform: scale(0.6); filter: blur(0px); }
+  30% { opacity: 0.9; }
+  to { opacity: 0; transform: scale(1.45); filter: blur(1px); }
+}
+
+.trimplay-explosion-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 40%;
+  height: 40%;
+  transform: translate(-50%, -50%);
+  border-radius: 9999px;
+  border: 2px solid rgba(255, 212, 107, 0.65);
+  box-shadow: 0 0 20px rgba(255, 212, 107, 0.25);
+  animation: trimplay-explosion-ring var(--dur, 780ms) ease-out forwards;
+  pointer-events: none;
+}
+
+@keyframes trimplay-viz-glow {
+  from {
+    box-shadow: 0 0 0px rgba(255, 212, 107, 0);
+  }
+  30% {
+    box-shadow: 0 0 24px rgba(255, 212, 107, 0.45), inset 0 0 18px rgba(255, 212, 107, 0.25);
+  }
+  to {
+    box-shadow: 0 0 0px rgba(255, 212, 107, 0);
+  }
+}
+
+.trimplay-viz-glow {
+  animation: trimplay-viz-glow var(--dur, 650ms) ease-out forwards;
+}

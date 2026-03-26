@@ -19,6 +19,22 @@ type AudioAsset = {
   sort_order: number
 }
 
+type VisualEffectAsset = {
+  id: string
+  event_key: "combo1" | "combo2" | "combo3" | "combo4" | "victory" | "gameover"
+  effect_key:
+    | "efeito_texto"
+    | "efeito_brilho"
+    | "efeito_tremer"
+    | "efeito_flash"
+    | "efeito_particulas"
+    | "efeito_explosao"
+    | "efeito_raio"
+    | "efeito_escurecer"
+  enabled: boolean
+  sort_order: number
+}
+
 const ORDER = ["combo1", "combo2", "combo3", "combo4", "gameover", "victory"] as const
 const LABELS: Record<(typeof ORDER)[number], string> = {
   combo1: "COMBO_1",
@@ -29,6 +45,38 @@ const LABELS: Record<(typeof ORDER)[number], string> = {
   victory: "VITORIA",
 }
 
+const VISUAL_EVENTS: VisualEffectAsset["event_key"][] = ["combo1", "combo2", "combo3", "combo4", "victory", "gameover"]
+const VISUAL_EVENT_LABELS: Record<VisualEffectAsset["event_key"], string> = {
+  combo1: "COMBO_1",
+  combo2: "COMBO_2",
+  combo3: "COMBO_3",
+  combo4: "COMBO_4",
+  victory: "VITORIA",
+  gameover: "GAME_OVER",
+}
+
+const VISUAL_EFFECT_LABELS: Record<VisualEffectAsset["effect_key"], string> = {
+  efeito_texto: "Efeito Texto",
+  efeito_brilho: "Efeito Brilho",
+  efeito_tremer: "Efeito Tremer",
+  efeito_flash: "Efeito Flash",
+  efeito_particulas: "Efeito Partículas",
+  efeito_explosao: "Efeito Explosão",
+  efeito_raio: "Efeito Raio",
+  efeito_escurecer: "Efeito Escurecer",
+}
+
+const VISUAL_EFFECT_OPTIONS: VisualEffectAsset["effect_key"][] = [
+  "efeito_texto",
+  "efeito_brilho",
+  "efeito_tremer",
+  "efeito_flash",
+  "efeito_particulas",
+  "efeito_explosao",
+  "efeito_raio",
+  "efeito_escurecer",
+]
+
 export default function TrimPlayerAdminPage() {
   const [items, setItems] = useState<AudioAsset[]>([])
   const [loading, setLoading] = useState(true)
@@ -37,9 +85,19 @@ export default function TrimPlayerAdminPage() {
   const [msgTipo, setMsgTipo] = useState<"ok" | "erro" | "info">("info")
   const [lastAddedId, setLastAddedId] = useState<string | null>(null)
   const [lastSavedId, setLastSavedId] = useState<string | null>(null)
+  const [visualItems, setVisualItems] = useState<VisualEffectAsset[]>([])
+  const [visualLoading, setVisualLoading] = useState(true)
   const previewRef = useRef<HTMLAudioElement | null>(null)
   const stopTimerRef = useRef<number | null>(null)
   const savedTimerRef = useRef<number | null>(null)
+  const [visualEffectToAdd, setVisualEffectToAdd] = useState<Record<VisualEffectAsset["event_key"], VisualEffectAsset["effect_key"]>>({
+    combo1: "efeito_texto",
+    combo2: "efeito_texto",
+    combo3: "efeito_texto",
+    combo4: "efeito_texto",
+    victory: "efeito_texto",
+    gameover: "efeito_texto",
+  })
 
   const grouped = useMemo(() => {
     const map = new Map<string, AudioAsset[]>()
@@ -54,6 +112,20 @@ export default function TrimPlayerAdminPage() {
     }
     return map
   }, [items])
+
+  const visualGrouped = useMemo(() => {
+    const map = new Map<VisualEffectAsset["event_key"], VisualEffectAsset[]>()
+    for (const e of VISUAL_EVENTS) map.set(e, [])
+    for (const x of visualItems) {
+      const arr = map.get(x.event_key)
+      if (arr) arr.push(x)
+    }
+    for (const e of VISUAL_EVENTS) {
+      const arr = map.get(e)!
+      arr.sort((a, b) => a.sort_order - b.sort_order)
+    }
+    return map
+  }, [visualItems])
 
   const load = async () => {
     setLoading(true)
@@ -74,8 +146,35 @@ export default function TrimPlayerAdminPage() {
     }
   }
 
+  const loadVisuals = async (preserveIfEmpty = false) => {
+    setVisualLoading(true)
+    try {
+      const r = await fetch("/api/admin/trimplay/visual-effects", { credentials: "include" })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(typeof j.error === "string" ? j.error : "Erro ao carregar efeitos visuais")
+      const loaded = Array.isArray(j.items) ? (j.items as VisualEffectAsset[]) : []
+      if (preserveIfEmpty && loaded.length === 0) {
+        // Evita “zerar” a UI caso o backend retorne vazio por auth/migração.
+        setMsg("Aviso: backend retornou 0 efeitos visuais. Mantive a lista atual.")
+        setMsgTipo("info")
+      } else {
+        setVisualItems(loaded)
+      }
+      if (typeof j.warning === "string" && j.warning.trim()) {
+        setMsg(j.warning)
+        setMsgTipo("info")
+      }
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Erro ao carregar efeitos visuais")
+      setMsgTipo("erro")
+    } finally {
+      setVisualLoading(false)
+    }
+  }
+
   useEffect(() => {
     void load()
+    void loadVisuals()
     return () => {
       if (stopTimerRef.current) window.clearTimeout(stopTimerRef.current)
       if (savedTimerRef.current) window.clearTimeout(savedTimerRef.current)
@@ -85,6 +184,10 @@ export default function TrimPlayerAdminPage() {
 
   const updateLocal = (id: string, patch: Partial<AudioAsset>) => {
     setItems((prev) => prev.map((x) => (x.id === id ? { ...x, ...patch } : x)))
+  }
+
+  const updateLocalVisual = (id: string, patch: Partial<VisualEffectAsset>) => {
+    setVisualItems((prev) => prev.map((x) => (x.id === id ? { ...x, ...patch } : x)))
   }
 
   const trimPlay = (asset: AudioAsset) => {
@@ -249,6 +352,140 @@ export default function TrimPlayerAdminPage() {
       await load()
     } catch {
       setMsg("Erro ao salvar ordem")
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  const addVisualEffect = async (eventKey: VisualEffectAsset["event_key"], effectKey: VisualEffectAsset["effect_key"]) => {
+    setBusyId(`visual-${eventKey}-add`)
+    setMsg("")
+    try {
+      const r = await fetch("/api/admin/trimplay/visual-effects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ event_key: eventKey, effect_key: effectKey, enabled: true }),
+      })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok)
+        throw new Error(
+          `Erro (${r.status}): ${typeof j.error === "string" ? j.error : "Erro ao adicionar efeito"}`
+        )
+
+      const created = j.item as VisualEffectAsset | undefined
+      if (created?.id) {
+        setVisualItems((prev) => [...prev, created])
+        setLastAddedId(created.id)
+        window.setTimeout(() => setLastAddedId((id) => (id === created.id ? null : id)), 3500)
+      } else {
+        await loadVisuals(true)
+      }
+
+      setMsg(`${VISUAL_EVENT_LABELS[eventKey]}: efeito adicionado`)
+      setMsgTipo("ok")
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Erro ao adicionar efeito")
+      setMsgTipo("erro")
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  const patchVisualEnabled = async (asset: VisualEffectAsset, enabled: boolean) => {
+    setBusyId(asset.id)
+    setMsg("")
+    try {
+      const r = await fetch(`/api/admin/trimplay/visual-effects/${asset.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ enabled }),
+      })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(typeof j.error === "string" ? j.error : "Erro ao salvar efeito")
+
+      updateLocalVisual(asset.id, { enabled })
+      setMsg("Efeito atualizado")
+      setMsgTipo("ok")
+      setLastSavedId(asset.id)
+      if (savedTimerRef.current) window.clearTimeout(savedTimerRef.current)
+      savedTimerRef.current = window.setTimeout(() => {
+        setLastSavedId((id) => (id === asset.id ? null : id))
+      }, 3000)
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Erro ao salvar efeito")
+      setMsgTipo("erro")
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  const removeVisualEffect = async (id: string) => {
+    setBusyId(id)
+    setMsg("")
+    try {
+      const r = await fetch(`/api/admin/trimplay/visual-effects/${id}`, {
+        method: "DELETE",
+        credentials: "include",
+      })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(typeof j.error === "string" ? j.error : "Erro ao remover efeito")
+
+      setMsg("Efeito removido")
+      setMsgTipo("ok")
+      await loadVisuals()
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Erro ao remover efeito")
+      setMsgTipo("erro")
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  const moveVisualEffect = (eventKey: VisualEffectAsset["event_key"], id: string, direction: "up" | "down") => {
+    const list = (visualGrouped.get(eventKey) ?? []).slice().sort((a, b) => a.sort_order - b.sort_order)
+    const idx = list.findIndex((x) => x.id === id)
+    if (idx < 0) return
+    const swapIdx = direction === "up" ? idx - 1 : idx + 1
+    if (swapIdx < 0 || swapIdx >= list.length) return
+
+    const a = list[idx]!
+    const b = list[swapIdx]!
+    updateLocalVisual(a.id, { sort_order: b.sort_order })
+    updateLocalVisual(b.id, { sort_order: a.sort_order })
+  }
+
+  const saveVisualOrdering = async (eventKey: VisualEffectAsset["event_key"]) => {
+    const list = (visualGrouped.get(eventKey) ?? []).slice().sort((a, b) => a.sort_order - b.sort_order)
+    if (list.length <= 1) return
+    setBusyId(`${eventKey}-visual-order`)
+    setMsg("")
+    try {
+      for (let i = 0; i < list.length; i++) {
+        const asset = list[i]!
+        const r = await fetch(`/api/admin/trimplay/visual-effects/${asset.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ sort_order: i }),
+        })
+        if (!r.ok) {
+          const j = await r.json().catch(() => ({}))
+          throw new Error(`Erro (${r.status}): ${typeof j.error === "string" ? j.error : "Erro ao salvar ordem"}`)
+        }
+      }
+      setMsg(`${VISUAL_EVENT_LABELS[eventKey]}: ordem salva`)
+      setMsgTipo("ok")
+      setLastSavedId(`${eventKey}-visual-order`)
+      if (savedTimerRef.current) window.clearTimeout(savedTimerRef.current)
+      savedTimerRef.current = window.setTimeout(() => {
+        setLastSavedId((id) => (id === `${eventKey}-visual-order` ? null : id))
+      }, 3000)
+      await loadVisuals(true)
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Erro ao salvar ordem")
+      setMsgTipo("erro")
     } finally {
       setBusyId(null)
     }
@@ -455,6 +692,150 @@ export default function TrimPlayerAdminPage() {
             </CardContent>
           </Card>
         ))}
+      </div>
+
+      <div className="border-t border-[#D4AF37]/20 pt-6">
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div>
+            <h2 className="text-xl font-bold text-white">Efeitos visuais (Trim Play)</h2>
+            <p className="text-zinc-400 text-sm mt-1">Cada evento executa efeitos em sequência (loop) e alterna automaticamente.</p>
+          </div>
+          {visualLoading ? <p className="text-zinc-400">Carregando…</p> : null}
+        </div>
+
+        <div className="grid gap-4 mt-4">
+          {VISUAL_EVENTS.map((eventKey) => (
+            <Card key={eventKey} className="bg-zinc-950 border-[#D4AF37]/35 text-white">
+              <CardContent className="p-5 space-y-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <Play className="w-4 h-4 text-[#D4AF37]" />
+                    <span className="font-semibold">{VISUAL_EVENT_LABELS[eventKey]}</span>
+                  </div>
+                  <p className="text-xs text-zinc-400">{(visualGrouped.get(eventKey) ?? []).length} efeito(s)</p>
+                </div>
+
+                <div className="flex flex-wrap gap-2 items-center">
+                  <select
+                    value={visualEffectToAdd[eventKey]}
+                    onChange={(e) =>
+                      setVisualEffectToAdd((prev) => ({
+                        ...prev,
+                        [eventKey]: e.target.value as VisualEffectAsset["effect_key"],
+                      }))
+                    }
+                    className="bg-zinc-900 border-[#D4AF37]/25 text-white text-sm rounded-md px-3 py-2 focus:outline-none"
+                  >
+                    {VISUAL_EFFECT_OPTIONS.map((k) => (
+                      <option key={k} value={k}>
+                        {VISUAL_EFFECT_LABELS[k]}
+                      </option>
+                    ))}
+                  </select>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="border-[#D4AF37]/50 text-white"
+                    onClick={() => void addVisualEffect(eventKey, visualEffectToAdd[eventKey])}
+                    disabled={busyId === `visual-${eventKey}-add`}
+                  >
+                    <Plus className="w-4 h-4 mr-1.5" />
+                    Adicionar efeito
+                  </Button>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className={[
+                      "border-[#D4AF37]/50",
+                      lastSavedId === `${eventKey}-visual-order` ? "border-emerald-500/60 text-emerald-300" : "",
+                    ].join(" ")}
+                    onClick={() => void saveVisualOrdering(eventKey)}
+                    disabled={busyId === `${eventKey}-visual-order`}
+                  >
+                    {busyId === `${eventKey}-visual-order` ? (
+                      "Salvando ordem..."
+                    ) : (
+                      <span className="inline-flex items-center gap-2">
+                        <Save
+                          className={[
+                            "w-4 h-4",
+                            lastSavedId === `${eventKey}-visual-order` ? "text-emerald-600" : "text-[#D4AF37]",
+                          ].join(" ")}
+                        />
+                        Salvar sequência
+                      </span>
+                    )}
+                  </Button>
+                </div>
+
+                {(visualGrouped.get(eventKey) ?? []).length === 0 ? (
+                  <p className="text-sm text-zinc-400">Sem efeitos visuais nesta categoria.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {(visualGrouped.get(eventKey) ?? []).map((asset) => (
+                      <div
+                        key={asset.id}
+                        className={[
+                          "rounded-lg border p-3 space-y-3 transition-colors",
+                          lastAddedId === asset.id
+                            ? "border-emerald-400/70 bg-emerald-500/10"
+                            : "border-[#D4AF37]/20",
+                        ].join(" ")}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-sm text-zinc-200">
+                            {VISUAL_EFFECT_LABELS[asset.effect_key] ?? asset.effect_key}
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-zinc-400">Ativo</span>
+                            <Switch
+                              checked={asset.enabled}
+                              disabled={busyId === asset.id}
+                              onCheckedChange={(v) => void patchVisualEnabled(asset, v)}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="border-[#D4AF37]/50"
+                            onClick={() => moveVisualEffect(eventKey, asset.id, "up")}
+                            disabled={busyId === asset.id}
+                          >
+                            <ArrowUp className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="border-[#D4AF37]/50"
+                            onClick={() => moveVisualEffect(eventKey, asset.id, "down")}
+                            disabled={busyId === asset.id}
+                          >
+                            <ArrowDown className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="border-red-500/40 text-red-300 hover:bg-red-500/10"
+                            onClick={() => void removeVisualEffect(asset.id)}
+                            disabled={busyId === asset.id}
+                          >
+                            <Trash2 className="w-4 h-4 mr-1.5" />
+                            Remover
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       </div>
     </div>
   )

@@ -33,6 +33,32 @@ import {
 
 const SIZE = 8
 
+type VisualEventKey = "combo1" | "combo2" | "combo3" | "combo4" | "victory" | "gameover"
+
+type VisualEffectKey =
+  | "efeito_texto"
+  | "efeito_brilho"
+  | "efeito_tremer"
+  | "efeito_flash"
+  | "efeito_particulas"
+  | "efeito_explosao"
+  | "efeito_raio"
+  | "efeito_escurecer"
+
+type VisualEffectAsset = { id: string; effectKey: string }
+
+type Particle = {
+  id: string
+  sizePx: number
+  // coordenadas em porcentagem do tabuleiro (0-100)
+  x1Pct: number
+  y1Pct: number
+  x2Pct: number
+  y2Pct: number
+  delayMs: number
+  hue: number
+}
+
 /** iOS/Android: permite preventDefault no arrasto e evita scroll “roubar” o gesto */
 const POINTER_MOVE_OPTS: AddEventListenerOptions = { passive: false }
 
@@ -502,6 +528,14 @@ export function TrimPlayGame({
   const [state, setState] = useState<"playing" | "over">("playing")
   const [toast, setToast] = useState<string | null>(null)
   const [peakBanner, setPeakBanner] = useState(false)
+  const [visualEffectActive, setVisualEffectActive] = useState<null | {
+    effectKey: VisualEffectKey
+    token: number
+    text?: string
+    particles?: Particle[]
+    rayHue?: number
+  }>(null)
+  const [visualParticlesToken, setVisualParticlesToken] = useState(0)
   const [drag, setDrag] = useState<DragPayload | null>(null)
   const [dropPreview, setDropPreview] = useState<{ ar: number; ac: number; ok: boolean } | null>(null)
 
@@ -510,6 +544,25 @@ export function TrimPlayGame({
   const [soundMuted, setSoundMuted] = useState(false)
   const [rankingOpen, setRankingOpen] = useState(false)
   const [myRanking, setMyRanking] = useState<null | { rank: number; score: number }>(null)
+
+  const [visualEvents, setVisualEvents] = useState<Record<VisualEventKey, VisualEffectAsset[]>>({
+    combo1: [],
+    combo2: [],
+    combo3: [],
+    combo4: [],
+    victory: [],
+    gameover: [],
+  })
+  const visualEventsRef = useRef(visualEvents)
+  const visualsLoadedRef = useRef(false)
+  const visualIdxRef = useRef<Record<VisualEventKey, number>>({
+    combo1: 0,
+    combo2: 0,
+    combo3: 0,
+    combo4: 0,
+    victory: 0,
+    gameover: 0,
+  })
 
   /** Layout estreito (celular): peças e ghost menores; desktop sm+ mais folgado */
   const [compactUi, setCompactUi] = useState(true)
@@ -520,7 +573,7 @@ export function TrimPlayGame({
     apply()
     mq.addEventListener("change", apply)
     return () => mq.removeEventListener("change", apply)
-  }, [])
+  }, [unlockVisualEffects])
   const trayCellPx = compactUi ? 16 : 22
   const trayGapPx = compactUi ? 2 : 3
   const ghostCellPx = compactUi ? 18 : 22
@@ -572,6 +625,7 @@ export function TrimPlayGame({
   stateRef.current = state
   dragRef.current = drag
   comboStreakRef.current = comboStreak
+  visualEventsRef.current = visualEvents
 
   useEffect(() => {
     const best = loadBestLocal(barbershopId, clienteId)
@@ -672,10 +726,160 @@ export function TrimPlayGame({
   const showToastRef = useRef(showToast)
   showToastRef.current = showToast
 
+  const visualEffectDurationMs = (effectKey: VisualEffectKey) => {
+    switch (effectKey) {
+      case "efeito_texto":
+        return 900
+      case "efeito_brilho":
+        return 650
+      case "efeito_tremer":
+        return 450
+      case "efeito_flash":
+        return 350
+      case "efeito_particulas":
+        return 650
+      case "efeito_explosao":
+        return 780
+      case "efeito_raio":
+        return 520
+      case "efeito_escurecer":
+        return 700
+      default:
+        return 500
+    }
+  }
+
+  const isValidVisualEffectKey = (k: unknown): k is VisualEffectKey => {
+    return (
+      k === "efeito_texto" ||
+      k === "efeito_brilho" ||
+      k === "efeito_tremer" ||
+      k === "efeito_flash" ||
+      k === "efeito_particulas" ||
+      k === "efeito_explosao" ||
+      k === "efeito_raio" ||
+      k === "efeito_escurecer"
+    )
+  }
+
+  const unlockVisualEffects = useCallback(async () => {
+    if (visualsLoadedRef.current) return
+    visualsLoadedRef.current = true
+    try {
+      const r = await fetch("/api/trimplay/visual-effects", { credentials: "include" })
+      const j = await r.json().catch(() => ({}))
+      const categories = (j?.categories ?? {}) as Partial<Record<VisualEventKey, VisualEffectAsset[]>>
+
+      const allEmpty =
+        (categories.combo1?.length ?? 0) === 0 &&
+        (categories.combo2?.length ?? 0) === 0 &&
+        (categories.combo3?.length ?? 0) === 0 &&
+        (categories.combo4?.length ?? 0) === 0 &&
+        (categories.victory?.length ?? 0) === 0 &&
+        (categories.gameover?.length ?? 0) === 0
+
+      if (allEmpty) {
+        // Fallback: garante que o jogo tenha efeitos mesmo se o banco estiver vazio.
+        setVisualEvents({
+          combo1: [{ id: "fallback_combo1_0", effectKey: "efeito_texto" }],
+          combo2: [{ id: "fallback_combo2_0", effectKey: "efeito_texto" }],
+          combo3: [{ id: "fallback_combo3_0", effectKey: "efeito_tremer" }],
+          combo4: [{ id: "fallback_combo4_0", effectKey: "efeito_explosao" }],
+          victory: [{ id: "fallback_victory_0", effectKey: "efeito_raio" }],
+          gameover: [{ id: "fallback_gameover_0", effectKey: "efeito_escurecer" }],
+        })
+        return
+      }
+
+      setVisualEvents({
+        combo1: Array.isArray(categories.combo1) ? categories.combo1 : [],
+        combo2: Array.isArray(categories.combo2) ? categories.combo2 : [],
+        combo3: Array.isArray(categories.combo3) ? categories.combo3 : [],
+        combo4: Array.isArray(categories.combo4) ? categories.combo4 : [],
+        victory: Array.isArray(categories.victory) ? categories.victory : [],
+        gameover: Array.isArray(categories.gameover) ? categories.gameover : [],
+      })
+    } catch {
+      // fallback silencioso: sem efeitos visuais
+    }
+  }, [])
+
+  const triggerVisualEvent = useCallback(
+    (eventKey: VisualEventKey, ctx?: { comboLevel?: number }) => {
+      const list = visualEventsRef.current[eventKey] ?? []
+      if (!list.length) return
+
+      const idx = visualIdxRef.current[eventKey] % list.length
+      visualIdxRef.current[eventKey] += 1
+
+      const effectKeyRaw = list[idx]?.effectKey
+      if (!isValidVisualEffectKey(effectKeyRaw)) return
+      const effectKey = effectKeyRaw
+      const token = Date.now() + Math.random()
+
+      const durationMs = visualEffectDurationMs(effectKey)
+
+      let text: string | undefined
+      if (effectKey === "efeito_texto") {
+        if (eventKey === "victory") text = "AUGE!"
+        else if (eventKey === "gameover") text = "GAME OVER"
+        else if (eventKey.startsWith("combo")) text = `Combo x${ctx?.comboLevel ?? 1}`
+      }
+
+      if (effectKey === "efeito_particulas" || effectKey === "efeito_explosao") {
+        const count = effectKey === "efeito_explosao" ? 18 : 12
+        const baseHue = Math.floor(Math.random() * 50) + 35
+        const particles: Particle[] = Array.from({ length: count }).map((_, i) => {
+          const a = Math.random() * Math.PI * 2
+          const dist = effectKey === "efeito_explosao" ? 18 + Math.random() * 28 : 12 + Math.random() * 22
+          const x1Pct = 50 + (Math.random() * 6 - 3)
+          const y1Pct = 50 + (Math.random() * 6 - 3)
+          const x2Pct = Math.max(5, Math.min(95, x1Pct + Math.cos(a) * dist))
+          const y2Pct = Math.max(5, Math.min(95, y1Pct + Math.sin(a) * dist))
+          return {
+            id: `${eventKey}_${token}_${i}`,
+            sizePx: effectKey === "efeito_explosao" ? 4 + Math.random() * 4 : 2.5 + Math.random() * 3.2,
+            x1Pct,
+            y1Pct,
+            x2Pct,
+            y2Pct,
+            delayMs: Math.floor(Math.random() * 90),
+            hue: baseHue + Math.random() * 20,
+          }
+        })
+        setVisualEffectActive({ effectKey, token, text, particles, rayHue: 45 })
+        window.setTimeout(() => {
+          setVisualEffectActive((cur) => (cur?.token === token ? null : cur))
+        }, durationMs + 60)
+        return
+      }
+
+      if (effectKey === "efeito_tremer") {
+        setVisualEffectActive({ effectKey, token })
+        window.setTimeout(() => {
+          setVisualEffectActive((cur) => (cur?.token === token ? null : cur))
+        }, durationMs)
+        return
+      }
+
+      // flash, raio, escurecer e texto ficam como overlays fixos
+      if (effectKey === "efeito_raio") {
+        setVisualEffectActive({ effectKey, token, text, rayHue: Math.floor(40 + Math.random() * 40) })
+      } else {
+        setVisualEffectActive({ effectKey, token, text })
+      }
+      window.setTimeout(() => {
+        setVisualEffectActive((cur) => (cur?.token === token ? null : cur))
+      }, durationMs + 60)
+    },
+    [visualEventsRef, visualEffectDurationMs, isValidVisualEffectKey]
+  )
+
   const endGame = useCallback(
     async (finalScore: number) => {
       setState("over")
       window.setTimeout(() => playTrimPlayGameOver(), 240)
+      triggerVisualEvent("gameover")
       const storedBest = loadBestLocal(barbershopId, clienteId)
       if (finalScore > storedBest) {
         setBestLocal(finalScore)
@@ -685,7 +889,7 @@ export function TrimPlayGame({
       unsyncedRoundPointsRef.current = 0
       await submitProgress(pendingRound)
     },
-    [barbershopId, clienteId, submitProgress]
+    [barbershopId, clienteId, submitProgress, triggerVisualEvent]
   )
 
   const updatePreview = useCallback((clientX: number, clientY: number, d: DragPayload) => {
@@ -732,10 +936,14 @@ export function TrimPlayGame({
       if (clearedThisMove) {
         const comboAudioLevel = Math.max(1, Math.min(4, Math.max(nextCombo, rounds)))
         playTrimPlayCombo(comboAudioLevel)
+        const comboEventKey: VisualEventKey =
+          nextCombo >= 4 ? "combo4" : nextCombo === 3 ? "combo3" : nextCombo === 2 ? "combo2" : "combo1"
+        triggerVisualEvent(comboEventKey, { comboLevel: Math.max(1, Math.min(4, nextCombo)) })
         if (nextCombo >= 2) showToast(`${nextCombo}x combo`)
       }
       if (boardJustCleared) {
         playTrimPlayVictory()
+        triggerVisualEvent("victory")
         showToast("AUGE! Tabuleiro limpo!")
         setPeakBanner(true)
         window.setTimeout(() => setPeakBanner(false), 1700)
@@ -782,7 +990,7 @@ export function TrimPlayGame({
         await endGame(nextScore)
       }
     },
-    [endGame, showToast, submitProgress]
+    [endGame, showToast, submitProgress, triggerVisualEvent]
   )
 
   const updatePreviewRef = useRef(updatePreview)
@@ -798,6 +1006,7 @@ export function TrimPlayGame({
     e.preventDefault()
     e.stopPropagation()
     unlockTrimPlayAudio()
+    void unlockVisualEffects()
 
     const el = e.currentTarget as HTMLElement
     try {
@@ -1006,6 +1215,49 @@ export function TrimPlayGame({
         </div>
       ) : null}
 
+      {visualEffectActive?.effectKey === "efeito_texto" && visualEffectActive.text ? (
+        <div className="fixed inset-0 z-[2147483645] pointer-events-none flex items-center justify-center px-6">
+          <div
+            key={visualEffectActive.token}
+            className="rounded-2xl border border-amber-300/70 bg-black/78 backdrop-blur-md px-7 py-4 shadow-[0_0_42px_rgba(245,158,11,0.25)] animate-in zoom-in-95 fade-in duration-200"
+          >
+            <p className="text-[#ffd86b] text-3xl sm:text-4xl font-extrabold tracking-wide text-center drop-shadow-[0_0_18px_rgba(245,158,11,0.7)]">
+              {visualEffectActive.text}
+            </p>
+          </div>
+        </div>
+      ) : null}
+
+      {visualEffectActive?.effectKey === "efeito_flash" ? (
+        <div
+          key={visualEffectActive.token}
+          className="fixed inset-0 z-[2147483643] pointer-events-none bg-white/25 trimplay-viz-flash"
+          style={{ ["--dur" as any]: `${visualEffectDurationMs("efeito_flash")}ms` } as CSSProperties}
+        />
+      ) : null}
+
+      {visualEffectActive?.effectKey === "efeito_escurecer" ? (
+        <div
+          key={visualEffectActive.token}
+          className="fixed inset-0 z-[2147483643] pointer-events-none bg-black/70 trimplay-viz-darken"
+          style={{ ["--dur" as any]: `${visualEffectDurationMs("efeito_escurecer")}ms` } as CSSProperties}
+        />
+      ) : null}
+
+      {visualEffectActive?.effectKey === "efeito_raio" ? (
+        <div
+          key={visualEffectActive.token}
+          className="fixed inset-0 z-[2147483643] pointer-events-none trimplay-viz-ray"
+          style={
+            {
+              ["--dur" as any]: `${visualEffectDurationMs("efeito_raio")}ms`,
+              background: "linear-gradient(115deg, rgba(255,212,107,0) 30%, rgba(255,212,107,0.55) 50%, rgba(255,212,107,0) 70%)",
+              mixBlendMode: "screen",
+            } as CSSProperties
+          }
+        />
+      ) : null}
+
       {drag ? (
         <div
           className="fixed z-[2147483645] pointer-events-none"
@@ -1152,52 +1404,107 @@ export function TrimPlayGame({
           >
             <div className="rounded-[11px] sm:rounded-[13px] bg-gradient-to-b from-[#0a0a0a] via-[#060606] to-[#030303] h-full w-full p-1 sm:p-2.5 shadow-[inset_0_2px_20px_rgba(0,0,0,0.65)] flex items-center justify-center">
               <div
+                key={visualEffectActive?.effectKey === "efeito_tremer" ? visualEffectActive.token : "base"}
                 ref={boardGridRef}
-                className="grid touch-none h-full w-full gap-0.5 sm:gap-1.5"
-                style={{
-                  gridTemplateColumns: `repeat(${SIZE}, minmax(0, 1fr))`,
-                  gridTemplateRows: `repeat(${SIZE}, minmax(0, 1fr))`,
-                }}
+                className={[
+                  "relative h-full w-full",
+                  visualEffectActive?.effectKey === "efeito_brilho" ? "trimplay-viz-glow" : "",
+                ].join(" ")}
+                style={
+                  visualEffectActive?.effectKey === "efeito_brilho"
+                    ? ({ ["--dur" as any]: `${visualEffectDurationMs("efeito_brilho")}ms` } as CSSProperties)
+                    : undefined
+                }
               >
-                {board.map((row, r) =>
-                  row.map((cell, c) => {
-                    const hs = cell ? HUE_STYLES[cell.hue % HUE_STYLES.length]! : null
-                    const inPreview =
-                      dropPreview &&
-                      drag?.piece.cells.some((p) => p.r + dropPreview.ar === r && p.c + dropPreview.ac === c)
-                    const previewClass = inPreview
-                      ? dropPreview.ok
-                        ? "ring-1 sm:ring-2 ring-emerald-400/95 ring-offset-1 sm:ring-offset-2 ring-offset-[#050505] bg-emerald-500/28 shadow-[0_0_12px_rgba(52,211,153,0.3)]"
-                        : "ring-1 sm:ring-2 ring-red-500/85 ring-offset-1 sm:ring-offset-2 ring-offset-[#050505] bg-red-500/2"
-                      : ""
+                <div
+                  className={[
+                    "grid touch-none h-full w-full gap-0.5 sm:gap-1.5",
+                    visualEffectActive?.effectKey === "efeito_tremer" ? "trimplay-viz-shake" : "",
+                  ].join(" ")}
+                  style={{
+                    gridTemplateColumns: `repeat(${SIZE}, minmax(0, 1fr))`,
+                    gridTemplateRows: `repeat(${SIZE}, minmax(0, 1fr))`,
+                    ...(visualEffectActive?.effectKey === "efeito_tremer"
+                      ? ({ ["--dur" as any]: `${visualEffectDurationMs("efeito_tremer")}ms` } as any)
+                      : {}),
+                  }}
+                >
+                  {board.map((row, r) =>
+                    row.map((cell, c) => {
+                      const hs = cell ? HUE_STYLES[cell.hue % HUE_STYLES.length]! : null
+                      const inPreview =
+                        dropPreview &&
+                        drag?.piece.cells.some((p) => p.r + dropPreview.ar === r && p.c + dropPreview.ac === c)
+                      const previewClass = inPreview
+                        ? dropPreview.ok
+                          ? "ring-1 sm:ring-2 ring-emerald-400/95 ring-offset-1 sm:ring-offset-2 ring-offset-[#050505] bg-emerald-500/28 shadow-[0_0_12px_rgba(52,211,153,0.3)]"
+                          : "ring-1 sm:ring-2 ring-red-500/85 ring-offset-1 sm:ring-offset-2 ring-offset-[#050505] bg-red-500/2"
+                        : ""
 
-                    return (
-                      <div
-                        key={`${r}_${c}`}
-                        data-board-cell
-                        data-br={r}
-                        data-bc={c}
-                        className={[
-                          "min-h-0 min-w-0 rounded-[5px] sm:rounded-[10px] border transition-all duration-150 ease-out",
-                          !cell
-                            ? "bg-gradient-to-br from-[#1c1c1c] to-[#0e0e0e] border-[#2e2818]/95 shadow-[inset_0_2px_8px_rgba(0,0,0,0.55)]"
-                            : "",
-                          !cell ? previewClass : "",
-                        ].join(" ")}
-                        style={
-                          hs
-                            ? {
-                                ...glossyBlockStyle(hs),
-                                borderWidth: 1,
-                                borderStyle: "solid",
-                              }
-                            : undefined
-                        }
-                        aria-label={`Célula ${r + 1},${c + 1}`}
-                      />
-                    )
-                  })
-                )}
+                      return (
+                        <div
+                          key={`${r}_${c}`}
+                          data-board-cell
+                          data-br={r}
+                          data-bc={c}
+                          className={[
+                            "min-h-0 min-w-0 rounded-[5px] sm:rounded-[10px] border transition-all duration-150 ease-out",
+                            !cell
+                              ? "bg-gradient-to-br from-[#1c1c1c] to-[#0e0e0e] border-[#2e2818]/95 shadow-[inset_0_2px_8px_rgba(0,0,0,0.55)]"
+                              : "",
+                            !cell ? previewClass : "",
+                          ].join(" ")}
+                          style={
+                            hs
+                              ? {
+                                  ...glossyBlockStyle(hs),
+                                  borderWidth: 1,
+                                  borderStyle: "solid",
+                                }
+                              : undefined
+                          }
+                          aria-label={`Célula ${r + 1},${c + 1}`}
+                        />
+                      )
+                    })
+                  )}
+                </div>
+
+                {(visualEffectActive?.effectKey === "efeito_particulas" || visualEffectActive?.effectKey === "efeito_explosao") &&
+                visualEffectActive.particles?.length ? (
+                  <div className="absolute inset-0 pointer-events-none overflow-hidden">
+                    {visualEffectActive.particles.map((p) => {
+                      const durationMs = visualEffectDurationMs(visualEffectActive.effectKey)
+                      return (
+                        <div
+                          key={p.id}
+                          className="trimplay-particle-fly"
+                          style={
+                            {
+                              left: `${p.x1Pct}%`,
+                              top: `${p.y1Pct}%`,
+                              ["--x1" as any]: `${p.x1Pct}%`,
+                              ["--y1" as any]: `${p.y1Pct}%`,
+                              ["--x2" as any]: `${p.x2Pct}%`,
+                              ["--y2" as any]: `${p.y2Pct}%`,
+                              ["--size" as any]: `${p.sizePx}px`,
+                              ["--h" as any]: `${p.hue}`,
+                              ["--delay" as any]: `${p.delayMs}ms`,
+                              ["--dur" as any]: `${durationMs}ms`,
+                            } as CSSProperties
+                          }
+                        />
+                      )
+                    })}
+                  </div>
+                ) : null}
+
+                {visualEffectActive?.effectKey === "efeito_explosao" ? (
+                  <div
+                    className="trimplay-explosion-ring"
+                    style={{ ["--dur" as any]: `${visualEffectDurationMs("efeito_explosao")}ms` } as CSSProperties}
+                  />
+                ) : null}
               </div>
             </div>
           </div>
