@@ -1314,7 +1314,7 @@ export function TrimPlayGame({
         </div>
       ) : null}
 
-      {impactFX?.flash !== "off" ? (
+      {impactFX && impactFX.flash !== "off" ? (
         <div
           key={`flash-${impactFX.token}`}
           className={[
