@@ -567,6 +567,17 @@ export function TrimPlayGame({
     setBestLocal(best)
   }, [barbershopId, clienteId])
 
+  const refreshMyRanking = useCallback(async () => {
+    try {
+      if (!navigator.onLine) return
+      const ranking = await fetchTrimPlayRanking({ barbershopId, clienteId })
+      saveCachedRanking(barbershopId, { top: ranking.top, my: ranking.my })
+      setMyRanking(ranking.my ? { rank: ranking.my.rank, score: ranking.my.score } : null)
+    } catch {
+      // ranking temporariamente indisponivel
+    }
+  }, [barbershopId, clienteId])
+
   useEffect(() => {
     recentTemplatesRef.current = hand.filter(Boolean).map((x) => x!.templateId)
     // executa uma vez com a mão inicial
@@ -574,23 +585,20 @@ export function TrimPlayGame({
   }, [])
 
   useEffect(() => {
-    let cancelled = false
-    async function loadMyRanking() {
-      try {
-        if (!navigator.onLine) return
-        const ranking = await fetchTrimPlayRanking({ barbershopId, clienteId })
-        if (cancelled) return
-        saveCachedRanking(barbershopId, { top: ranking.top, my: ranking.my })
-        setMyRanking(ranking.my ? { rank: ranking.my.rank, score: ranking.my.score } : null)
-      } catch {
-        // Sem bloquear o jogo caso o ranking esteja indisponível.
-      }
-    }
-    void loadMyRanking()
+    void refreshMyRanking()
+  }, [refreshMyRanking])
+
+  useEffect(() => {
+    const refresh = () => void refreshMyRanking()
+    const timer = window.setInterval(refresh, 12000)
+    window.addEventListener("focus", refresh)
+    document.addEventListener("visibilitychange", refresh)
     return () => {
-      cancelled = true
+      window.clearInterval(timer)
+      window.removeEventListener("focus", refresh)
+      document.removeEventListener("visibilitychange", refresh)
     }
-  }, [barbershopId, clienteId])
+  }, [refreshMyRanking])
 
   const syncPending = async () => {
     const pending = loadPendingScore(barbershopId, clienteId)
@@ -624,9 +632,7 @@ export function TrimPlayGame({
             clienteName: clienteNome,
             score: deltaScore,
           })
-          const ranking = await fetchTrimPlayRanking({ barbershopId, clienteId })
-          saveCachedRanking(barbershopId, { top: ranking.top, my: ranking.my })
-          setMyRanking(ranking.my ? { rank: ranking.my.rank, score: ranking.my.score } : null)
+          await refreshMyRanking()
           setSyncError(null)
         } catch (e) {
           savePendingScore(barbershopId, clienteId, deltaScore)
@@ -637,7 +643,7 @@ export function TrimPlayGame({
         setSyncError("Sem internet: pontuação será enviada quando voltar.")
       }
     },
-    [barbershopId, clienteId, clienteNome]
+    [barbershopId, clienteId, clienteNome, refreshMyRanking]
   )
 
   useEffect(() => {
@@ -1027,13 +1033,14 @@ export function TrimPlayGame({
 
       <header className="relative z-20 shrink-0 flex items-center gap-2 px-2 sm:px-3 pt-[max(0.25rem,env(safe-area-inset-top))] pb-2 border-b border-[#3d3520]/55 bg-[#080807]/85 backdrop-blur-md">
         <div className="flex-1 min-w-0 pr-1">
-          <p className="text-[12px] sm:text-sm text-white/75 tabular-nums leading-tight truncate mt-0.5">
-            <span className="inline-flex items-center gap-1 text-[#f0d060] font-semibold">
-              <Trophy className="h-3 w-3" />
-              <span>#{myRanking?.rank ?? "--"}</span>
+          <p className="text-[14px] sm:text-base text-white/80 tabular-nums leading-tight truncate mt-0.5">
+            <span className="inline-flex items-center gap-1.5 text-[#f0d060] font-semibold drop-shadow-[0_0_6px_rgba(240,208,96,0.25)]">
+              <Trophy className="h-4 w-4 sm:h-[18px] sm:w-[18px]" />
+              <span className="tracking-[0.02em]">#{myRanking?.rank ?? "--"}</span>
             </span>
             <span className="text-white/40"> · </span>
-            <span>{bestLocal} melhor</span>
+            <span className="font-semibold text-white/90">{myRanking?.score ?? bestLocal}</span>
+            <span className="text-white/45 text-[12px] sm:text-sm ml-1">pts</span>
           </p>
         </div>
         <div className="flex items-center gap-1 shrink-0">
