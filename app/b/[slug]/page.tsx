@@ -205,14 +205,27 @@ export default function BarbeariaPage() {
   }, [publicMeta, slug])
 
   useEffect(() => {
+    const forceAccountUi =
+      typeof window !== "undefined" && /[?&](conta|signup|login)=1(?:&|$)/i.test(window.location.search)
     const c = getClienteLogado(slug)
     if (c) {
       setClienteLogado(c)
       setAuthPhase("logado")
       setDadosCliente({ nome: c.nome, telefone: c.telefone, email: c.email })
-    } else {
-      setAuthPhase("cadastro")
+      return
     }
+
+    // Fluxo padrão para o link público do cliente: agendar sem precisar criar conta.
+    // Só mostra Cadastre-se/Entrar se o usuário passar ?conta=1.
+    if (forceAccountUi) {
+      setAuthPhase("cadastro")
+      return
+    }
+
+    const convidado = criarClienteConvidado(slug, "Cliente")
+    setClienteLogado(convidado)
+    setAuthPhase("logado")
+    setDadosCliente({ nome: convidado.nome, telefone: convidado.telefone, email: convidado.email })
   }, [slug])
 
   /** Reabrir o link: mostra resumo do último agendamento confirmado deste cliente */
