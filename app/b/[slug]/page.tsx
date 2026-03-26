@@ -483,6 +483,18 @@ export default function BarbeariaPage() {
     setHorarioSelecionado(null)
   }
 
+  const remarcarAgendamento = () => {
+    // Cancela o agendamento confirmado e volta para escolha de horários,
+    // mantendo serviços/unidade/profissional previamente escolhidos.
+    clearConfirmedBooking(slug)
+    setBookingSummary(null)
+    setAgendamentoConfirmado(false)
+    setTrimPlayStage("intro")
+    setEtapa(3)
+    setDataSelecionada(null)
+    setHorarioSelecionado(null)
+  }
+
   const barbershopId = publicMeta?.id ?? ""
 
   // —— Telas de acesso: loading, cadastro, login ——
@@ -776,10 +788,10 @@ export default function BarbeariaPage() {
               </Button>
               <Button
                 variant="outline"
-                onClick={iniciarNovoAgendamento}
+                onClick={remarcarAgendamento}
                 className="w-full border-[#FFD700]/40 text-[#FFD700] hover:bg-[#FFD700]/10"
               >
-                Fazer novo agendamento
+                Remarcar agendamento
               </Button>
             </div>
           </CardContent>
