@@ -1090,7 +1090,7 @@ export function TrimPlayGame({
         </div>
       </header>
 
-      <main className="relative z-0 flex-1 min-h-0 flex flex-col w-full max-w-lg mx-auto touch-pan-y pt-5 sm:pt-7">
+      <main className="relative z-0 flex-1 min-h-0 flex flex-col w-full max-w-lg mx-auto touch-pan-y pt-7 sm:pt-9">
         <div className="shrink-0 flex justify-center pt-2 sm:pt-3 pb-2 sm:pb-3">
           <div className="flex flex-col items-center gap-1.5">
             <span className="text-5xl sm:text-6xl leading-none font-semibold tracking-tight text-white/90 tabular-nums">
