@@ -275,8 +275,8 @@ function measureBoardFromDom(gridEl: HTMLElement): GridMeasure | null {
 }
 
 /**
- * Entre todos os encaixes válidos, escolhe o que alinha melhor o canto da peça (em pixels).
- * Tolerância ~0,75 célula: corrige subpixel, padding e diferença ghost/tabuleiro sem “teleportar” a peça.
+ * Entre todos os encaixes válidos, escolhe o mais próximo do ghost (canto da peça).
+ * Tolerância ampla (~3+ células): estilo puzzle rápido — não precisa encostar no alvo.
  */
 function pickDropAnchor(
   shapeLeft: number,
@@ -305,7 +305,10 @@ function pickDropAnchor(
   }
 
   if (!best) return null
-  const maxSlop = Math.min(m.stepX, m.stepY) * 0.95
+  const cell = Math.min(m.stepX, m.stepY)
+  /** Raio em células: soltar longe do alvo ainda encaixa no encaixe válido mais próximo (puzzle rápido) */
+  const maxSlopCells = 5.25
+  const maxSlop = cell * maxSlopCells
   if (bestPx > maxSlop * maxSlop) return null
   return best
 }
@@ -861,8 +864,8 @@ export function TrimPlayGame({
               variant="fullscreen"
               header={
                 <div className="flex items-center gap-2 text-[#f0d060]">
-                  <span className="font-semibold">Top 10</span>
-                  <span className="text-white/35 text-sm font-normal">· melhores pontuações</span>
+                  <span className="font-semibold">Ranking</span>
+                  <span className="text-white/35 text-sm font-normal">· todos os jogadores</span>
                 </div>
               }
             />

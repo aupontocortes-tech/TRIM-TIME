@@ -16,7 +16,6 @@ export async function GET(request: Request) {
     const top = await prisma.trimPlayScore.findMany({
       where: { barbershopId },
       orderBy: { bestScore: "desc" },
-      take: 10,
       select: { clienteId: true, clienteNome: true, bestScore: true },
     })
 
