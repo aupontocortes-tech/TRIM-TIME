@@ -125,7 +125,8 @@ function shapeDims(cells: ShapeCell[]) {
 }
 
 type BoardCell = { hue: number } | null
-type HandPiece = { id: string; cells: ShapeCell[]; hue: number }
+type HandPiece = { id: string; cells: ShapeCell[]; hue: number; templateId: string }
+type ShapeTemplateDef = { id: string; cells: ShapeCell[]; difficulty: 1 | 2 | 3; weight: number }
 
 type DragPayload = {
   slot: number
@@ -140,18 +141,105 @@ function emptyBoard(): BoardCell[][] {
   return Array.from({ length: SIZE }, () => Array.from({ length: SIZE }, () => null))
 }
 
-function randomPiece(): HandPiece {
-  const cells = SHAPE_TEMPLATES[Math.floor(Math.random() * SHAPE_TEMPLATES.length)]!
+const SHAPE_LIBRARY: ShapeTemplateDef[] = SHAPE_TEMPLATES.map((cells, i) => {
+  const area = cells.length
+  const { h, w } = shapeDims(cells)
+  const span = Math.max(h, w)
+  const isLine4 = area === 4 && (h === 1 || w === 1)
+  const difficulty: 1 | 2 | 3 =
+    area <= 2 ? 1 : area >= 4 || span >= 4 || isLine4 ? 3 : area === 3 && span >= 3 ? 2 : 2
+  return { id: `s${i + 1}`, cells, difficulty, weight: difficulty === 1 ? 1.2 : difficulty === 2 ? 1 : 0.85 }
+})
+
+function countPlacements(board: BoardCell[][], cells: ShapeCell[]) {
+  let count = 0
+  for (let r = 0; r < SIZE; r++) {
+    for (let c = 0; c < SIZE; c++) {
+      if (canPlace(board, cells, r, c)) count++
+    }
+  }
+  return count
+}
+
+function boardFillRatio(board: BoardCell[][]) {
+  let occupied = 0
+  for (const row of board) {
+    for (const cell of row) if (cell) occupied++
+  }
+  return occupied / (SIZE * SIZE)
+}
+
+function targetDifficultyFromState(score: number, fillRatio: number): 1 | 2 | 3 {
+  const scoreTier = score >= 3600 ? 3 : score >= 1500 ? 2 : 1
+  const pressure = fillRatio >= 0.58 ? 1 : fillRatio <= 0.22 ? -1 : 0
+  return Math.max(1, Math.min(3, scoreTier + pressure)) as 1 | 2 | 3
+}
+
+function weightedPick<T>(entries: { item: T; weight: number }[]): T {
+  const total = entries.reduce((acc, e) => acc + Math.max(0, e.weight), 0)
+  let roll = Math.random() * Math.max(total, 0.0001)
+  for (const e of entries) {
+    roll -= Math.max(0, e.weight)
+    if (roll <= 0) return e.item
+  }
+  return entries[entries.length - 1]!.item
+}
+
+function makePiece(template: ShapeTemplateDef): HandPiece {
   const hue = Math.floor(Math.random() * 6)
   return {
     id: `p_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
-    cells: [...cells],
+    cells: [...template.cells],
     hue,
+    templateId: template.id,
   }
 }
 
-function dealHand(): (HandPiece | null)[] {
-  return [randomPiece(), randomPiece(), randomPiece()]
+function pickTemplateForBoard(board: BoardCell[][], score: number, recentIds: string[]): ShapeTemplateDef {
+  const fillRatio = boardFillRatio(board)
+  const targetDifficulty = targetDifficultyFromState(score, fillRatio)
+
+  const fitData = SHAPE_LIBRARY.map((t) => ({ t, fits: countPlacements(board, t.cells) }))
+  const fitCandidates = fitData.filter((x) => x.fits > 0)
+  const nearLosing = fillRatio >= 0.68 || fitCandidates.length <= 4
+
+  if (nearLosing && Math.random() < 0.32) {
+    const saver = fitCandidates.filter((x) => x.t.difficulty === 1 || x.t.cells.length <= 3)
+    if (saver.length > 0) {
+      return weightedPick(
+        saver.map((x) => ({
+          item: x.t,
+          weight: x.fits * (recentIds.includes(x.t.id) ? 0.45 : 1),
+        }))
+      )
+    }
+  }
+
+  const source = fitCandidates.length > 0 ? fitCandidates : fitData
+  return weightedPick(
+    source.map((x) => {
+      const diffDistance = Math.abs(x.t.difficulty - targetDifficulty)
+      const difficultyWeight = diffDistance === 0 ? 1.5 : diffDistance === 1 ? 1 : 0.65
+      const fitWeight = Math.max(1, Math.min(14, x.fits + 1))
+      const repeatPenalty = recentIds.includes(x.t.id) ? 0.42 : 1
+      return {
+        item: x.t,
+        weight: x.t.weight * difficultyWeight * fitWeight * repeatPenalty,
+      }
+    })
+  )
+}
+
+function dealHand(board: BoardCell[][], score: number, recentIds: string[]): (HandPiece | null)[] {
+  const next: HandPiece[] = []
+  const recent = [...recentIds]
+  for (let i = 0; i < 3; i++) {
+    const template = pickTemplateForBoard(board, score, recent)
+    next.push(makePiece(template))
+    recent.push(template.id)
+    if (recent.length > 8) recent.shift()
+  }
+  return next
 }
 
 function canPlace(board: BoardCell[][], cells: ShapeCell[], ar: number, ac: number) {
@@ -394,9 +482,13 @@ export function TrimPlayGame({
   onExit: () => void
 }) {
   const [board, setBoard] = useState<BoardCell[][]>(() => emptyBoard())
-  const [hand, setHand] = useState<(HandPiece | null)[]>(() => dealHand())
+  const [hand, setHand] = useState<(HandPiece | null)[]>(() => {
+    const base = emptyBoard()
+    return dealHand(base, 0, [])
+  })
   const [score, setScore] = useState(0)
   const [moves, setMoves] = useState(0)
+  const [comboStreak, setComboStreak] = useState(0)
   const [state, setState] = useState<"playing" | "over">("playing")
   const [toast, setToast] = useState<string | null>(null)
   const [drag, setDrag] = useState<DragPayload | null>(null)
@@ -458,6 +550,9 @@ export function TrimPlayGame({
   const dragRef = useRef<DragPayload | null>(null)
   const pointerCaptureRef = useRef<{ el: HTMLElement; id: number } | null>(null)
   const dragPointerListenersCleanupRef = useRef<(() => void) | null>(null)
+  const comboStreakRef = useRef(0)
+  const recentTemplatesRef = useRef<string[]>([])
+  const unsyncedRoundPointsRef = useRef(0)
 
   boardRef.current = board
   handRef.current = hand
@@ -465,11 +560,18 @@ export function TrimPlayGame({
   movesRef.current = moves
   stateRef.current = state
   dragRef.current = drag
+  comboStreakRef.current = comboStreak
 
   useEffect(() => {
     const best = loadBestLocal(barbershopId, clienteId)
     setBestLocal(best)
   }, [barbershopId, clienteId])
+
+  useEffect(() => {
+    recentTemplatesRef.current = hand.filter(Boolean).map((x) => x!.templateId)
+    // executa uma vez com a mão inicial
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -511,6 +613,33 @@ export function TrimPlayGame({
     }
   }
 
+  const submitProgress = useCallback(
+    async (deltaScore: number) => {
+      if (deltaScore <= 0) return
+      if (navigator.onLine) {
+        try {
+          await submitTrimPlayScore({
+            barbershopId,
+            clienteId,
+            clienteName: clienteNome,
+            score: deltaScore,
+          })
+          const ranking = await fetchTrimPlayRanking({ barbershopId, clienteId })
+          saveCachedRanking(barbershopId, { top: ranking.top, my: ranking.my })
+          setMyRanking(ranking.my ? { rank: ranking.my.rank, score: ranking.my.score } : null)
+          setSyncError(null)
+        } catch (e) {
+          savePendingScore(barbershopId, clienteId, deltaScore)
+          setSyncError(e instanceof Error ? e.message : "Sem conexão para sincronizar")
+        }
+      } else {
+        savePendingScore(barbershopId, clienteId, deltaScore)
+        setSyncError("Sem internet: pontuação será enviada quando voltar.")
+      }
+    },
+    [barbershopId, clienteId, clienteNome]
+  )
+
   useEffect(() => {
     const run = () => void syncPending()
     window.addEventListener("online", run)
@@ -535,29 +664,11 @@ export function TrimPlayGame({
         setBestLocal(finalScore)
         saveBestLocal(barbershopId, clienteId, finalScore)
       }
-      if (navigator.onLine) {
-        try {
-          await submitTrimPlayScore({
-            barbershopId,
-            clienteId,
-            clienteName: clienteNome,
-            score: finalScore,
-          })
-          clearPendingScore(barbershopId, clienteId)
-          const ranking = await fetchTrimPlayRanking({ barbershopId, clienteId })
-          saveCachedRanking(barbershopId, { top: ranking.top, my: ranking.my })
-          setMyRanking(ranking.my ? { rank: ranking.my.rank, score: ranking.my.score } : null)
-          setSyncError(null)
-        } catch (e) {
-          savePendingScore(barbershopId, clienteId, finalScore)
-          setSyncError(e instanceof Error ? e.message : "Sem conexão para sincronizar")
-        }
-      } else {
-        savePendingScore(barbershopId, clienteId, finalScore)
-        setSyncError("Sem internet: pontuação será enviada quando voltar.")
-      }
+      const pendingRound = unsyncedRoundPointsRef.current
+      unsyncedRoundPointsRef.current = 0
+      await submitProgress(pendingRound)
     },
-    [barbershopId, clienteId, clienteNome]
+    [barbershopId, clienteId, submitProgress]
   )
 
   const updatePreview = useCallback((clientX: number, clientY: number, d: DragPayload) => {
@@ -596,14 +707,22 @@ export function TrimPlayGame({
 
       const next = placePiece(boardNow, piece.cells, ar, ac, piece.hue)
       const { board: afterClear, cellsCleared, linesTotal, rounds } = resolveClears(next)
+      const clearedThisMove = linesTotal > 0
+      const nextCombo = clearedThisMove ? comboStreakRef.current + 1 : 0
+      setComboStreak(nextCombo)
 
-      if (cellsCleared > 0) {
-        if (rounds >= 2) playTrimPlayCombo(rounds)
+      if (clearedThisMove) {
+        if (nextCombo >= 2 || rounds >= 2) playTrimPlayCombo(Math.max(nextCombo, rounds))
         else playTrimPlayLineClear()
+        if (nextCombo >= 2) showToast(`${nextCombo}x combo`)
       }
 
-      const points =
-        cellsCleared > 0 ? cellsCleared * 15 + linesTotal * 80 + (linesTotal >= 2 ? 120 : 0) : piece.cells.length * 2
+      const placePoints = piece.cells.length * 3
+      const clearPoints = clearedThisMove ? cellsCleared * 12 + linesTotal * 90 : 0
+      const multiLineBonus = linesTotal >= 2 ? linesTotal * 70 : 0
+      const comboBonus = clearedThisMove ? Math.max(0, nextCombo - 1) * 55 + (nextCombo >= 3 ? nextCombo * 20 : 0) : 0
+      const points = placePoints + clearPoints + multiLineBonus + comboBonus
+      unsyncedRoundPointsRef.current += points
       const nextScore = scoreNow + points
       const nextMoves = movesNow + 1
 
@@ -612,7 +731,13 @@ export function TrimPlayGame({
 
       let filledHand = newHand
       if (newHand.every((x) => x === null)) {
-        filledHand = dealHand()
+        const roundDelta = unsyncedRoundPointsRef.current
+        unsyncedRoundPointsRef.current = 0
+        void submitProgress(roundDelta)
+        filledHand = dealHand(afterClear, nextScore, recentTemplatesRef.current)
+        recentTemplatesRef.current = [...recentTemplatesRef.current, ...filledHand.filter(Boolean).map((x) => x!.templateId)].slice(
+          -8
+        )
         if (!canPlaceAnyPiece(afterClear, filledHand)) {
           setBoard(afterClear)
           setHand(filledHand)
@@ -632,7 +757,7 @@ export function TrimPlayGame({
         await endGame(nextScore)
       }
     },
-    [endGame, showToast]
+    [endGame, showToast, submitProgress]
   )
 
   const updatePreviewRef = useRef(updatePreview)
@@ -788,15 +913,20 @@ export function TrimPlayGame({
       document.documentElement.style.overscrollBehavior = ""
     }
     setBoard(emptyBoard())
-    setHand(dealHand())
+    const freshBoard = emptyBoard()
+    const freshHand = dealHand(freshBoard, 0, [])
+    recentTemplatesRef.current = freshHand.filter(Boolean).map((x) => x!.templateId)
+    setHand(freshHand)
     setScore(0)
     setMoves(0)
+    setComboStreak(0)
     setState("playing")
     setSyncError(null)
     setToast(null)
     setDrag(null)
     setDropPreview(null)
     dragRef.current = null
+    unsyncedRoundPointsRef.current = 0
   }
 
   return (
@@ -962,9 +1092,16 @@ export function TrimPlayGame({
 
       <main className="relative z-0 flex-1 min-h-0 flex flex-col w-full max-w-lg mx-auto touch-pan-y">
         <div className="shrink-0 flex justify-center pt-2 sm:pt-3 pb-2 sm:pb-3">
-          <span className="text-5xl sm:text-6xl leading-none font-semibold tracking-tight text-white/90 tabular-nums">
-            {score}
-          </span>
+          <div className="flex flex-col items-center gap-1.5">
+            <span className="text-5xl sm:text-6xl leading-none font-semibold tracking-tight text-white/90 tabular-nums">
+              {score}
+            </span>
+            {comboStreak >= 2 ? (
+              <span className="text-[11px] sm:text-xs px-2 py-0.5 rounded-full border border-amber-400/40 bg-amber-500/15 text-amber-200 font-semibold">
+                Combo x{comboStreak}
+              </span>
+            ) : null}
+          </div>
         </div>
         {/* Tabuleiro quadrado: encaixa na altura/largura úteis do viewport */}
         <div className="shrink-0 flex items-start justify-center px-1 pt-0.5 pb-2 sm:pt-1 sm:pb-2">
@@ -1027,7 +1164,7 @@ export function TrimPlayGame({
             </div>
           </div>
         </div>
-        <div className="flex-1 min-h-0" />
+        <div className="shrink-0 h-5 sm:h-8" />
 
         {/* Três peças sempre na mesma linha; altura fixa enxuta */}
         <section className="shrink-0 border-t border-[#3d3520]/50 bg-[#060605]/90 px-1.5 sm:px-3 pt-2 pb-[max(0.35rem,env(safe-area-inset-bottom))]">
