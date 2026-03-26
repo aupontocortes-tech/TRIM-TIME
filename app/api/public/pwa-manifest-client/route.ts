@@ -19,7 +19,9 @@ export async function GET(req: Request) {
     short_name: "Agendar",
     description: "Agende seu horário na barbearia",
     start_url: `/b/${encodeURIComponent(slug)}`,
-    scope: "/",
+    // Importante: usar scope dedicado evita o PWA "do barbeiro" (start_url: /painel)
+    // sobrescrever o comportamento ao instalar/recusar cache no navegador.
+    scope: `/b/${encodeURIComponent(slug)}`,
     display: "standalone",
     background_color: "#0a0a0a",
     theme_color: "#c9a227",
