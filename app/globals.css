@@ -280,3 +280,240 @@
 .trimplay-viz-glow {
   animation: trimplay-viz-glow var(--dur, 650ms) ease-out forwards;
 }
+
+/* --- Trim Play: impacto (combo / vitória) — tela cheia --- */
+@keyframes trimplay-shake-screen-light {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  20% {
+    transform: translate3d(-6px, 3px, 0) rotate(-0.35deg);
+  }
+  40% {
+    transform: translate3d(7px, -2px, 0) rotate(0.35deg);
+  }
+  60% {
+    transform: translate3d(-5px, 2px, 0);
+  }
+  80% {
+    transform: translate3d(4px, -3px, 0);
+  }
+}
+
+@keyframes trimplay-shake-screen-med {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  15% {
+    transform: translate3d(-11px, 5px, 0) rotate(-0.6deg);
+  }
+  35% {
+    transform: translate3d(12px, -6px, 0) rotate(0.6deg);
+  }
+  55% {
+    transform: translate3d(-10px, 4px, 0);
+  }
+  75% {
+    transform: translate3d(9px, -5px, 0);
+  }
+}
+
+@keyframes trimplay-shake-screen-heavy {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  12% {
+    transform: translate3d(-18px, 10px, 0) rotate(-1deg);
+  }
+  28% {
+    transform: translate3d(20px, -9px, 0) rotate(1deg);
+  }
+  44% {
+    transform: translate3d(-16px, 8px, 0);
+  }
+  60% {
+    transform: translate3d(17px, -10px, 0) rotate(0.8deg);
+  }
+  76% {
+    transform: translate3d(-12px, 6px, 0);
+  }
+}
+
+.trimplay-shake-screen-light {
+  animation: trimplay-shake-screen-light var(--shake-ms, 640ms) ease-in-out both;
+  will-change: transform;
+}
+
+.trimplay-shake-screen-med {
+  animation: trimplay-shake-screen-med var(--shake-ms, 780ms) ease-in-out both;
+  will-change: transform;
+}
+
+.trimplay-shake-screen-heavy {
+  animation: trimplay-shake-screen-heavy var(--shake-ms, 980ms) ease-in-out both;
+  will-change: transform;
+}
+
+@keyframes trimplay-impact-flash-micro {
+  0% {
+    opacity: 0;
+  }
+  40% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes trimplay-impact-flash-strong {
+  0% {
+    opacity: 0;
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.trimplay-impact-flash {
+  animation-timing-function: ease-out;
+  animation-fill-mode: forwards;
+}
+
+.trimplay-impact-flash--micro {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.95) 0%,
+    rgba(255, 236, 180, 0.55) 38%,
+    transparent 88%
+  );
+  mix-blend-mode: screen;
+  animation-name: trimplay-impact-flash-micro;
+}
+
+.trimplay-impact-flash--strong {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 1) 0%,
+    rgba(255, 214, 120, 0.75) 35%,
+    rgba(255, 160, 60, 0.2) 70%,
+    transparent 100%
+  );
+  mix-blend-mode: screen;
+  animation-name: trimplay-impact-flash-strong;
+}
+
+@keyframes trimplay-hero-burst {
+  0% {
+    transform: scale(0.32);
+    opacity: 0;
+    filter: blur(8px);
+  }
+  16% {
+    transform: scale(1.22);
+    opacity: 1;
+    filter: blur(0);
+  }
+  38% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  68% {
+    transform: scale(0.94);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.78);
+    opacity: 0;
+    filter: blur(4px);
+  }
+}
+
+.trimplay-hero-burst {
+  animation: trimplay-hero-burst var(--hero-dur, 1000ms)
+    cubic-bezier(0.33, 1.35, 0.52, 1) forwards;
+  will-change: transform, opacity, filter;
+}
+
+.trimplay-particle-spark {
+  width: calc(var(--size, 5px) * 2.8) !important;
+  height: calc(var(--size, 5px) * 0.55) !important;
+  border-radius: 9999px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    hsla(var(--h, 45), 100%, 70%, 0.95),
+    rgba(255, 255, 255, 0.95),
+    hsla(var(--h, 45), 100%, 68%, 0.9),
+    transparent
+  ) !important;
+  box-shadow:
+    0 0 10px hsla(var(--h, 45), 100%, 58%, 0.95),
+    0 0 18px hsla(var(--h, 45), 100%, 50%, 0.5);
+}
+
+.trimplay-viz-ray-strong {
+  opacity: 1;
+}
+
+.trimplay-explosion-ring--impact {
+  width: min(72vw, 420px);
+  height: min(72vw, 420px);
+  border-width: 3px;
+  box-shadow:
+    0 0 40px rgba(255, 212, 107, 0.55),
+    inset 0 0 24px rgba(255, 200, 80, 0.22);
+}
+
+@keyframes trimplay-go-backdrop {
+  from {
+    background-color: rgba(0, 0, 0, 0);
+  }
+  to {
+    background-color: rgba(0, 0, 0, 0.9);
+  }
+}
+
+.trimplay-gameover-backdrop {
+  animation: trimplay-go-backdrop 1.15s ease-out forwards;
+}
+
+@keyframes trimplay-go-card-in {
+  from {
+    opacity: 0;
+    transform: scale(0.92) translateY(16px);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+    filter: blur(0);
+  }
+}
+
+.trimplay-gameover-card {
+  animation: trimplay-go-card-in 0.75s cubic-bezier(0.34, 1.25, 0.64, 1) 0.2s both;
+}
+
+@keyframes trimplay-go-title {
+  0% {
+    opacity: 0;
+    transform: scale(0.88);
+    letter-spacing: 0.15em;
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+    letter-spacing: 0.05em;
+  }
+}
+
+.trimplay-gameover-title {
+  animation: trimplay-go-title 0.85s ease-out 0.35s both;
+}

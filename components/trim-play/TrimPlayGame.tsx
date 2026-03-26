@@ -33,75 +33,122 @@ import {
 
 const SIZE = 8
 
-type VisualEventKey = "combo1" | "combo2" | "combo3" | "combo4" | "victory" | "gameover"
-
-type VisualEffectKey =
-  | "efeito_texto"
-  | "efeito_brilho"
-  | "efeito_tremer"
-  | "efeito_flash"
-  | "efeito_particulas"
-  | "efeito_explosao"
-  | "efeito_raio"
-  | "efeito_escurecer"
-
-type VisualEffectAsset = { id: string; effectKey: string }
-
-/** Alinha com o admin/API: aceita `texto`, `efeito_texto`, etc. */
-function toVisualEffectKey(raw: unknown): VisualEffectKey | null {
-  const s = String(raw ?? "")
-    .trim()
-    .toLowerCase()
-    .replace(/[\s-]/g, "_")
-  const map: Record<string, VisualEffectKey> = {
-    texto: "efeito_texto",
-    efeito_texto: "efeito_texto",
-    brilho: "efeito_brilho",
-    efeito_brilho: "efeito_brilho",
-    tremer: "efeito_tremer",
-    efeito_tremer: "efeito_tremer",
-    flash: "efeito_flash",
-    efeito_flash: "efeito_flash",
-    particulas: "efeito_particulas",
-    particula: "efeito_particulas",
-    efeito_particulas: "efeito_particulas",
-    explosao: "efeito_explosao",
-    efeito_explosao: "efeito_explosao",
-    raio: "efeito_raio",
-    efeito_raio: "efeito_raio",
-    escurecer: "efeito_escurecer",
-    efeito_escurecer: "efeito_escurecer",
-  }
-  return map[s] ?? null
-}
-
-const FALLBACK_VISUAL_EVENTS: Record<VisualEventKey, VisualEffectAsset[]> = {
-  combo1: [{ id: "fallback_combo1_0", effectKey: "efeito_texto" }],
-  combo2: [{ id: "fallback_combo2_0", effectKey: "efeito_flash" }],
-  combo3: [{ id: "fallback_combo3_0", effectKey: "efeito_tremer" }],
-  combo4: [{ id: "fallback_combo4_0", effectKey: "efeito_explosao" }],
-  victory: [{ id: "fallback_victory_0", effectKey: "efeito_raio" }],
-  gameover: [{ id: "fallback_gameover_0", effectKey: "efeito_escurecer" }],
-}
-
-function normalizeVisualAssets(list: VisualEffectAsset[] | undefined): VisualEffectAsset[] {
-  if (!Array.isArray(list)) return []
-  return list.map((a) => {
-    const k = toVisualEffectKey(a?.effectKey)
-    return { id: a.id, effectKey: k ?? "efeito_texto" }
-  })
-}
+type ParticleKind = "dot" | "spark"
 
 type Particle = {
   id: string
   sizePx: number
-  // coordenadas em porcentagem do tabuleiro (0-100)
+  // coordenadas em porcentagem da área de celebração (0-100)
   x1Pct: number
   y1Pct: number
   x2Pct: number
   y2Pct: number
   delayMs: number
   hue: number
+  kind?: ParticleKind
+}
+
+export type ScreenShakeLevel = "light" | "med" | "heavy"
+
+export type TrimPlayImpactFX = {
+  token: number
+  heroText: string
+  heroMs: number
+  shake: ScreenShakeLevel | null
+  shakeMs: number
+  flash: "off" | "micro" | "strong"
+  flashMs: number
+  particles: Particle[]
+  particleDurMs: number
+  ray: boolean
+  rayMs: number
+  ring: boolean
+  ringMs: number
+}
+
+function buildImpactParticles(
+  count: number,
+  idPrefix: string,
+  token: number,
+  opts: { burst: number; sizeLo: number; sizeHi: number; sparkRatio: number }
+): Particle[] {
+  const { burst, sizeLo, sizeHi, sparkRatio } = opts
+  return Array.from({ length: count }, (_, i) => {
+    const a = Math.random() * Math.PI * 2
+    const dist = burst * (0.38 + Math.random() * 0.72)
+    const x1Pct = 50 + (Math.random() * 12 - 6)
+    const y1Pct = 50 + (Math.random() * 12 - 6)
+    const x2Pct = Math.max(3, Math.min(97, x1Pct + Math.cos(a) * dist))
+    const y2Pct = Math.max(3, Math.min(97, y1Pct + Math.sin(a) * dist))
+    const kind: ParticleKind = Math.random() < sparkRatio ? "spark" : "dot"
+    return {
+      id: `${idPrefix}_${token}_${i}`,
+      sizePx: sizeLo + Math.random() * Math.max(0.5, sizeHi - sizeLo),
+      x1Pct,
+      y1Pct,
+      x2Pct,
+      y2Pct,
+      delayMs: Math.floor(Math.random() * 140),
+      hue: 32 + Math.random() * 36 + (kind === "spark" ? 10 : 0),
+      kind,
+    }
+  })
+}
+
+function impactSpecCombo(level: 1 | 2 | 3 | 4, token: number): Omit<TrimPlayImpactFX, "token"> {
+  const heroText = level === 1 ? "COMBO!" : level === 2 ? "COMBO x2" : level === 3 ? "COMBO x3" : "INSANO!"
+  const heroMs = level <= 2 ? 920 : level === 3 ? 1000 : 1120
+  const shake: ScreenShakeLevel | null = level <= 1 ? null : level === 2 ? "light" : level === 3 ? "med" : "heavy"
+  const shakeMs = level === 2 ? 640 : level === 3 ? 780 : level >= 4 ? 980 : 0
+  const flash = level >= 4 ? "strong" : level >= 3 ? "micro" : "off"
+  const flashMs = flash === "strong" ? 200 : flash === "micro" ? 150 : 0
+  const count = level === 1 ? 18 : level === 2 ? 28 : level === 3 ? 42 : 58
+  const burst = level === 1 ? 24 : level === 2 ? 30 : level === 3 ? 38 : 48
+  const sparkRatio = level === 1 ? 0.28 : level === 2 ? 0.38 : level === 3 ? 0.48 : 0.58
+  const particles = buildImpactParticles(count, `cb${level}`, token, {
+    burst,
+    sizeLo: level >= 3 ? 3.5 : 3,
+    sizeHi: level >= 4 ? 12 : level >= 3 ? 9 : 7,
+    sparkRatio,
+  })
+  const particleDurMs = level >= 4 ? 1100 : level >= 3 ? 980 : 860
+  return {
+    heroText,
+    heroMs,
+    shake,
+    shakeMs,
+    flash,
+    flashMs,
+    particles,
+    particleDurMs,
+    ray: false,
+    rayMs: 0,
+    ring: level >= 4,
+    ringMs: level >= 4 ? 900 : 0,
+  }
+}
+
+function impactSpecVictory(token: number): Omit<TrimPlayImpactFX, "token"> {
+  const particles = buildImpactParticles(68, "vic", token, {
+    burst: 52,
+    sizeLo: 4,
+    sizeHi: 14,
+    sparkRatio: 0.55,
+  })
+  return {
+    heroText: "PERFEITO!",
+    heroMs: 1280,
+    shake: "heavy",
+    shakeMs: 1080,
+    flash: "strong",
+    flashMs: 220,
+    particles,
+    particleDurMs: 1200,
+    ray: true,
+    rayMs: 1100,
+    ring: true,
+    ringMs: 1000,
+  }
 }
 
 /** iOS/Android: permite preventDefault no arrasto e evita scroll “roubar” o gesto */
@@ -700,15 +747,9 @@ export function TrimPlayGame({
   const [comboStreak, setComboStreak] = useState(0)
   const [state, setState] = useState<"playing" | "over">("playing")
   const [toast, setToast] = useState<string | null>(null)
-  const [peakBanner, setPeakBanner] = useState(false)
-  const [visualEffectActive, setVisualEffectActive] = useState<null | {
-    effectKey: VisualEffectKey
-    token: number
-    text?: string
-    particles?: Particle[]
-    rayHue?: number
-  }>(null)
-  const [visualParticlesToken, setVisualParticlesToken] = useState(0)
+  const [impactFX, setImpactFX] = useState<TrimPlayImpactFX | null>(null)
+  const impactClearTimerRef = useRef<number | null>(null)
+  const [gameOverAnimKey, setGameOverAnimKey] = useState(0)
   const [drag, setDrag] = useState<DragPayload | null>(null)
   const [dropPreview, setDropPreview] = useState<{ ar: number; ac: number; ok: boolean } | null>(null)
 
@@ -717,25 +758,6 @@ export function TrimPlayGame({
   const [soundMuted, setSoundMuted] = useState(false)
   const [rankingOpen, setRankingOpen] = useState(false)
   const [myRanking, setMyRanking] = useState<null | { rank: number; score: number }>(null)
-
-  const [visualEvents, setVisualEvents] = useState<Record<VisualEventKey, VisualEffectAsset[]>>({
-    combo1: [],
-    combo2: [],
-    combo3: [],
-    combo4: [],
-    victory: [],
-    gameover: [],
-  })
-  const visualEventsRef = useRef(visualEvents)
-  const visualsLoadedRef = useRef(false)
-  const visualIdxRef = useRef<Record<VisualEventKey, number>>({
-    combo1: 0,
-    combo2: 0,
-    combo3: 0,
-    combo4: 0,
-    victory: 0,
-    gameover: 0,
-  })
 
   /** Layout estreito (celular): peças e ghost menores; desktop sm+ mais folgado */
   const [compactUi, setCompactUi] = useState(true)
@@ -798,8 +820,6 @@ export function TrimPlayGame({
   stateRef.current = state
   dragRef.current = drag
   comboStreakRef.current = comboStreak
-  visualEventsRef.current = visualEvents
-
   useEffect(() => {
     const best = loadBestLocal(barbershopId, clienteId)
     setBestLocal(best)
@@ -899,156 +919,42 @@ export function TrimPlayGame({
   const showToastRef = useRef(showToast)
   showToastRef.current = showToast
 
-  const visualEffectDurationMs = (effectKey: VisualEffectKey) => {
-    switch (effectKey) {
-      case "efeito_texto":
-        return 900
-      case "efeito_brilho":
-        return 650
-      case "efeito_tremer":
-        return 450
-      case "efeito_flash":
-        return 480
-      case "efeito_particulas":
-        return 650
-      case "efeito_explosao":
-        return 780
-      case "efeito_raio":
-        return 520
-      case "efeito_escurecer":
-        return 700
-      default:
-        return 500
-    }
-  }
-
-  const visualsFetchPromiseRef = useRef<Promise<void> | null>(null)
-
-  const unlockVisualEffects = useCallback(async () => {
-    if (visualsLoadedRef.current) return
-    if (visualsFetchPromiseRef.current) {
-      await visualsFetchPromiseRef.current
-      return
-    }
-    visualsFetchPromiseRef.current = (async () => {
-      const applyFallback = () => setVisualEvents(FALLBACK_VISUAL_EVENTS)
-      try {
-        const r = await fetch("/api/trimplay/visual-effects", { credentials: "include" })
-        const j = await r.json().catch(() => ({}))
-        const categories = (j?.categories ?? {}) as Partial<Record<VisualEventKey, VisualEffectAsset[]>>
-
-        const allEmpty =
-          (categories.combo1?.length ?? 0) === 0 &&
-          (categories.combo2?.length ?? 0) === 0 &&
-          (categories.combo3?.length ?? 0) === 0 &&
-          (categories.combo4?.length ?? 0) === 0 &&
-          (categories.victory?.length ?? 0) === 0 &&
-          (categories.gameover?.length ?? 0) === 0
-
-        if (allEmpty) {
-          applyFallback()
-          visualsLoadedRef.current = true
-          return
-        }
-
-        setVisualEvents({
-          combo1: normalizeVisualAssets(categories.combo1),
-          combo2: normalizeVisualAssets(categories.combo2),
-          combo3: normalizeVisualAssets(categories.combo3),
-          combo4: normalizeVisualAssets(categories.combo4),
-          victory: normalizeVisualAssets(categories.victory),
-          gameover: normalizeVisualAssets(categories.gameover),
-        })
-        visualsLoadedRef.current = true
-      } catch {
-        applyFallback()
-        visualsLoadedRef.current = true
-      } finally {
-        visualsFetchPromiseRef.current = null
-      }
-    })()
-    await visualsFetchPromiseRef.current
+  const launchImpact = useCallback((spec: Omit<TrimPlayImpactFX, "token">) => {
+    if (impactClearTimerRef.current) window.clearTimeout(impactClearTimerRef.current)
+    const token = Date.now() + Math.random()
+    const holdMs =
+      Math.max(
+        560,
+        spec.heroMs,
+        spec.shake ? spec.shakeMs : 0,
+        spec.particleDurMs,
+        spec.ray ? spec.rayMs : 0,
+        spec.ring ? spec.ringMs : 0,
+        spec.flash !== "off" ? spec.flashMs + 100 : 0
+      ) + 180
+    setImpactFX({ ...spec, token })
+    impactClearTimerRef.current = window.setTimeout(() => {
+      setImpactFX(null)
+      impactClearTimerRef.current = null
+    }, holdMs)
   }, [])
 
   useEffect(() => {
-    void unlockVisualEffects()
-  }, [unlockVisualEffects])
-
-  const triggerVisualEvent = useCallback(
-    (eventKey: VisualEventKey, ctx?: { comboLevel?: number }) => {
-      const list = visualEventsRef.current[eventKey] ?? []
-      if (!list.length) return
-
-      const idx = visualIdxRef.current[eventKey] % list.length
-      visualIdxRef.current[eventKey] += 1
-
-      const effectKey = toVisualEffectKey(list[idx]?.effectKey)
-      if (!effectKey) return
-      const token = Date.now() + Math.random()
-
-      const durationMs = visualEffectDurationMs(effectKey)
-
-      let text: string | undefined
-      if (effectKey === "efeito_texto") {
-        if (eventKey === "victory") text = "AUGE!"
-        else if (eventKey === "gameover") text = "GAME OVER"
-        else if (eventKey.startsWith("combo")) text = `Combo x${ctx?.comboLevel ?? 1}`
-      }
-
-      if (effectKey === "efeito_particulas" || effectKey === "efeito_explosao") {
-        const count = effectKey === "efeito_explosao" ? 18 : 12
-        const baseHue = Math.floor(Math.random() * 50) + 35
-        const particles: Particle[] = Array.from({ length: count }).map((_, i) => {
-          const a = Math.random() * Math.PI * 2
-          const dist = effectKey === "efeito_explosao" ? 18 + Math.random() * 28 : 12 + Math.random() * 22
-          const x1Pct = 50 + (Math.random() * 6 - 3)
-          const y1Pct = 50 + (Math.random() * 6 - 3)
-          const x2Pct = Math.max(5, Math.min(95, x1Pct + Math.cos(a) * dist))
-          const y2Pct = Math.max(5, Math.min(95, y1Pct + Math.sin(a) * dist))
-          return {
-            id: `${eventKey}_${token}_${i}`,
-            sizePx: effectKey === "efeito_explosao" ? 6 + Math.random() * 6 : 4 + Math.random() * 5,
-            x1Pct,
-            y1Pct,
-            x2Pct,
-            y2Pct,
-            delayMs: Math.floor(Math.random() * 90),
-            hue: baseHue + Math.random() * 20,
-          }
-        })
-        setVisualEffectActive({ effectKey, token, text, particles, rayHue: 45 })
-        window.setTimeout(() => {
-          setVisualEffectActive((cur) => (cur?.token === token ? null : cur))
-        }, durationMs + 60)
-        return
-      }
-
-      if (effectKey === "efeito_tremer") {
-        setVisualEffectActive({ effectKey, token })
-        window.setTimeout(() => {
-          setVisualEffectActive((cur) => (cur?.token === token ? null : cur))
-        }, durationMs)
-        return
-      }
-
-      // flash, raio, escurecer e texto ficam como overlays fixos
-      if (effectKey === "efeito_raio") {
-        setVisualEffectActive({ effectKey, token, text, rayHue: Math.floor(40 + Math.random() * 40) })
-      } else {
-        setVisualEffectActive({ effectKey, token, text })
-      }
-      window.setTimeout(() => {
-        setVisualEffectActive((cur) => (cur?.token === token ? null : cur))
-      }, durationMs + 60)
-    },
-    [visualEffectDurationMs]
-  )
+    return () => {
+      if (impactClearTimerRef.current) window.clearTimeout(impactClearTimerRef.current)
+    }
+  }, [])
 
   const endGame = useCallback(
     async (finalScore: number) => {
+      setImpactFX(null)
+      if (impactClearTimerRef.current) {
+        window.clearTimeout(impactClearTimerRef.current)
+        impactClearTimerRef.current = null
+      }
       setState("over")
+      setGameOverAnimKey((k) => k + 1)
       window.setTimeout(() => playTrimPlayGameOver(), 240)
-      triggerVisualEvent("gameover")
       const storedBest = loadBestLocal(barbershopId, clienteId)
       if (finalScore > storedBest) {
         setBestLocal(finalScore)
@@ -1058,7 +964,7 @@ export function TrimPlayGame({
       unsyncedRoundPointsRef.current = 0
       await submitProgress(pendingRound)
     },
-    [barbershopId, clienteId, submitProgress, triggerVisualEvent]
+    [barbershopId, clienteId, submitProgress]
   )
 
   const updatePreview = useCallback((clientX: number, clientY: number, d: DragPayload) => {
@@ -1105,17 +1011,15 @@ export function TrimPlayGame({
       if (clearedThisMove) {
         const comboAudioLevel = Math.max(1, Math.min(4, Math.max(nextCombo, rounds)))
         playTrimPlayCombo(comboAudioLevel)
-        const comboEventKey: VisualEventKey =
-          nextCombo >= 4 ? "combo4" : nextCombo === 3 ? "combo3" : nextCombo === 2 ? "combo2" : "combo1"
-        triggerVisualEvent(comboEventKey, { comboLevel: Math.max(1, Math.min(4, nextCombo)) })
         if (nextCombo >= 2) showToast(`${nextCombo}x combo`)
       }
       if (boardJustCleared) {
         playTrimPlayVictory()
-        triggerVisualEvent("victory")
         showToast("AUGE! Tabuleiro limpo!")
-        setPeakBanner(true)
-        window.setTimeout(() => setPeakBanner(false), 1700)
+        launchImpact(impactSpecVictory(Date.now() + Math.random()))
+      } else if (clearedThisMove) {
+        const level = Math.max(1, Math.min(4, nextCombo)) as 1 | 2 | 3 | 4
+        launchImpact(impactSpecCombo(level, Date.now() + Math.random()))
       }
 
       const placePoints = piece.cells.length * 3
@@ -1172,7 +1076,7 @@ export function TrimPlayGame({
         await endGame(nextScore)
       }
     },
-    [endGame, showToast, submitProgress, triggerVisualEvent, linesLifetime, maxComboEver]
+    [endGame, showToast, submitProgress, linesLifetime, maxComboEver, launchImpact]
   )
 
   const updatePreviewRef = useRef(updatePreview)
@@ -1188,8 +1092,6 @@ export function TrimPlayGame({
     e.preventDefault()
     e.stopPropagation()
     unlockTrimPlayAudio()
-    void unlockVisualEffects()
-
     const el = e.currentTarget as HTMLElement
     try {
       el.setPointerCapture(e.pointerId)
@@ -1345,10 +1247,34 @@ export function TrimPlayGame({
     setDropPreview(null)
     dragRef.current = null
     unsyncedRoundPointsRef.current = 0
+    setImpactFX(null)
+    if (impactClearTimerRef.current) {
+      window.clearTimeout(impactClearTimerRef.current)
+      impactClearTimerRef.current = null
+    }
   }
 
+  const rootShakeClass =
+    impactFX?.shake === "light"
+      ? "trimplay-shake-screen-light"
+      : impactFX?.shake === "med"
+        ? "trimplay-shake-screen-med"
+        : impactFX?.shake === "heavy"
+          ? "trimplay-shake-screen-heavy"
+          : ""
+
   return (
-    <div className="relative h-[100dvh] min-h-[100dvh] max-h-[100dvh] text-white flex flex-col overflow-hidden">
+    <div
+      className={[
+        "relative h-[100dvh] min-h-[100dvh] max-h-[100dvh] text-white flex flex-col overflow-hidden",
+        rootShakeClass,
+      ].join(" ")}
+      style={
+        impactFX?.shake
+          ? ({ ["--shake-ms" as string]: `${impactFX.shakeMs}ms` } as CSSProperties)
+          : undefined
+      }
+    >
       <div
         className="pointer-events-none fixed inset-0 -z-10"
         style={{
@@ -1387,59 +1313,72 @@ export function TrimPlayGame({
         </div>
       ) : null}
 
-      {peakBanner ? (
-        <div className="fixed inset-0 z-[2147483644] pointer-events-none flex items-center justify-center px-6">
-          <div className="rounded-2xl border border-amber-300/70 bg-black/78 backdrop-blur-md px-7 py-5 shadow-[0_0_42px_rgba(245,158,11,0.45)] animate-in zoom-in-95 fade-in duration-200">
-            <p className="text-amber-200 text-xs tracking-[0.28em] text-center">MOMENTO</p>
-            <p className="text-[#ffd86b] text-3xl sm:text-4xl font-extrabold tracking-wide text-center drop-shadow-[0_0_18px_rgba(245,158,11,0.7)]">
-              AUGE!
-            </p>
-            <p className="text-white/85 text-sm text-center mt-1">Tabuleiro limpo</p>
-          </div>
-        </div>
-      ) : null}
-
-      {visualEffectActive?.effectKey === "efeito_texto" && visualEffectActive.text ? (
-        <div className="fixed inset-0 z-[2147483645] pointer-events-none flex items-center justify-center px-6">
-          <div
-            key={visualEffectActive.token}
-            className="rounded-2xl border border-amber-300/70 bg-black/78 backdrop-blur-md px-7 py-4 shadow-[0_0_42px_rgba(245,158,11,0.25)] animate-in zoom-in-95 fade-in duration-200"
-          >
-            <p className="text-[#ffd86b] text-3xl sm:text-4xl font-extrabold tracking-wide text-center drop-shadow-[0_0_18px_rgba(245,158,11,0.7)]">
-              {visualEffectActive.text}
-            </p>
-          </div>
-        </div>
-      ) : null}
-
-      {visualEffectActive?.effectKey === "efeito_flash" ? (
+      {impactFX?.flash !== "off" ? (
         <div
-          key={visualEffectActive.token}
-          className="fixed inset-0 z-[2147483646] pointer-events-none bg-gradient-to-b from-white/55 via-amber-100/25 to-transparent trimplay-viz-flash mix-blend-screen"
-          style={{ ["--dur" as any]: `${visualEffectDurationMs("efeito_flash")}ms` } as CSSProperties}
+          key={`flash-${impactFX.token}`}
+          className={[
+            "fixed inset-0 z-[2147483648] pointer-events-none trimplay-impact-flash",
+            impactFX.flash === "strong" ? "trimplay-impact-flash--strong" : "trimplay-impact-flash--micro",
+          ].join(" ")}
+          style={{ animationDuration: `${impactFX.flashMs}ms` }}
         />
       ) : null}
 
-      {visualEffectActive?.effectKey === "efeito_escurecer" ? (
+      {impactFX?.ray ? (
         <div
-          key={visualEffectActive.token}
-          className="fixed inset-0 z-[2147483643] pointer-events-none bg-black/70 trimplay-viz-darken"
-          style={{ ["--dur" as any]: `${visualEffectDurationMs("efeito_escurecer")}ms` } as CSSProperties}
-        />
-      ) : null}
-
-      {visualEffectActive?.effectKey === "efeito_raio" ? (
-        <div
-          key={visualEffectActive.token}
-          className="fixed inset-0 z-[2147483643] pointer-events-none trimplay-viz-ray"
+          key={`ray-${impactFX.token}`}
+          className="fixed inset-0 z-[2147483647] pointer-events-none trimplay-viz-ray trimplay-viz-ray-strong mix-blend-screen"
           style={
             {
-              ["--dur" as any]: `${visualEffectDurationMs("efeito_raio")}ms`,
-              background: "linear-gradient(115deg, rgba(255,212,107,0) 30%, rgba(255,212,107,0.55) 50%, rgba(255,212,107,0) 70%)",
-              mixBlendMode: "screen",
+              ["--dur" as string]: `${impactFX.rayMs}ms`,
+              background:
+                "linear-gradient(118deg, rgba(255,212,107,0) 22%, rgba(255,245,200,0.65) 48%, rgba(255,180,60,0.5) 52%, rgba(255,212,107,0) 78%)",
             } as CSSProperties
           }
         />
+      ) : null}
+
+      {impactFX && impactFX.particles.length > 0 ? (
+        <div className="fixed inset-0 z-[2147483646] pointer-events-none overflow-hidden relative" aria-hidden>
+          {impactFX.ring ? (
+            <div
+              className="trimplay-explosion-ring trimplay-explosion-ring--impact"
+              style={{ ["--dur" as string]: `${impactFX.ringMs}ms` } as CSSProperties}
+            />
+          ) : null}
+          {impactFX.particles.map((p) => (
+            <div
+              key={p.id}
+              className={p.kind === "spark" ? "trimplay-particle-spark trimplay-particle-fly" : "trimplay-particle-fly"}
+              style={
+                {
+                  left: `${p.x1Pct}%`,
+                  top: `${p.y1Pct}%`,
+                  ["--x1" as string]: `${p.x1Pct}%`,
+                  ["--y1" as string]: `${p.y1Pct}%`,
+                  ["--x2" as string]: `${p.x2Pct}%`,
+                  ["--y2" as string]: `${p.y2Pct}%`,
+                  ["--size" as string]: `${p.sizePx}px`,
+                  ["--h" as string]: `${p.hue}`,
+                  ["--delay" as string]: `${p.delayMs}ms`,
+                  ["--dur" as string]: `${impactFX.particleDurMs}ms`,
+                } as CSSProperties
+              }
+            />
+          ))}
+        </div>
+      ) : null}
+
+      {impactFX ? (
+        <div className="fixed inset-0 z-[2147483649] pointer-events-none flex items-center justify-center px-4">
+          <p
+            key={`hero-${impactFX.token}`}
+            className="trimplay-hero-burst text-center font-black uppercase tracking-tight text-[#ffeb9c] drop-shadow-[0_0_28px_rgba(255,200,80,0.9)]"
+            style={{ ["--hero-dur" as string]: `${impactFX.heroMs}ms` } as CSSProperties}
+          >
+            {impactFX.heroText}
+          </p>
+        </div>
       ) : null}
 
       {drag ? (
@@ -1590,30 +1529,12 @@ export function TrimPlayGame({
             }}
           >
             <div className="rounded-[11px] sm:rounded-[13px] bg-gradient-to-b from-[#0a0a0a] via-[#060606] to-[#030303] h-full w-full p-1 sm:p-2.5 shadow-[inset_0_2px_20px_rgba(0,0,0,0.65)] flex items-center justify-center">
-              <div
-                key={visualEffectActive?.effectKey === "efeito_tremer" ? visualEffectActive.token : "base"}
-                ref={boardGridRef}
-                className={[
-                  "relative h-full w-full",
-                  visualEffectActive?.effectKey === "efeito_brilho" ? "trimplay-viz-glow" : "",
-                ].join(" ")}
-                style={
-                  visualEffectActive?.effectKey === "efeito_brilho"
-                    ? ({ ["--dur" as any]: `${visualEffectDurationMs("efeito_brilho")}ms` } as CSSProperties)
-                    : undefined
-                }
-              >
+              <div ref={boardGridRef} className="relative h-full w-full">
                 <div
-                  className={[
-                    "grid touch-none h-full w-full gap-0.5 sm:gap-1.5",
-                    visualEffectActive?.effectKey === "efeito_tremer" ? "trimplay-viz-shake" : "",
-                  ].join(" ")}
+                  className="grid touch-none h-full w-full gap-0.5 sm:gap-1.5"
                   style={{
                     gridTemplateColumns: `repeat(${SIZE}, minmax(0, 1fr))`,
                     gridTemplateRows: `repeat(${SIZE}, minmax(0, 1fr))`,
-                    ...(visualEffectActive?.effectKey === "efeito_tremer"
-                      ? ({ ["--dur" as any]: `${visualEffectDurationMs("efeito_tremer")}ms` } as any)
-                      : {}),
                   }}
                 >
                   {board.map((row, r) =>
@@ -1656,42 +1577,6 @@ export function TrimPlayGame({
                     })
                   )}
                 </div>
-
-                {(visualEffectActive?.effectKey === "efeito_particulas" || visualEffectActive?.effectKey === "efeito_explosao") &&
-                visualEffectActive.particles?.length ? (
-                  <div className="absolute inset-0 pointer-events-none overflow-hidden">
-                    {visualEffectActive.particles.map((p) => {
-                      const durationMs = visualEffectDurationMs(visualEffectActive.effectKey)
-                      return (
-                        <div
-                          key={p.id}
-                          className="trimplay-particle-fly"
-                          style={
-                            {
-                              left: `${p.x1Pct}%`,
-                              top: `${p.y1Pct}%`,
-                              ["--x1" as any]: `${p.x1Pct}%`,
-                              ["--y1" as any]: `${p.y1Pct}%`,
-                              ["--x2" as any]: `${p.x2Pct}%`,
-                              ["--y2" as any]: `${p.y2Pct}%`,
-                              ["--size" as any]: `${p.sizePx}px`,
-                              ["--h" as any]: `${p.hue}`,
-                              ["--delay" as any]: `${p.delayMs}ms`,
-                              ["--dur" as any]: `${durationMs}ms`,
-                            } as CSSProperties
-                          }
-                        />
-                      )
-                    })}
-                  </div>
-                ) : null}
-
-                {visualEffectActive?.effectKey === "efeito_explosao" ? (
-                  <div
-                    className="trimplay-explosion-ring"
-                    style={{ ["--dur" as any]: `${visualEffectDurationMs("efeito_explosao")}ms` } as CSSProperties}
-                  />
-                ) : null}
               </div>
             </div>
           </div>
@@ -1744,15 +1629,20 @@ export function TrimPlayGame({
       </main>
 
       {state === "over" ? (
-        <div className="fixed inset-0 z-[2147483646] bg-black/75 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
+        <div
+          key={gameOverAnimKey}
+          className="trimplay-gameover-backdrop fixed inset-0 z-[2147483651] flex items-center justify-center p-4 backdrop-blur-[2px]"
+        >
           <div
-            className="w-full max-w-md rounded-2xl border border-[#9a7b2d]/55 p-6 sm:p-8 shadow-[0_0_0_1px_rgba(0,0,0,0.5),0_32px_90px_rgba(0,0,0,0.65)]"
+            className="trimplay-gameover-card w-full max-w-md rounded-2xl border border-[#9a7b2d]/55 p-6 sm:p-8 shadow-[0_0_0_1px_rgba(0,0,0,0.5),0_32px_90px_rgba(0,0,0,0.65)]"
             style={{
               background: "linear-gradient(165deg, #141210 0%, #0a0a08 100%)",
             }}
           >
-            <p className="text-xs uppercase tracking-[0.25em] text-[#8a7a50] mb-2">Fim de rodada</p>
-            <h2 className="text-[#f0d878] font-bold text-2xl sm:text-3xl mb-3">Game over</h2>
+            <p className="text-xs uppercase tracking-[0.3em] text-red-300/80 mb-2 text-center">Fim de rodada</p>
+            <h2 className="text-[#f0d878] font-black text-3xl sm:text-4xl mb-3 text-center uppercase tracking-wide trimplay-gameover-title">
+              FIM DE JOGO
+            </h2>
             <p className="text-white/75 text-sm">
               Pontuação: <span className="font-semibold text-[#f0d060] tabular-nums text-lg">{score}</span>
             </p>
