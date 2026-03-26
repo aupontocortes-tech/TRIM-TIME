@@ -573,7 +573,7 @@ export function TrimPlayGame({
     apply()
     mq.addEventListener("change", apply)
     return () => mq.removeEventListener("change", apply)
-  }, [unlockVisualEffects])
+  }, [])
   const trayCellPx = compactUi ? 16 : 22
   const trayGapPx = compactUi ? 2 : 3
   const ghostCellPx = compactUi ? 18 : 22
