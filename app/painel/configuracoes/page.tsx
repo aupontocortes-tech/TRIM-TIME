@@ -141,6 +141,8 @@ export default function ConfiguracoesPage() {
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saveOk, setSaveOk] = useState(false)
   const [linkCopiado, setLinkCopiado] = useState(false)
+  const [linkInstalarCopiado, setLinkInstalarCopiado] = useState(false)
+  const [msgClienteCopiada, setMsgClienteCopiada] = useState(false)
 
   const [waLoading, setWaLoading] = useState(false)
   const [waError, setWaError] = useState<string | null>(null)
@@ -268,11 +270,39 @@ export default function ConfiguracoesPage() {
   const linkAgendamento =
     origin && barbershop?.slug ? `${origin}/b/${barbershop.slug}` : barbershop?.slug ? `/b/${barbershop.slug}` : "—"
 
+  const linkAgendamentoInstalar =
+    origin && barbershop?.slug
+      ? `${origin}/b/${barbershop.slug}?instalar=1`
+      : barbershop?.slug
+        ? `/b/${barbershop.slug}?instalar=1`
+        : "—"
+
+  const textoMensagemClienteComLinks =
+    origin && barbershop?.slug
+      ? `Agende com a gente:\n${origin}/b/${barbershop.slug}\n\nInstale o app no celular (use o botão “Baixar” na tela ou abra no Chrome/Safari):\n${origin}/b/${barbershop.slug}?instalar=1`
+      : ""
+
   const copiarLink = () => {
     const full = origin && barbershop?.slug ? `${origin}/b/${barbershop.slug}` : ""
     if (full) void navigator.clipboard.writeText(full)
     setLinkCopiado(true)
     setTimeout(() => setLinkCopiado(false), 2000)
+  }
+
+  const copiarLinkInstalar = () => {
+    const full =
+      origin && barbershop?.slug ? `${origin}/b/${barbershop.slug}?instalar=1` : ""
+    if (full) void navigator.clipboard.writeText(full)
+    setLinkInstalarCopiado(true)
+    setTimeout(() => setLinkInstalarCopiado(false), 2000)
+  }
+
+  const copiarMensagemCliente = () => {
+    if (textoMensagemClienteComLinks) {
+      void navigator.clipboard.writeText(textoMensagemClienteComLinks)
+    }
+    setMsgClienteCopiada(true)
+    setTimeout(() => setMsgClienteCopiada(false), 2000)
   }
 
   const handleSave = async () => {
@@ -759,7 +789,8 @@ export default function ConfiguracoesPage() {
             <div className="flex-1">
               <h3 className="text-lg font-semibold text-foreground mb-1">Seu Link de Agendamento</h3>
               <p className="text-sm text-muted-foreground mb-3">
-                Compartilhe este link com seus clientes para que eles possam agendar
+                Compartilhe este link com seus clientes para que eles possam agendar. Para celular, envie também o link
+                com <span className="text-foreground font-medium">?instalar=1</span> ou use a mensagem pronta abaixo.
               </p>
               <div className="flex items-center gap-2 p-3 bg-background/50 rounded-lg border border-border">
                 <span className="text-primary font-medium flex-1 truncate">{linkAgendamento}</span>
@@ -782,6 +813,54 @@ export default function ConfiguracoesPage() {
                   )}
                 </Button>
               </div>
+              <p className="text-xs text-muted-foreground mt-2 mb-1.5">Link com botões de instalação no celular</p>
+              <div className="flex items-center gap-2 p-3 bg-background/50 rounded-lg border border-border">
+                <span className="text-primary font-medium flex-1 truncate text-sm">{linkAgendamentoInstalar}</span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={copiarLinkInstalar}
+                  className="border-primary/30 hover:bg-primary/10 flex-shrink-0"
+                >
+                  {linkInstalarCopiado ? (
+                    <>
+                      <Check className="w-4 h-4 mr-1 text-green-500" />
+                      Copiado!
+                    </>
+                  ) : (
+                    <>
+                      <Smartphone className="w-4 h-4 mr-1" />
+                      Copiar
+                    </>
+                  )}
+                </Button>
+              </div>
+              {textoMensagemClienteComLinks ? (
+                <div className="mt-3 space-y-2">
+                  <p className="text-xs text-muted-foreground">Mensagem para WhatsApp (dois links, fácil de tocar)</p>
+                  <pre className="text-[11px] leading-relaxed text-foreground/90 whitespace-pre-wrap break-all p-3 rounded-lg border border-border bg-background/60 max-h-32 overflow-y-auto">
+                    {textoMensagemClienteComLinks}
+                  </pre>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="w-full sm:w-auto"
+                    onClick={copiarMensagemCliente}
+                  >
+                    {msgClienteCopiada ? (
+                      <>
+                        <Check className="w-4 h-4 mr-1 text-green-500" />
+                        Mensagem copiada!
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-4 h-4 mr-1" />
+                        Copiar mensagem inteira
+                      </>
+                    )}
+                  </Button>
+                </div>
+              ) : null}
             </div>
             <div className="flex gap-2">
               <Button variant="outline" className="border-border" type="button" disabled>

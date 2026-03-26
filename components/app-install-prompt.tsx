@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import {
   ChevronDown,
   ChevronUp,
+  Copy,
   Download,
   Monitor,
   Smartphone,
@@ -75,6 +76,7 @@ export function AppInstallPrompt({
   )
   const [showIosHelp, setShowIosHelp] = useState(false)
   const [showDesktopHelp, setShowDesktopHelp] = useState(false)
+  const [installLinkCopied, setInstallLinkCopied] = useState(false)
 
   const playStoreUrl = process.env.NEXT_PUBLIC_PLAY_STORE_URL
   const appStoreUrl = process.env.NEXT_PUBLIC_APP_STORE_URL
@@ -88,9 +90,10 @@ export function AppInstallPrompt({
     if (isStandaloneMode()) return
 
     const forceShow = shouldForceFromUrl()
-    const skipLocalStorageHide = variant === "clientBooking"
+    /** Só ignora “já fechei” quando a URL pede instalação — evita modal bloqueando /b/slug no celular */
+    const skipLocalStorageHide = forceShow
 
-    if (!forceShow && !skipLocalStorageHide) {
+    if (!skipLocalStorageHide) {
       try {
         const raw = localStorage.getItem(hideKey)
         if (raw) {
@@ -116,7 +119,33 @@ export function AppInstallPrompt({
     }
     window.addEventListener("beforeinstallprompt", onBip)
     return () => window.removeEventListener("beforeinstallprompt", onBip)
-  }, [hideKey, variant])
+  }, [hideKey])
+
+  const bookingInstallHref =
+    typeof window !== "undefined"
+      ? (() => {
+          try {
+            const u = new URL(window.location.href)
+            u.searchParams.set("instalar", "1")
+            return u.toString()
+          } catch {
+            return ""
+          }
+        })()
+      : ""
+
+  const copyBookingInstallLink = useCallback(() => {
+    if (typeof window === "undefined") return
+    try {
+      const u = new URL(window.location.href)
+      u.searchParams.set("instalar", "1")
+      void navigator.clipboard.writeText(u.toString())
+      setInstallLinkCopied(true)
+      window.setTimeout(() => setInstallLinkCopied(false), 2500)
+    } catch {
+      /* ignore */
+    }
+  }, [])
 
   const dismiss = useCallback(() => {
     setShow(false)
@@ -205,6 +234,49 @@ export function AppInstallPrompt({
               </div>
             </div>
 
+            {variant === "clientBooking" ? (
+              <div className="mt-4 rounded-lg border border-primary/25 bg-primary/5 p-3 space-y-3">
+                <p className="text-xs font-medium text-foreground">
+                  No celular: use os botões abaixo — links normais em WhatsApp às vezes não abrem a loja.
+                </p>
+                <div className="flex flex-col gap-2">
+                  {playStoreUrl ? (
+                    <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90" asChild>
+                      <a href={playStoreUrl} target="_blank" rel="noopener noreferrer">
+                        <Download className="w-4 h-4 mr-2 shrink-0" />
+                        Baixar no Google Play
+                      </a>
+                    </Button>
+                  ) : null}
+                  {appStoreUrl ? (
+                    <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90" asChild>
+                      <a href={appStoreUrl} target="_blank" rel="noopener noreferrer">
+                        <Download className="w-4 h-4 mr-2 shrink-0" />
+                        Baixar na App Store
+                      </a>
+                    </Button>
+                  ) : null}
+                  {bookingInstallHref ? (
+                    <Button variant="outline" className="w-full border-border" asChild>
+                      <a href={bookingInstallHref} target="_blank" rel="noopener noreferrer">
+                        <Smartphone className="w-4 h-4 mr-2 shrink-0" />
+                        Abrir esta página no navegador (instalar PWA)
+                      </a>
+                    </Button>
+                  ) : null}
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="w-full"
+                    onClick={() => void copyBookingInstallLink()}
+                  >
+                    <Copy className="w-4 h-4 mr-2 shrink-0" />
+                    {installLinkCopied ? "Link copiado!" : "Copiar link com instalação (?instalar=1)"}
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+
             <div className="mt-4 flex flex-col sm:flex-row gap-2 flex-wrap">
               {canInstallPwa ? (
                 <Button
@@ -217,7 +289,7 @@ export function AppInstallPrompt({
                 </Button>
               ) : null}
 
-              {playStoreUrl ? (
+              {variant !== "clientBooking" && playStoreUrl ? (
                 <Button variant="outline" className="border-border" asChild>
                   <a
                     href={playStoreUrl}
@@ -228,7 +300,7 @@ export function AppInstallPrompt({
                   </a>
                 </Button>
               ) : null}
-              {appStoreUrl ? (
+              {variant !== "clientBooking" && appStoreUrl ? (
                 <Button variant="outline" className="border-border" asChild>
                   <a
                     href={appStoreUrl}
