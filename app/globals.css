@@ -411,34 +411,34 @@
 
 @keyframes trimplay-hero-burst {
   0% {
-    transform: scale(0.32);
+    transform: scale(0.45);
     opacity: 0;
-    filter: blur(8px);
   }
-  16% {
-    transform: scale(1.22);
+  14% {
+    transform: scale(1.12);
     opacity: 1;
-    filter: blur(0);
   }
-  38% {
+  35% {
     transform: scale(1);
     opacity: 1;
   }
-  68% {
-    transform: scale(0.94);
+  65% {
+    transform: scale(0.97);
     opacity: 1;
   }
   100% {
-    transform: scale(0.78);
+    transform: scale(0.88);
     opacity: 0;
-    filter: blur(4px);
   }
 }
 
 .trimplay-hero-burst {
+  font-size: clamp(1.85rem, 10.5vw, 4.25rem);
+  line-height: 1.05;
+  transform-origin: center center;
   animation: trimplay-hero-burst var(--hero-dur, 1000ms)
     cubic-bezier(0.33, 1.35, 0.52, 1) forwards;
-  will-change: transform, opacity, filter;
+  will-change: transform, opacity;
 }
 
 .trimplay-particle-spark {

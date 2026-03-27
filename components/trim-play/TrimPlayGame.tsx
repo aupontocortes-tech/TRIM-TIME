@@ -1265,17 +1265,7 @@ export function TrimPlayGame({
           : ""
 
   return (
-    <div
-      className={[
-        "relative h-[100dvh] min-h-[100dvh] max-h-[100dvh] text-white flex flex-col overflow-hidden",
-        rootShakeClass,
-      ].join(" ")}
-      style={
-        impactFX?.shake
-          ? ({ ["--shake-ms" as string]: `${impactFX.shakeMs}ms` } as CSSProperties)
-          : undefined
-      }
-    >
+    <div className="relative h-[100dvh] min-h-[100dvh] max-h-[100dvh] text-white flex flex-col overflow-hidden">
       <div
         className="pointer-events-none fixed inset-0 -z-10"
         style={{
@@ -1371,10 +1361,10 @@ export function TrimPlayGame({
       ) : null}
 
       {impactFX ? (
-        <div className="fixed inset-0 z-[2147483649] pointer-events-none flex items-center justify-center px-4">
+        <div className="fixed inset-0 z-[2147483649] pointer-events-none flex items-center justify-center px-3 sm:px-6 py-10 overflow-visible">
           <p
             key={`hero-${impactFX.token}`}
-            className="trimplay-hero-burst text-center font-black uppercase tracking-tight text-[#ffeb9c] drop-shadow-[0_0_28px_rgba(255,200,80,0.9)]"
+            className="trimplay-hero-burst max-w-[min(96vw,28rem)] text-center font-black uppercase tracking-wide sm:tracking-tighter text-[#ffeb9c] whitespace-nowrap antialiased [text-shadow:0_2px_0_rgba(0,0,0,0.85),0_0_20px_rgba(255,200,80,0.55),0_0_40px_rgba(200,140,30,0.35)]"
             style={{ ["--hero-dur" as string]: `${impactFX.heroMs}ms` } as CSSProperties}
           >
             {impactFX.heroText}
@@ -1504,7 +1494,19 @@ export function TrimPlayGame({
         </div>
       </header>
 
-      <main className="relative z-0 flex-1 min-h-0 flex flex-col w-full max-w-lg mx-auto touch-pan-y pt-7 sm:pt-9">
+      <main
+        className={[
+          "relative z-0 flex-1 min-h-0 flex flex-col w-full max-w-lg mx-auto touch-pan-y pt-7 sm:pt-9",
+          rootShakeClass,
+        ]
+          .filter(Boolean)
+          .join(" ")}
+        style={
+          impactFX?.shake
+            ? ({ ["--shake-ms" as string]: `${impactFX.shakeMs}ms` } as CSSProperties)
+            : undefined
+        }
+      >
         <div className="shrink-0 flex justify-center pt-2 sm:pt-3 pb-2 sm:pb-3">
           <div className="flex flex-col items-center gap-1.5">
             <span className="text-5xl sm:text-6xl leading-none font-semibold tracking-tight text-white/90 tabular-nums">
