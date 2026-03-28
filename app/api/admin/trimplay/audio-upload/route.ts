@@ -37,9 +37,27 @@ export async function POST(request: Request) {
     }
 
     const supabase = createServiceRoleClient()
-    await supabase.storage.createBucket(BUCKET, { public: true }).catch(() => {
-      // bucket já pode existir
+
+    const { error: bucketErr } = await supabase.storage.createBucket(BUCKET, {
+      public: true,
+      fileSizeLimit: 52_428_800,
     })
+    if (bucketErr) {
+      const raw = `${bucketErr.message ?? ""} ${(bucketErr as { statusCode?: string }).statusCode ?? ""}`
+      const alreadyThere =
+        /already exists|duplicate|BucketAlreadyExists|409/i.test(raw) ||
+        (bucketErr as { statusCode?: string }).statusCode === "409"
+      if (!alreadyThere) {
+        return NextResponse.json(
+          {
+            error: `Supabase Storage: ${bucketErr.message}`,
+            hint:
+              'Crie o bucket público "trimplay-audio" no Supabase (Storage → New bucket) ou rode o SQL em supabase/migrations/012_trimplay_audio_storage_bucket.sql. Verifique SUPABASE_SERVICE_ROLE_KEY na Vercel.',
+          },
+          { status: 500 }
+        )
+      }
+    }
 
     const ext = file.name.includes(".") ? file.name.split(".").pop()!.toLowerCase() : "mp3"
     const path = `${key}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`
@@ -49,7 +67,22 @@ export async function POST(request: Request) {
       upsert: false,
     })
     if (up.error) {
-      return NextResponse.json({ error: up.error.message }, { status: 500 })
+      let hint: string | undefined
+      const em = up.error.message.toLowerCase()
+      if (em.includes("mime") || em.includes("type") || em.includes("not allowed")) {
+        hint =
+          'No Supabase → Storage → bucket "trimplay-audio" → Configuration: deixe "Allowed MIME types" vazio (todos) ou inclua audio/mpeg, audio/wav.'
+      } else if (em.includes("row-level security") || em.includes("rls") || em.includes("policy")) {
+        hint =
+          'Execute supabase/migrations/012_trimplay_audio_storage_bucket.sql no SQL Editor ou torne o bucket público e revise as políticas em Storage → Policies.'
+      } else if (em.includes("bucket") && em.includes("not found")) {
+        hint =
+          'Crie o bucket "trimplay-audio" (público) no Supabase ou rode a migration 012_trimplay_audio_storage_bucket.sql.'
+      }
+      return NextResponse.json(
+        { error: up.error.message, ...(hint ? { hint } : {}) },
+        { status: 500 }
+      )
     }
 
     const pub = supabase.storage.from(BUCKET).getPublicUrl(path)

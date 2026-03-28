@@ -90,6 +90,7 @@ export default function TrimPlayerAdminPage() {
   const previewRef = useRef<HTMLAudioElement | null>(null)
   const stopTimerRef = useRef<number | null>(null)
   const savedTimerRef = useRef<number | null>(null)
+  const audioFileInputRefs = useRef<Partial<Record<(typeof ORDER)[number], HTMLInputElement | null>>>({})
   const [visualEffectToAdd, setVisualEffectToAdd] = useState<Record<VisualEffectAsset["event_key"], VisualEffectAsset["effect_key"]>>({
     combo1: "efeito_texto",
     combo2: "efeito_texto",
@@ -218,6 +219,12 @@ export default function TrimPlayerAdminPage() {
     setBusyId(`${category}-upload`)
     setMsg("")
     try {
+      const maxBytes = 4 * 1024 * 1024
+      if (file.size > maxBytes) {
+        throw new Error(
+          `Arquivo muito grande para envio pelo site (máx. ~4 MB). Tamanho: ${(file.size / (1024 * 1024)).toFixed(1)} MB. Comprima o áudio ou use um trecho menor.`
+        )
+      }
       const form = new FormData()
       form.set("category", category)
       form.set("file", file)
@@ -227,7 +234,16 @@ export default function TrimPlayerAdminPage() {
         credentials: "include",
       })
       const upJson = await up.json().catch(() => ({}))
-      if (!up.ok) throw new Error(typeof upJson.error === "string" ? upJson.error : "Erro de upload")
+      if (!up.ok) {
+        const detail =
+          typeof upJson.error === "string"
+            ? upJson.error
+            : up.status === 413
+              ? "Arquivo maior que o limite do servidor (tente um ficheiro menor)."
+              : `Erro de upload (${up.status})`
+        const hint = typeof (upJson as { hint?: string }).hint === "string" ? (upJson as { hint: string }).hint : ""
+        throw new Error(hint ? `${detail}\n\n${hint}` : detail)
+      }
 
       const create = await fetch("/api/admin/trimplay/audio-assets", {
         method: "POST",
@@ -502,7 +518,7 @@ export default function TrimPlayerAdminPage() {
       {msg ? (
         <div
           className={[
-            "text-sm rounded-md border px-3 py-2",
+            "text-sm rounded-md border px-3 py-2 whitespace-pre-wrap",
             msgTipo === "ok"
               ? "text-emerald-200 border-emerald-500/40 bg-emerald-500/10"
               : msgTipo === "erro"
@@ -532,20 +548,32 @@ export default function TrimPlayerAdminPage() {
                   <Music className="w-4 h-4 text-[#D4AF37]" />
                   <span className="font-semibold">{LABELS[category]}</span>
                 </div>
-                <label className="inline-flex items-center justify-center gap-2 rounded-md border border-[#D4AF37]/45 px-3 py-2 text-sm cursor-pointer hover:bg-[#D4AF37]/10">
-                  <Upload className="w-4 h-4" />
-                  <Plus className="w-4 h-4" />
-                  Adicionar áudio
-                  <input
-                    type="file"
-                    accept=".mp3,.wav,.mpeg,audio/*"
-                    className="hidden"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0]
-                      if (f) void uploadAndCreate(category, f)
-                    }}
-                  />
-                </label>
+                <input
+                  ref={(el) => {
+                    audioFileInputRefs.current[category] = el
+                  }}
+                  type="file"
+                  accept=".mp3,.wav,.mpeg,audio/*"
+                  className="sr-only"
+                  tabIndex={-1}
+                  aria-hidden
+                  onChange={(e) => {
+                    const f = e.target.files?.[0]
+                    e.target.value = ""
+                    if (f) void uploadAndCreate(category, f)
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="inline-flex items-center gap-2 border-[#D4AF37]/45 hover:bg-[#D4AF37]/10 text-white shrink-0"
+                  disabled={busyId === `${category}-upload`}
+                  onClick={() => audioFileInputRefs.current[category]?.click()}
+                >
+                  <Upload className="w-4 h-4 shrink-0" />
+                  <Plus className="w-4 h-4 shrink-0" />
+                  {busyId === `${category}-upload` ? "Enviando…" : "Adicionar áudio"}
+                </Button>
               </div>
 
               {(grouped.get(category) ?? []).length === 0 ? (
