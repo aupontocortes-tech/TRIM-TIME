@@ -1,19 +1,16 @@
 import { NextResponse } from "next/server"
-import { createServiceRoleClient } from "@/lib/supabase/server"
 import { requireSuperAdmin } from "@/lib/admin-auth"
+import { TRIMPLAY_AUDIO_BUCKET } from "@/lib/trimplay-audio-constants"
+import {
+  ensureTrimplayAudioBucket,
+  isAllowedTrimplayAudioNameAndType,
+  sanitizeTrimplayFileName,
+} from "@/lib/supabase/trimplay-audio-bucket"
 
 export const dynamic = "force-dynamic"
+export const runtime = "nodejs"
 
 const AUDIO_KEYS = new Set(["combo1", "combo2", "combo3", "combo4", "gameover", "victory"])
-const BUCKET = "trimplay-audio"
-
-function isAllowedAudioFile(file: File) {
-  const name = file.name.toLowerCase()
-  const ext = name.includes(".") ? name.split(".").pop() ?? "" : ""
-  const allowedExt = new Set(["mp3", "wav", "mpeg"])
-  if (file.type.startsWith("audio/")) return true
-  return allowedExt.has(ext)
-}
 
 export async function POST(request: Request) {
   const auth = await requireSuperAdmin()
@@ -25,45 +22,40 @@ export async function POST(request: Request) {
       .trim()
       .toLowerCase()
       .replace("vitoria", "victory")
-    const file = form.get("file")
+    const raw = form.get("file")
     if (!AUDIO_KEYS.has(key)) {
       return NextResponse.json({ error: "key inválida" }, { status: 400 })
     }
-    if (!(file instanceof File)) {
-      return NextResponse.json({ error: "Arquivo obrigatório" }, { status: 400 })
+
+    if (!(raw instanceof Blob) || raw.size === 0) {
+      return NextResponse.json(
+        { error: "Arquivo obrigatório (formato não reconhecido pelo servidor — use o upload pelo site atualizado)" },
+        { status: 400 }
+      )
     }
-    if (!isAllowedAudioFile(file)) {
+
+    const fallbackName = String(form.get("file_name") ?? "").trim() || "audio.mp3"
+    const displayName = raw instanceof File && raw.name ? raw.name : fallbackName
+    const safeName = sanitizeTrimplayFileName(displayName)
+    const mime = raw.type || "application/octet-stream"
+    if (!isAllowedTrimplayAudioNameAndType(safeName, mime)) {
       return NextResponse.json({ error: "Envie um áudio .mp3, .wav ou .mpeg" }, { status: 400 })
     }
 
-    const supabase = createServiceRoleClient()
-
-    const { error: bucketErr } = await supabase.storage.createBucket(BUCKET, {
-      public: true,
-      fileSizeLimit: 52_428_800,
-    })
-    if (bucketErr) {
-      const raw = `${bucketErr.message ?? ""} ${(bucketErr as { statusCode?: string }).statusCode ?? ""}`
-      const alreadyThere =
-        /already exists|duplicate|BucketAlreadyExists|409/i.test(raw) ||
-        (bucketErr as { statusCode?: string }).statusCode === "409"
-      if (!alreadyThere) {
-        return NextResponse.json(
-          {
-            error: `Supabase Storage: ${bucketErr.message}`,
-            hint:
-              'Crie o bucket público "trimplay-audio" no Supabase (Storage → New bucket) ou rode o SQL em supabase/migrations/012_trimplay_audio_storage_bucket.sql. Verifique SUPABASE_SERVICE_ROLE_KEY na Vercel.',
-          },
-          { status: 500 }
-        )
-      }
+    const ensured = await ensureTrimplayAudioBucket()
+    if (!ensured.ok) {
+      return NextResponse.json(
+        { error: ensured.error, ...(ensured.hint ? { hint: ensured.hint } : {}) },
+        { status: 500 }
+      )
     }
+    const { supabase } = ensured
 
-    const ext = file.name.includes(".") ? file.name.split(".").pop()!.toLowerCase() : "mp3"
+    const ext = safeName.includes(".") ? safeName.split(".").pop()!.toLowerCase() : "mp3"
     const path = `${key}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`
-    const bytes = new Uint8Array(await file.arrayBuffer())
-    const up = await supabase.storage.from(BUCKET).upload(path, bytes, {
-      contentType: file.type || "audio/mpeg",
+    const bytes = new Uint8Array(await raw.arrayBuffer())
+    const up = await supabase.storage.from(TRIMPLAY_AUDIO_BUCKET).upload(path, bytes, {
+      contentType: raw.type || "audio/mpeg",
       upsert: false,
     })
     if (up.error) {
@@ -74,7 +66,7 @@ export async function POST(request: Request) {
           'No Supabase → Storage → bucket "trimplay-audio" → Configuration: deixe "Allowed MIME types" vazio (todos) ou inclua audio/mpeg, audio/wav.'
       } else if (em.includes("row-level security") || em.includes("rls") || em.includes("policy")) {
         hint =
-          'Execute supabase/migrations/012_trimplay_audio_storage_bucket.sql no SQL Editor ou torne o bucket público e revise as políticas em Storage → Policies.'
+          "Execute supabase/migrations/012_trimplay_audio_storage_bucket.sql no SQL Editor ou revise as políticas em Storage → Policies."
       } else if (em.includes("bucket") && em.includes("not found")) {
         hint =
           'Crie o bucket "trimplay-audio" (público) no Supabase ou rode a migration 012_trimplay_audio_storage_bucket.sql.'
@@ -85,8 +77,8 @@ export async function POST(request: Request) {
       )
     }
 
-    const pub = supabase.storage.from(BUCKET).getPublicUrl(path)
-    return NextResponse.json({ ok: true, file_url: pub.data.publicUrl, file_name: file.name, path })
+    const pub = supabase.storage.from(TRIMPLAY_AUDIO_BUCKET).getPublicUrl(path)
+    return NextResponse.json({ ok: true, file_url: pub.data.publicUrl, file_name: safeName, path })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "Erro interno" }, { status: 500 })
   }

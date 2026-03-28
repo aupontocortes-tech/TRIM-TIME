@@ -1,6 +1,8 @@
 "use client"
 
 import { useMemo, useRef, useState, useEffect } from "react"
+import { createClient } from "@supabase/supabase-js"
+import { TRIMPLAY_AUDIO_BUCKET, TRIMPLAY_AUDIO_MAX_BYTES } from "@/lib/trimplay-audio-constants"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -219,30 +221,65 @@ export default function TrimPlayerAdminPage() {
     setBusyId(`${category}-upload`)
     setMsg("")
     try {
-      const maxBytes = 4 * 1024 * 1024
-      if (file.size > maxBytes) {
+      if (file.size > TRIMPLAY_AUDIO_MAX_BYTES) {
         throw new Error(
-          `Arquivo muito grande para envio pelo site (máx. ~4 MB). Tamanho: ${(file.size / (1024 * 1024)).toFixed(1)} MB. Comprima o áudio ou use um trecho menor.`
+          `Arquivo muito grande (máx. ~${Math.round(TRIMPLAY_AUDIO_MAX_BYTES / (1024 * 1024))} MB). Tamanho: ${(file.size / (1024 * 1024)).toFixed(1)} MB.`
         )
       }
-      const form = new FormData()
-      form.set("category", category)
-      form.set("file", file)
-      const up = await fetch("/api/admin/trimplay/audio-upload", {
+
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+      const supabaseAnon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+      if (!supabaseUrl?.trim() || !supabaseAnon?.trim()) {
+        throw new Error(
+          "Faltam NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY no ambiente do site (configure na Vercel → Environment Variables)."
+        )
+      }
+
+      const init = await fetch("/api/admin/trimplay/audio-upload-init", {
         method: "POST",
-        body: form,
+        headers: { "Content-Type": "application/json" },
         credentials: "include",
+        body: JSON.stringify({
+          category,
+          file_name: file.name,
+          content_type: file.type || "audio/mpeg",
+          size: file.size,
+        }),
       })
-      const upJson = await up.json().catch(() => ({}))
-      if (!up.ok) {
+      const initJson = (await init.json().catch(() => ({}))) as {
+        error?: string
+        hint?: string
+        path?: string
+        token?: string
+        file_url?: string
+        file_name?: string
+      }
+      if (!init.ok) {
         const detail =
-          typeof upJson.error === "string"
-            ? upJson.error
-            : up.status === 413
-              ? "Arquivo maior que o limite do servidor (tente um ficheiro menor)."
-              : `Erro de upload (${up.status})`
-        const hint = typeof (upJson as { hint?: string }).hint === "string" ? (upJson as { hint: string }).hint : ""
+          typeof initJson.error === "string"
+            ? initJson.error
+            : `Erro ao preparar upload (${init.status})`
+        const hint = typeof initJson.hint === "string" ? initJson.hint : ""
         throw new Error(hint ? `${detail}\n\n${hint}` : detail)
+      }
+
+      const path = String(initJson.path ?? "")
+      const token = String(initJson.token ?? "")
+      const fileUrl = String(initJson.file_url ?? "")
+      const savedName = String(initJson.file_name ?? file.name)
+      if (!path || !token || !fileUrl) {
+        throw new Error("Resposta inválida do servidor ao preparar o upload.")
+      }
+
+      const sb = createClient(supabaseUrl, supabaseAnon)
+      const { error: upErr } = await sb.storage.from(TRIMPLAY_AUDIO_BUCKET).uploadToSignedUrl(path, token, file, {
+        contentType: file.type || "audio/mpeg",
+        upsert: false,
+      })
+      if (upErr) {
+        throw new Error(
+          `${upErr.message}\n\nO ficheiro vai direto ao Supabase. Confirme que NEXT_PUBLIC_SUPABASE_URL aponta para o mesmo projeto onde está o bucket "${TRIMPLAY_AUDIO_BUCKET}".`
+        )
       }
 
       const create = await fetch("/api/admin/trimplay/audio-assets", {
@@ -251,8 +288,8 @@ export default function TrimPlayerAdminPage() {
         credentials: "include",
         body: JSON.stringify({
           category,
-          file_url: String(upJson.file_url ?? ""),
-          file_name: String(upJson.file_name ?? file.name),
+          file_url: fileUrl,
+          file_name: savedName,
           trim_start_sec: 0,
           trim_end_sec: 2,
           volume: 1,
