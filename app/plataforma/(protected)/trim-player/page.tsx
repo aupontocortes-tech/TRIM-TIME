@@ -23,7 +23,7 @@ type AudioAsset = {
 
 type VisualEffectAsset = {
   id: string
-  event_key: "combo1" | "combo2" | "combo3" | "combo4" | "victory" | "gameover"
+  event_key: "combo1" | "combo2" | "combo3" | "combo4" | "combo5" | "victory" | "gameover"
   effect_key:
     | "efeito_texto"
     | "efeito_brilho"
@@ -37,22 +37,32 @@ type VisualEffectAsset = {
   sort_order: number
 }
 
-const ORDER = ["combo1", "combo2", "combo3", "combo4", "gameover", "victory"] as const
+const ORDER = ["combo1", "combo2", "combo3", "combo4", "combo5", "gameover", "victory"] as const
 const LABELS: Record<(typeof ORDER)[number], string> = {
   combo1: "COMBO_1",
   combo2: "COMBO_2",
   combo3: "COMBO_3",
   combo4: "COMBO_4",
+  combo5: "COMBO_5",
   gameover: "GAME_OVER",
   victory: "VITORIA",
 }
 
-const VISUAL_EVENTS: VisualEffectAsset["event_key"][] = ["combo1", "combo2", "combo3", "combo4", "victory", "gameover"]
+const VISUAL_EVENTS: VisualEffectAsset["event_key"][] = [
+  "combo1",
+  "combo2",
+  "combo3",
+  "combo4",
+  "combo5",
+  "victory",
+  "gameover",
+]
 const VISUAL_EVENT_LABELS: Record<VisualEffectAsset["event_key"], string> = {
   combo1: "COMBO_1",
   combo2: "COMBO_2",
   combo3: "COMBO_3",
   combo4: "COMBO_4",
+  combo5: "COMBO_5",
   victory: "VITORIA",
   gameover: "GAME_OVER",
 }
@@ -98,6 +108,7 @@ export default function TrimPlayerAdminPage() {
     combo2: "efeito_texto",
     combo3: "efeito_texto",
     combo4: "efeito_texto",
+    combo5: "efeito_texto",
     victory: "efeito_texto",
     gameover: "efeito_texto",
   })

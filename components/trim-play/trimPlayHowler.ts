@@ -12,7 +12,7 @@ const TRIMPLAY_USE_FILE_SOUNDS = false
 const REMOTE_CONFIG_TTL_MS = 15000
 
 const FILE_BASE = "/sounds/trim-play"
-type RemoteCategory = "combo1" | "combo2" | "combo3" | "combo4" | "gameover" | "victory"
+type RemoteCategory = "combo1" | "combo2" | "combo3" | "combo4" | "combo5" | "gameover" | "victory"
 type RemoteAudioAsset = {
   id: string
   file: string
@@ -222,6 +222,7 @@ let remoteCategories: Record<RemoteCategory, RemoteAudioAsset[]> = {
   combo2: [],
   combo3: [],
   combo4: [],
+  combo5: [],
   gameover: [],
   victory: [],
 }
@@ -230,6 +231,7 @@ const remoteNextIndex: Record<RemoteCategory, number> = {
   combo2: 0,
   combo3: 0,
   combo4: 0,
+  combo5: 0,
   gameover: 0,
   victory: 0,
 }
@@ -256,6 +258,7 @@ async function loadRemoteAudioConfig() {
       combo2: Array.isArray(data.categories?.combo2) ? data.categories!.combo2! : [],
       combo3: Array.isArray(data.categories?.combo3) ? data.categories!.combo3! : [],
       combo4: Array.isArray(data.categories?.combo4) ? data.categories!.combo4! : [],
+      combo5: Array.isArray(data.categories?.combo5) ? data.categories!.combo5! : [],
       gameover: Array.isArray(data.categories?.gameover) ? data.categories!.gameover! : [],
       victory: Array.isArray(data.categories?.victory) ? data.categories!.victory! : [],
     }
@@ -279,6 +282,7 @@ async function loadRemoteAudioAssets() {
       combo2: Array.isArray(data.categories?.combo2) ? data.categories!.combo2! : [],
       combo3: Array.isArray(data.categories?.combo3) ? data.categories!.combo3! : [],
       combo4: Array.isArray(data.categories?.combo4) ? data.categories!.combo4! : [],
+      combo5: Array.isArray(data.categories?.combo5) ? data.categories!.combo5! : [],
       gameover: Array.isArray(data.categories?.gameover) ? data.categories!.gameover! : [],
       victory: Array.isArray(data.categories?.victory) ? data.categories!.victory! : [],
     }
@@ -386,9 +390,18 @@ export function playTrimPlayLineClear() {
 export function playTrimPlayCombo(level: number) {
   ensureHowls()
   if (muted) return
-  const comboLevel = Math.min(4, Math.max(1, Math.floor(level || 1)))
+  const comboLevel = Math.min(5, Math.max(1, Math.floor(level || 1)))
   void loadRemoteAudioAssets()
-  const comboKey: RemoteCategory = comboLevel >= 4 ? "combo4" : comboLevel === 3 ? "combo3" : comboLevel === 2 ? "combo2" : "combo1"
+  const comboKey: RemoteCategory =
+    comboLevel >= 5
+      ? "combo5"
+      : comboLevel === 4
+        ? "combo4"
+        : comboLevel === 3
+          ? "combo3"
+          : comboLevel === 2
+            ? "combo2"
+            : "combo1"
   if (tryPlayRemote(comboKey)) return
   if (TRIMPLAY_USE_FILE_SOUNDS) {
     play(fileComboHowl)

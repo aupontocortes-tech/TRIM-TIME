@@ -4,7 +4,7 @@ import { requireSuperAdmin } from "@/lib/admin-auth"
 
 export const dynamic = "force-dynamic"
 
-const AUDIO_KEYS = new Set(["combo1", "combo2", "combo3", "combo4", "gameover"])
+const AUDIO_KEYS = new Set(["combo1", "combo2", "combo3", "combo4", "combo5", "gameover"])
 
 export async function GET() {
   const auth = await requireSuperAdmin()

@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma"
 
 export const dynamic = "force-dynamic"
 
-type VisualEventKey = "combo1" | "combo2" | "combo3" | "combo4" | "victory" | "gameover"
+type VisualEventKey = "combo1" | "combo2" | "combo3" | "combo4" | "combo5" | "victory" | "gameover"
 
 function visualEffectRepo() {
   const repo = (prisma as unknown as { trimPlayVisualEffectAsset?: unknown }).trimPlayVisualEffectAsset
@@ -34,7 +34,7 @@ export async function GET(req: Request) {
   const repo = visualEffectRepo()
   if (!repo) {
     return NextResponse.json({
-      categories: { combo1: [], combo2: [], combo3: [], combo4: [], victory: [], gameover: [] },
+      categories: { combo1: [], combo2: [], combo3: [], combo4: [], combo5: [], victory: [], gameover: [] },
     })
   }
 
@@ -54,6 +54,7 @@ export async function GET(req: Request) {
       combo2: [],
       combo3: [],
       combo4: [],
+      combo5: [],
       victory: [],
       gameover: [],
     }
@@ -68,7 +69,7 @@ export async function GET(req: Request) {
   } catch (e) {
     if (isMissingTableError(e)) {
       return NextResponse.json({
-        categories: { combo1: [], combo2: [], combo3: [], combo4: [], victory: [], gameover: [] },
+        categories: { combo1: [], combo2: [], combo3: [], combo4: [], combo5: [], victory: [], gameover: [] },
       })
     }
     return NextResponse.json({ error: e instanceof Error ? e.message : "Erro interno" }, { status: 500 })

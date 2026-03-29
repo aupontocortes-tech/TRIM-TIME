@@ -10,7 +10,7 @@ import {
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 
-const AUDIO_KEYS = new Set(["combo1", "combo2", "combo3", "combo4", "gameover", "victory"])
+const AUDIO_KEYS = new Set(["combo1", "combo2", "combo3", "combo4", "combo5", "gameover", "victory"])
 
 export async function POST(request: Request) {
   const auth = await requireSuperAdmin()

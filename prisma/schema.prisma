@@ -409,7 +409,7 @@ model TrimPlayAudioAsset {
 // Lista de efeitos visuais alternados por evento no jogo (combo/vitória/game over).
 model TrimPlayVisualEffectAsset {
   id         String   @id @default(uuid()) @db.Uuid
-  eventKey   String   @map("event_key") // combo1..combo4, victory, gameover
+  eventKey   String   @map("event_key") // combo1..combo5, victory, gameover
   effectKey  String   @map("effect_key") // efeito_texto, efeito_flash, ...
   enabled    Boolean  @default(true)
   sortOrder  Int      @default(0) @map("sort_order")

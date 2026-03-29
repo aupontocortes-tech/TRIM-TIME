@@ -35,7 +35,7 @@ export async function GET() {
   const repo = audioAssetRepo()
   if (!repo) {
     return NextResponse.json({
-      categories: { combo1: [], combo2: [], combo3: [], combo4: [], gameover: [], victory: [] },
+      categories: { combo1: [], combo2: [], combo3: [], combo4: [], combo5: [], gameover: [], victory: [] },
     })
   }
   try {
@@ -48,6 +48,7 @@ export async function GET() {
       combo2: [] as unknown[],
       combo3: [] as unknown[],
       combo4: [] as unknown[],
+      combo5: [] as unknown[],
       gameover: [] as unknown[],
       victory: [] as unknown[],
     }
@@ -67,7 +68,7 @@ export async function GET() {
   } catch (e) {
     if (isMissingTableError(e)) {
       return NextResponse.json({
-        categories: { combo1: [], combo2: [], combo3: [], combo4: [], gameover: [], victory: [] },
+        categories: { combo1: [], combo2: [], combo3: [], combo4: [], combo5: [], gameover: [], victory: [] },
       })
     }
     return NextResponse.json({ error: e instanceof Error ? e.message : "Erro interno" }, { status: 500 })

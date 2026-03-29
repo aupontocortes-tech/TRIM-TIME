@@ -4,9 +4,17 @@ import { requireSuperAdmin } from "@/lib/admin-auth"
 
 export const dynamic = "force-dynamic"
 
-type VisualEventKey = "combo1" | "combo2" | "combo3" | "combo4" | "victory" | "gameover"
+type VisualEventKey = "combo1" | "combo2" | "combo3" | "combo4" | "combo5" | "victory" | "gameover"
 
-const VALID_EVENT_KEYS = new Set<VisualEventKey>(["combo1", "combo2", "combo3", "combo4", "victory", "gameover"])
+const VALID_EVENT_KEYS = new Set<VisualEventKey>([
+  "combo1",
+  "combo2",
+  "combo3",
+  "combo4",
+  "combo5",
+  "victory",
+  "gameover",
+])
 
 const VALID_EFFECT_KEYS = new Set<string>([
   "efeito_texto",
@@ -26,6 +34,7 @@ const DEFAULT_VISUAL_EFFECTS: Record<VisualEventKey, string[]> = {
   combo2: ["efeito_texto", "efeito_tremer"],
   combo3: ["efeito_texto", "efeito_tremer", "efeito_particulas"],
   combo4: ["efeito_explosao", "efeito_flash", "efeito_tremer"],
+  combo5: ["efeito_raio", "efeito_explosao", "efeito_flash", "efeito_particulas", "efeito_tremer"],
   victory: ["efeito_raio", "efeito_explosao", "efeito_flash"],
   gameover: ["efeito_escurecer", "efeito_texto"],
 }
@@ -159,7 +168,7 @@ export async function POST(request: Request) {
     const eventKeyRaw = normalizeEventKey(body.event_key)
     // Normalização mais tolerante (para o painel não travar com variações/valores vazios).
     let eventKey: VisualEventKey = "combo1"
-    const m = /^combo([1-4])$/i.exec(eventKeyRaw)
+    const m = /^combo([1-5])$/i.exec(eventKeyRaw)
     if (m) eventKey = `combo${m[1]}` as VisualEventKey
     else if (eventKeyRaw === "victory" || eventKeyRaw === "vitoria") eventKey = "victory"
     else if (eventKeyRaw === "gameover" || eventKeyRaw === "gameover") eventKey = "gameover"

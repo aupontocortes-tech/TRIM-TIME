@@ -48,7 +48,7 @@ type Particle = {
   kind?: ParticleKind
 }
 
-export type ScreenShakeLevel = "light" | "med" | "heavy"
+export type ScreenShakeLevel = "light" | "med" | "heavy" | "mega"
 
 export type TrimPlayImpactFX = {
   token: number
@@ -56,7 +56,7 @@ export type TrimPlayImpactFX = {
   heroMs: number
   shake: ScreenShakeLevel | null
   shakeMs: number
-  flash: "off" | "micro" | "strong"
+  flash: "off" | "micro" | "strong" | "mega"
   flashMs: number
   particles: Particle[]
   particleDurMs: number
@@ -95,23 +95,34 @@ function buildImpactParticles(
   })
 }
 
-function impactSpecCombo(level: 1 | 2 | 3 | 4, token: number): Omit<TrimPlayImpactFX, "token"> {
-  const heroText = level === 1 ? "COMBO!" : level === 2 ? "COMBO x2" : level === 3 ? "COMBO x3" : "INSANO!"
-  const heroMs = level <= 2 ? 920 : level === 3 ? 1000 : 1120
-  const shake: ScreenShakeLevel | null = level <= 1 ? null : level === 2 ? "light" : level === 3 ? "med" : "heavy"
-  const shakeMs = level === 2 ? 640 : level === 3 ? 780 : level >= 4 ? 980 : 0
-  const flash = level >= 4 ? "strong" : level >= 3 ? "micro" : "off"
-  const flashMs = flash === "strong" ? 200 : flash === "micro" ? 150 : 0
-  const count = level === 1 ? 18 : level === 2 ? 28 : level === 3 ? 42 : 58
-  const burst = level === 1 ? 24 : level === 2 ? 30 : level === 3 ? 38 : 48
-  const sparkRatio = level === 1 ? 0.28 : level === 2 ? 0.38 : level === 3 ? 0.48 : 0.58
+function impactSpecCombo(level: 1 | 2 | 3 | 4 | 5, token: number): Omit<TrimPlayImpactFX, "token"> {
+  const heroText =
+    level === 1
+      ? "COMBO!"
+      : level === 2
+        ? "COMBO x2"
+        : level === 3
+          ? "COMBO x3"
+          : level === 4
+            ? "INSANO!"
+            : "LENDÁRIO!"
+  const heroMs = level <= 2 ? 960 : level === 3 ? 1040 : level === 4 ? 1180 : 1320
+  const shake: ScreenShakeLevel | null =
+    level <= 1 ? null : level === 2 ? "light" : level === 3 ? "med" : level === 4 ? "heavy" : "mega"
+  const shakeMs = level === 2 ? 680 : level === 3 ? 820 : level === 4 ? 1020 : level >= 5 ? 1240 : 0
+  const flash: TrimPlayImpactFX["flash"] =
+    level >= 5 ? "mega" : level >= 4 ? "strong" : level >= 3 ? "micro" : "off"
+  const flashMs = flash === "mega" ? 280 : flash === "strong" ? 220 : flash === "micro" ? 175 : 0
+  const count = level === 1 ? 24 : level === 2 ? 34 : level === 3 ? 50 : level === 4 ? 66 : 82
+  const burst = level === 1 ? 28 : level === 2 ? 34 : level === 3 ? 42 : level === 4 ? 52 : 60
+  const sparkRatio = level === 1 ? 0.32 : level === 2 ? 0.42 : level === 3 ? 0.52 : level === 4 ? 0.62 : 0.72
   const particles = buildImpactParticles(count, `cb${level}`, token, {
     burst,
-    sizeLo: level >= 3 ? 3.5 : 3,
-    sizeHi: level >= 4 ? 12 : level >= 3 ? 9 : 7,
+    sizeLo: level >= 3 ? 3.8 : 3.2,
+    sizeHi: level >= 5 ? 14 : level >= 4 ? 12 : level >= 3 ? 10 : 7.5,
     sparkRatio,
   })
-  const particleDurMs = level >= 4 ? 1100 : level >= 3 ? 980 : 860
+  const particleDurMs = level >= 5 ? 1280 : level >= 4 ? 1180 : level >= 3 ? 1020 : 900
   return {
     heroText,
     heroMs,
@@ -121,33 +132,33 @@ function impactSpecCombo(level: 1 | 2 | 3 | 4, token: number): Omit<TrimPlayImpa
     flashMs,
     particles,
     particleDurMs,
-    ray: false,
-    rayMs: 0,
+    ray: level >= 5,
+    rayMs: level >= 5 ? 1120 : 0,
     ring: level >= 4,
-    ringMs: level >= 4 ? 900 : 0,
+    ringMs: level >= 5 ? 1080 : level >= 4 ? 960 : 0,
   }
 }
 
 function impactSpecVictory(token: number): Omit<TrimPlayImpactFX, "token"> {
-  const particles = buildImpactParticles(68, "vic", token, {
-    burst: 52,
-    sizeLo: 4,
-    sizeHi: 14,
-    sparkRatio: 0.55,
+  const particles = buildImpactParticles(84, "vic", token, {
+    burst: 58,
+    sizeLo: 4.2,
+    sizeHi: 15,
+    sparkRatio: 0.62,
   })
   return {
     heroText: "PERFEITO!",
-    heroMs: 1280,
-    shake: "heavy",
-    shakeMs: 1080,
-    flash: "strong",
-    flashMs: 220,
+    heroMs: 1380,
+    shake: "mega",
+    shakeMs: 1180,
+    flash: "mega",
+    flashMs: 300,
     particles,
-    particleDurMs: 1200,
+    particleDurMs: 1320,
     ray: true,
-    rayMs: 1100,
+    rayMs: 1240,
     ring: true,
-    ringMs: 1000,
+    ringMs: 1120,
   }
 }
 
@@ -1009,7 +1020,7 @@ export function TrimPlayGame({
       setComboStreak(nextCombo)
 
       if (clearedThisMove) {
-        const comboAudioLevel = Math.max(1, Math.min(4, Math.max(nextCombo, rounds)))
+        const comboAudioLevel = Math.max(1, Math.min(5, Math.max(nextCombo, rounds)))
         playTrimPlayCombo(comboAudioLevel)
         if (nextCombo >= 2) showToast(`${nextCombo}x combo`)
       }
@@ -1019,7 +1030,7 @@ export function TrimPlayGame({
         showToast("AUGE! Tabuleiro limpo!")
         launchImpact(impactSpecVictory(Date.now() + Math.random()))
       } else if (clearedThisMove) {
-        const level = Math.max(1, Math.min(4, nextCombo)) as 1 | 2 | 3 | 4
+        const level = Math.max(1, Math.min(5, nextCombo)) as 1 | 2 | 3 | 4 | 5
         launchImpact(impactSpecCombo(level, Date.now() + Math.random()))
       }
 
@@ -1262,7 +1273,9 @@ export function TrimPlayGame({
         ? "trimplay-shake-screen-med"
         : impactFX?.shake === "heavy"
           ? "trimplay-shake-screen-heavy"
-          : ""
+          : impactFX?.shake === "mega"
+            ? "trimplay-shake-screen-mega"
+            : ""
 
   return (
     <div className="relative h-[100dvh] min-h-[100dvh] max-h-[100dvh] text-white flex flex-col overflow-hidden">
@@ -1309,7 +1322,11 @@ export function TrimPlayGame({
           key={`flash-${impactFX.token}`}
           className={[
             "fixed inset-0 z-[2147483648] pointer-events-none trimplay-impact-flash",
-            impactFX.flash === "strong" ? "trimplay-impact-flash--strong" : "trimplay-impact-flash--micro",
+            impactFX.flash === "mega"
+              ? "trimplay-impact-flash--mega"
+              : impactFX.flash === "strong"
+                ? "trimplay-impact-flash--strong"
+                : "trimplay-impact-flash--micro",
           ].join(" ")}
           style={{ animationDuration: `${impactFX.flashMs}ms` }}
         />

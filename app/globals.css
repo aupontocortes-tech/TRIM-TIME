@@ -342,6 +342,31 @@
   }
 }
 
+@keyframes trimplay-shake-screen-mega {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  10% {
+    transform: translate3d(-22px, 14px, 0) rotate(-1.25deg);
+  }
+  22% {
+    transform: translate3d(24px, -12px, 0) rotate(1.15deg);
+  }
+  38% {
+    transform: translate3d(-20px, 11px, 0) rotate(-0.9deg);
+  }
+  52% {
+    transform: translate3d(22px, -14px, 0) rotate(1deg);
+  }
+  68% {
+    transform: translate3d(-16px, 9px, 0);
+  }
+  84% {
+    transform: translate3d(14px, -8px, 0) rotate(-0.5deg);
+  }
+}
+
 .trimplay-shake-screen-light {
   animation: trimplay-shake-screen-light var(--shake-ms, 640ms) ease-in-out both;
   will-change: transform;
@@ -354,6 +379,11 @@
 
 .trimplay-shake-screen-heavy {
   animation: trimplay-shake-screen-heavy var(--shake-ms, 980ms) ease-in-out both;
+  will-change: transform;
+}
+
+.trimplay-shake-screen-mega {
+  animation: trimplay-shake-screen-mega var(--shake-ms, 1180ms) ease-in-out both;
   will-change: transform;
 }
 
@@ -373,11 +403,30 @@
   0% {
     opacity: 0;
   }
-  30% {
+  28% {
     opacity: 1;
   }
   100% {
     opacity: 0;
+  }
+}
+
+@keyframes trimplay-impact-flash-mega {
+  0% {
+    opacity: 0;
+    filter: brightness(1);
+  }
+  22% {
+    opacity: 1;
+    filter: brightness(1.35);
+  }
+  45% {
+    opacity: 0.92;
+    filter: brightness(1.2);
+  }
+  100% {
+    opacity: 0;
+    filter: brightness(1);
   }
 }
 
@@ -401,12 +450,30 @@
   background: linear-gradient(
     180deg,
     rgba(255, 255, 255, 1) 0%,
-    rgba(255, 214, 120, 0.75) 35%,
-    rgba(255, 160, 60, 0.2) 70%,
+    rgba(255, 214, 120, 0.82) 32%,
+    rgba(255, 160, 60, 0.35) 68%,
     transparent 100%
   );
   mix-blend-mode: screen;
   animation-name: trimplay-impact-flash-strong;
+}
+
+.trimplay-impact-flash--mega {
+  background: radial-gradient(
+      ellipse 120% 80% at 50% 30%,
+      rgba(255, 255, 255, 0.95) 0%,
+      rgba(255, 220, 140, 0.88) 28%,
+      rgba(255, 140, 40, 0.45) 55%,
+      transparent 78%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(255, 248, 220, 0.9) 0%,
+      rgba(255, 180, 70, 0.55) 45%,
+      transparent 100%
+    );
+  mix-blend-mode: screen;
+  animation-name: trimplay-impact-flash-mega;
 }
 
 @keyframes trimplay-hero-burst {
@@ -463,12 +530,13 @@
 }
 
 .trimplay-explosion-ring--impact {
-  width: min(72vw, 420px);
-  height: min(72vw, 420px);
+  width: min(78vw, 460px);
+  height: min(78vw, 460px);
   border-width: 3px;
   box-shadow:
-    0 0 40px rgba(255, 212, 107, 0.55),
-    inset 0 0 24px rgba(255, 200, 80, 0.22);
+    0 0 52px rgba(255, 212, 107, 0.62),
+    0 0 88px rgba(255, 160, 60, 0.28),
+    inset 0 0 28px rgba(255, 200, 80, 0.28);
 }
 
 @keyframes trimplay-go-backdrop {

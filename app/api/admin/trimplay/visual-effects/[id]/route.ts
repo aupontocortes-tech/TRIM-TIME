@@ -4,7 +4,7 @@ import { requireSuperAdmin } from "@/lib/admin-auth"
 
 export const dynamic = "force-dynamic"
 
-type VisualEventKey = "combo1" | "combo2" | "combo3" | "combo4" | "victory" | "gameover"
+type VisualEventKey = "combo1" | "combo2" | "combo3" | "combo4" | "combo5" | "victory" | "gameover"
 
 function visualEffectRepo() {
   const repo = (prisma as unknown as { trimPlayVisualEffectAsset?: unknown }).trimPlayVisualEffectAsset

@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma"
 
 export const dynamic = "force-dynamic"
 
-const AUDIO_KEYS = ["combo1", "combo2", "combo3", "combo4", "gameover"] as const
+const AUDIO_KEYS = ["combo1", "combo2", "combo3", "combo4", "combo5", "gameover"] as const
 
 export async function GET() {
   try {

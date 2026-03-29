@@ -4,7 +4,7 @@ import { requireSuperAdmin } from "@/lib/admin-auth"
 
 export const dynamic = "force-dynamic"
 
-const CATEGORIES = new Set(["combo1", "combo2", "combo3", "combo4", "gameover", "victory"])
+const CATEGORIES = new Set(["combo1", "combo2", "combo3", "combo4", "combo5", "gameover", "victory"])
 
 function audioAssetRepo() {
   const repo = (prisma as unknown as { trimPlayAudioAsset?: unknown }).trimPlayAudioAsset
