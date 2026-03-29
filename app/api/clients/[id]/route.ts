@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { createServiceRoleClient } from "@/lib/supabase/server"
 import { requireBarbershopId } from "@/lib/tenant"
+import { sanitizeClientNotes } from "@/lib/client-auth-notes"
 import type { Client } from "@/lib/db/types"
 
 export async function PATCH(
@@ -24,7 +25,10 @@ export async function PATCH(
       .single()
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     if (!data) return NextResponse.json({ error: "Cliente não encontrado" }, { status: 404 })
-    return NextResponse.json(data as Client)
+    return NextResponse.json({
+      ...(data as Client),
+      notes: sanitizeClientNotes((data as Client).notes),
+    })
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Erro ao atualizar" },

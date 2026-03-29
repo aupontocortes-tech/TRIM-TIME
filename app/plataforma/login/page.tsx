@@ -6,13 +6,15 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { FieldGroup, Field, FieldLabel } from "@/components/ui/field"
-import { ArrowLeft, Shield } from "lucide-react"
+import { ArrowLeft, Eye, EyeOff, Shield } from "lucide-react"
 
 const GOLD = "#D4AF37"
 
 /** Login separado do app das barbearias — apenas SUPER_ADMIN_EMAIL. */
 export default function PlataformaLoginPage() {
   const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
 
@@ -24,7 +26,7 @@ export default function PlataformaLoginPage() {
       const res = await fetch("/api/auth/platform-login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim() }),
+        body: JSON.stringify({ email: email.trim(), password }),
         credentials: "include",
       })
       const data = await res.json().catch(() => ({}))
@@ -106,6 +108,30 @@ export default function PlataformaLoginPage() {
                     required
                     className="bg-zinc-900 border-zinc-700 text-white placeholder:text-zinc-500"
                   />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="platform-password" className="text-zinc-200">
+                    Senha
+                  </FieldLabel>
+                  <div className="relative">
+                    <Input
+                      id="platform-password"
+                      type={showPassword ? "text" : "password"}
+                      autoComplete="current-password"
+                      placeholder="Sua senha"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                      className="bg-zinc-900 border-zinc-700 text-white placeholder:text-zinc-500 pr-10"
+                    />
+                    <button
+                      type="button"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400"
+                      onClick={() => setShowPassword((prev) => !prev)}
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
                 </Field>
               </FieldGroup>
 

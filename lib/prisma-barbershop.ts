@@ -2,6 +2,7 @@
  * Converte Barbershop do Prisma para o formato da API (snake_case para o frontend).
  */
 import type { Barbershop, BarbershopSettings } from "@/lib/db/types"
+import { sanitizeBarbershopSettings } from "@/lib/barbershop-auth-settings"
 import type { Prisma } from "@prisma/client"
 
 type PrismaBarbershop = {
@@ -28,7 +29,7 @@ export function toBarbershopApi(b: PrismaBarbershop): Barbershop {
     role: b.role as Barbershop["role"],
     suspended_at: b.suspendedAt?.toISOString() ?? null,
     is_test: b.isTest ?? false,
-    settings: (b.settings && typeof b.settings === "object" ? (b.settings as BarbershopSettings) : null) ?? null,
+    settings: sanitizeBarbershopSettings(b.settings),
     created_at: b.createdAt.toISOString(),
     updated_at: b.updatedAt.toISOString(),
   }

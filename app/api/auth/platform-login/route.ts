@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 import { cookies } from "next/headers"
 import { BARBERSHOP_ID_COOKIE } from "@/lib/tenant"
+import { getBarbershopPasswordHash, withBarbershopPasswordHash } from "@/lib/barbershop-auth-settings"
+import { hashPassword, verifyPassword } from "@/lib/auth/password"
 import { prisma } from "@/lib/prisma"
 
 /**
@@ -11,10 +13,11 @@ import { prisma } from "@/lib/prisma"
  */
 export async function POST(request: Request) {
   try {
-    const body = await request.json() as { email: string }
+    const body = await request.json() as { email: string; password: string }
     const email = body.email?.trim()?.toLowerCase()
-    if (!email) {
-      return NextResponse.json({ error: "Email é obrigatório" }, { status: 400 })
+    const password = body.password?.trim()
+    if (!email || !password) {
+      return NextResponse.json({ error: "Email e senha são obrigatórios" }, { status: 400 })
     }
 
     const superAdminEmail = process.env.SUPER_ADMIN_EMAIL?.trim()?.toLowerCase()
@@ -22,7 +25,7 @@ export async function POST(request: Request) {
 
     let barbershop = await prisma.barbershop.findFirst({
       where: { email },
-      select: { id: true, role: true },
+      select: { id: true, role: true, settings: true, suspendedAt: true },
     })
     if (!barbershop) {
       return NextResponse.json(
@@ -43,12 +46,26 @@ export async function POST(request: Request) {
       )
     }
 
+    if (barbershop.suspendedAt) {
+      return NextResponse.json({ error: "Conta suspensa. Acesse com outra conta." }, { status: 403 })
+    }
+
+    const storedHash = getBarbershopPasswordHash(barbershop.settings)
+    if (!storedHash) {
+      await prisma.barbershop.update({
+        where: { id: barbershop.id },
+        data: { settings: withBarbershopPasswordHash(barbershop.settings, hashPassword(password)) },
+      })
+    } else if (!verifyPassword(password, storedHash)) {
+      return NextResponse.json({ error: "Email ou senha inválidos" }, { status: 401 })
+    }
+
     if (envMatch && barbershop.role !== "super_admin") {
       await prisma.barbershop.update({
         where: { id: barbershop.id },
         data: { role: "super_admin" },
       })
-      barbershop = { id: barbershop.id, role: "super_admin" }
+      barbershop = { ...barbershop, id: barbershop.id, role: "super_admin" }
     }
 
     const cookieStore = await cookies()

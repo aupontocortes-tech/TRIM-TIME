@@ -23,14 +23,6 @@ import {
   Building2,
 } from "lucide-react"
 import {
-  getClienteLogado,
-  cadastrarCliente,
-  loginCliente,
-  logoutCliente,
-  criarClienteConvidado,
-  type ClienteAgendamento,
-} from "@/lib/cliente-auth"
-import {
   clearConfirmedBooking,
   loadConfirmedBooking,
   saveConfirmedBooking,
@@ -115,6 +107,13 @@ const gerarDias = () => {
 const diasSemana = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
 const meses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
+type ClienteAgendamento = {
+  id: string
+  nome: string
+  email: string
+  telefone: string
+}
+
 type PublicUnit = {
   id: string
   name: string
@@ -136,6 +135,8 @@ type PublicShopPayload = {
   cep: string | null
   opening_hours?: BarbershopSettings["opening_hours"] | null
   units: PublicUnit[]
+  services: { id: string; name: string; price: number; duration: number }[]
+  barbers: { id: string; name: string; phone: string | null }[]
 }
 
 export default function BarbeariaPage() {
@@ -145,15 +146,18 @@ export default function BarbeariaPage() {
 
   const [authPhase, setAuthPhase] = useState<"loading" | "cadastro" | "login" | "logado">("loading")
   const [clienteLogado, setClienteLogado] = useState<ClienteAgendamento | null>(null)
+  const [authLoading, setAuthLoading] = useState(false)
 
   const [etapa, setEtapa] = useState(1)
-  const [servicosSelecionados, setServicosSelecionados] = useState<number[]>([])
-  const [profissionalSelecionado, setProfissionalSelecionado] = useState<number | null>(null)
+  const [servicosSelecionados, setServicosSelecionados] = useState<string[]>([])
+  const [profissionalSelecionado, setProfissionalSelecionado] = useState<string | null>(null)
   const [dataSelecionada, setDataSelecionada] = useState<Date | null>(null)
   const [horarioSelecionado, setHorarioSelecionado] = useState<string | null>(null)
   const [dadosCliente, setDadosCliente] = useState({ nome: "", telefone: "", email: "" })
   const [agendamentoConfirmado, setAgendamentoConfirmado] = useState(false)
   const [bookingSummary, setBookingSummary] = useState<PersistedClientBookingV1 | null>(null)
+  const [bookingLoading, setBookingLoading] = useState(false)
+  const [erroAgendamento, setErroAgendamento] = useState("")
   const [trimPlayStage, setTrimPlayStage] = useState<"intro" | "splash" | "game">("intro")
   const [trimPlayCliente, setTrimPlayCliente] = useState<null | { id: string; nome: string }>(null)
 
@@ -176,6 +180,7 @@ export default function BarbeariaPage() {
   /** Dados públicos da barbearia (API) — nome, contato, unidades */
   const [publicMeta, setPublicMeta] = useState<PublicShopPayload | null>(null)
   const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null)
+  const [occupiedTimes, setOccupiedTimes] = useState<string[]>([])
 
   useEffect(() => {
     let cancelled = false
@@ -207,31 +212,44 @@ export default function BarbeariaPage() {
   useEffect(() => {
     const forceAccountUi =
       typeof window !== "undefined" && /[?&](conta|signup|login)=1(?:&|$)/i.test(window.location.search)
-    const c = getClienteLogado(slug)
-    if (c) {
-      setClienteLogado(c)
-      setAuthPhase("logado")
-      setDadosCliente({ nome: c.nome, telefone: c.telefone, email: c.email })
-      return
-    }
+    let cancelled = false
 
-    // Fluxo padrão para o link público do cliente: agendar sem precisar criar conta.
-    // Só mostra Cadastre-se/Entrar se o usuário passar ?conta=1.
-    if (forceAccountUi) {
-      setAuthPhase("cadastro")
-      return
-    }
+    fetch(`/api/public/barbershops/${encodeURIComponent(slug)}/auth/session`, {
+      credentials: "include",
+      cache: "no-store",
+    })
+      .then((r) => (r.ok ? r.json() : { client: null }))
+      .then((data: { client?: ClienteAgendamento | null }) => {
+        if (cancelled) return
+        const c = data?.client ?? null
+        if (c) {
+          setClienteLogado(c)
+          setAuthPhase("logado")
+          setDadosCliente({ nome: c.nome, telefone: c.telefone, email: c.email })
+          return
+        }
+        if (forceAccountUi) {
+          setAuthPhase("cadastro")
+          return
+        }
+        setClienteLogado(null)
+        setAuthPhase("logado")
+      })
+      .catch(() => {
+        if (cancelled) return
+        setClienteLogado(null)
+        setAuthPhase(forceAccountUi ? "cadastro" : "logado")
+      })
 
-    const convidado = criarClienteConvidado(slug, "Cliente")
-    setClienteLogado(convidado)
-    setAuthPhase("logado")
-    setDadosCliente({ nome: convidado.nome, telefone: convidado.telefone, email: convidado.email })
+    return () => {
+      cancelled = true
+    }
   }, [slug])
 
   /** Reabrir o link: mostra resumo do último agendamento confirmado deste cliente */
   useEffect(() => {
     if (authPhase !== "logado") return
-    const c = getClienteLogado(slug)
+    const c = clienteLogado
     if (!c) return
     const p = loadConfirmedBooking(slug)
     if (!p || p.clienteId !== c.id) return
@@ -243,7 +261,7 @@ export default function BarbeariaPage() {
       telefone: c.telefone,
       email: c.email,
     })
-  }, [authPhase, slug])
+  }, [authPhase, clienteLogado, slug])
 
   useEffect(() => {
     if (!agendamentoConfirmado) return
@@ -287,43 +305,81 @@ export default function BarbeariaPage() {
     return `(${numbers.slice(0, 2)}) ${numbers.slice(2, 7)}-${numbers.slice(7, 11)}`
   }
 
-  const handleCadastro = (e: React.FormEvent) => {
+  const handleCadastro = async (e: React.FormEvent) => {
     e.preventDefault()
     setErroCadastro("")
+    setAuthLoading(true)
     if (formCadastro.senha !== formCadastro.confirmarSenha) {
       setErroCadastro("As senhas não coincidem")
+      setAuthLoading(false)
       return
     }
     if (formCadastro.senha.length < 6) {
       setErroCadastro("A senha deve ter pelo menos 6 caracteres")
+      setAuthLoading(false)
       return
     }
-    const cliente = cadastrarCliente(slug, {
-      nome: formCadastro.nome,
-      email: formCadastro.email,
-      telefone: formCadastro.telefone,
-      senha: formCadastro.senha,
-    })
-    setClienteLogado(cliente)
-    setDadosCliente({ nome: cliente.nome, telefone: cliente.telefone, email: cliente.email })
-    setAuthPhase("logado")
+    try {
+      const res = await fetch(`/api/public/barbershops/${encodeURIComponent(slug)}/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          nome: formCadastro.nome,
+          email: formCadastro.email,
+          telefone: formCadastro.telefone,
+          senha: formCadastro.senha,
+        }),
+      })
+      const data = (await res.json().catch(() => ({}))) as { error?: string; client?: ClienteAgendamento }
+      if (!res.ok || !data.client) {
+        setErroCadastro(data.error || "Não foi possível criar sua conta")
+        return
+      }
+      setClienteLogado(data.client)
+      setDadosCliente({ nome: data.client.nome, telefone: data.client.telefone, email: data.client.email })
+      setAuthPhase("logado")
+    } catch {
+      setErroCadastro("Erro ao criar conta. Tente novamente.")
+    } finally {
+      setAuthLoading(false)
+    }
   }
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setErroLogin("")
-    const cliente = loginCliente(slug, formLogin.emailOuTelefone, formLogin.senha)
-    if (!cliente) {
-      setErroLogin("Email/telefone ou senha incorretos")
-      return
+    setAuthLoading(true)
+    try {
+      const res = await fetch(`/api/public/barbershops/${encodeURIComponent(slug)}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          emailOuTelefone: formLogin.emailOuTelefone,
+          senha: formLogin.senha,
+        }),
+      })
+      const data = (await res.json().catch(() => ({}))) as { error?: string; client?: ClienteAgendamento }
+      if (!res.ok || !data.client) {
+        setErroLogin(data.error || "Email/telefone ou senha incorretos")
+        return
+      }
+      setClienteLogado(data.client)
+      setDadosCliente({ nome: data.client.nome, telefone: data.client.telefone, email: data.client.email })
+      setAuthPhase("logado")
+    } catch {
+      setErroLogin("Erro ao entrar. Tente novamente.")
+    } finally {
+      setAuthLoading(false)
     }
-    setClienteLogado(cliente)
-    setDadosCliente({ nome: cliente.nome, telefone: cliente.telefone, email: cliente.email })
-    setAuthPhase("logado")
   }
 
-  const handleLogout = () => {
-    logoutCliente(slug)
+  const handleLogout = async () => {
+    await fetch(`/api/public/barbershops/${encodeURIComponent(slug)}/auth/session`, {
+      method: "DELETE",
+      credentials: "include",
+    }).catch(() => {})
     setClienteLogado(null)
     setAuthPhase("cadastro")
     setEtapa(1)
@@ -335,10 +391,9 @@ export default function BarbeariaPage() {
   }
 
   const entrarComoConvidado = () => {
-    const convidado = criarClienteConvidado(slug, "Convidado")
-    setClienteLogado(convidado)
+    setClienteLogado(null)
     setAuthPhase("logado")
-    setDadosCliente({ nome: convidado.nome, telefone: "", email: "" })
+    setDadosCliente((prev) => ({ nome: prev.nome || "", telefone: prev.telefone || "", email: prev.email || "" }))
     setEtapa(1)
     setServicosSelecionados([])
     setProfissionalSelecionado(null)
@@ -347,9 +402,32 @@ export default function BarbeariaPage() {
     setAgendamentoConfirmado(false)
     setBookingSummary(null)
     setTrimPlayStage("intro")
+    setErroAgendamento("")
   }
 
-  const barbearia = barbeariaData
+  const barbearia = {
+    ...barbeariaData,
+    nome: publicMeta?.name ?? barbeariaData.nome,
+    telefone: publicMeta?.phone ?? barbeariaData.telefone,
+    servicos:
+      publicMeta?.services?.length
+        ? publicMeta.services.map((service) => ({
+            id: service.id,
+            nome: service.name,
+            preco: service.price,
+            duracao: service.duration,
+          }))
+        : barbeariaData.servicos.map((service) => ({ ...service, id: String(service.id) })),
+    profissionais:
+      publicMeta?.barbers?.length
+        ? publicMeta.barbers.map((barber) => ({
+            id: barber.id,
+            nome: barber.name,
+            foto: "/placeholder.svg",
+            especialidade: barber.phone ? `Contato: ${barber.phone}` : "Profissional",
+          }))
+        : barbeariaData.profissionais.map((barber) => ({ ...barber, id: String(barber.id) })),
+  }
   const dias = gerarDias()
   const openingHours = openingHoursFromSettings(publicMeta?.opening_hours ?? undefined)
   const dayKeyByIndex = [
@@ -446,7 +524,36 @@ export default function BarbeariaPage() {
     }
   }
 
-  const toggleServico = (id: number) => {
+  useEffect(() => {
+    if (!dataSelecionada || !profissionalSelecionado) {
+      setOccupiedTimes([])
+      return
+    }
+    const date = dataSelecionada.toISOString().slice(0, 10)
+    let cancelled = false
+    fetch(
+      `/api/public/barbershops/${encodeURIComponent(slug)}/appointments?date=${encodeURIComponent(date)}&barber_id=${encodeURIComponent(profissionalSelecionado)}`,
+      { cache: "no-store" }
+    )
+      .then((r) => (r.ok ? r.json() : { occupied_times: [] }))
+      .then((data: { occupied_times?: string[] }) => {
+        if (!cancelled) setOccupiedTimes(Array.isArray(data.occupied_times) ? data.occupied_times : [])
+      })
+      .catch(() => {
+        if (!cancelled) setOccupiedTimes([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [dataSelecionada, profissionalSelecionado, slug])
+
+  useEffect(() => {
+    if (horarioSelecionado && occupiedTimes.includes(horarioSelecionado)) {
+      setHorarioSelecionado(null)
+    }
+  }, [horarioSelecionado, occupiedTimes])
+
+  const toggleServico = (id: string) => {
     setServicosSelecionados(prev => 
       prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]
     )
@@ -471,33 +578,69 @@ export default function BarbeariaPage() {
     }
   }
 
-  const confirmarAgendamento = () => {
-    if (!clienteLogado || !dataSelecionada || !horarioSelecionado || profissionalSelecionado === null) return
+  const confirmarAgendamento = async () => {
+    if (!dataSelecionada || !horarioSelecionado || profissionalSelecionado === null) return
     const prof = barbearia.profissionais.find((p) => p.id === profissionalSelecionado)
     if (!prof) return
-    const summary: PersistedClientBookingV1 = {
-      v: 1,
-      clienteId: clienteLogado.id,
-      confirmedAt: new Date().toISOString(),
-      unitId: selectedUnitId,
-      unitName: selectedUnit?.name ?? null,
-      dataIso: dataSelecionada.toISOString(),
-      horario: horarioSelecionado,
-      profissionalId: profissionalSelecionado,
-      profissionalNome: prof.nome,
-      servicos: servicosSelecionadosData.map((s) => ({
-        id: s.id,
-        nome: s.nome,
-        preco: s.preco,
-        duracao: s.duracao,
-      })),
-      nomeExibicao: dadosCliente.nome.trim() || clienteLogado.nome,
-      totalPreco,
-      totalDuracao,
+    setBookingLoading(true)
+    setErroAgendamento("")
+    try {
+      const res = await fetch(`/api/public/barbershops/${encodeURIComponent(slug)}/appointments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          barber_id: profissionalSelecionado,
+          service_ids: servicosSelecionados,
+          date: dataSelecionada.toISOString().slice(0, 10),
+          time: horarioSelecionado,
+          unit_id: selectedUnitId,
+          client: {
+            nome: dadosCliente.nome,
+            telefone: dadosCliente.telefone,
+            email: dadosCliente.email,
+          },
+        }),
+      })
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string
+        client?: ClienteAgendamento
+      }
+      if (!res.ok) {
+        setErroAgendamento(data.error || "Não foi possível confirmar seu agendamento")
+        return
+      }
+      if (data.client) {
+        setClienteLogado(data.client)
+      }
+      const summary: PersistedClientBookingV1 = {
+        v: 1,
+        clienteId: data.client?.id ?? clienteLogado?.id ?? `guest_${Date.now()}`,
+        confirmedAt: new Date().toISOString(),
+        unitId: selectedUnitId,
+        unitName: selectedUnit?.name ?? null,
+        dataIso: dataSelecionada.toISOString(),
+        horario: horarioSelecionado,
+        profissionalId: profissionalSelecionado,
+        profissionalNome: prof.nome,
+        servicos: servicosSelecionadosData.map((s) => ({
+          id: s.id,
+          nome: s.nome,
+          preco: s.preco,
+          duracao: s.duracao,
+        })),
+        nomeExibicao: dadosCliente.nome.trim() || data.client?.nome || clienteLogado?.nome || "Cliente",
+        totalPreco,
+        totalDuracao,
+      }
+      saveConfirmedBooking(slug, summary)
+      setBookingSummary(summary)
+      setAgendamentoConfirmado(true)
+    } catch {
+      setErroAgendamento("Erro ao confirmar agendamento. Tente novamente.")
+    } finally {
+      setBookingLoading(false)
     }
-    saveConfirmedBooking(slug, summary)
-    setBookingSummary(summary)
-    setAgendamentoConfirmado(true)
   }
 
   const iniciarNovoAgendamento = () => {
@@ -618,8 +761,12 @@ export default function BarbeariaPage() {
                     required
                   />
                 </div>
-                <Button type="submit" className="w-full bg-primary text-primary-foreground hover:bg-primary/90">
-                  Criar conta e continuar
+                <Button
+                  type="submit"
+                  disabled={authLoading}
+                  className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+                >
+                  {authLoading ? "Criando conta..." : "Criar conta e continuar"}
                 </Button>
               </form>
               <p className="text-center text-sm text-muted-foreground mt-4">
@@ -701,8 +848,12 @@ export default function BarbeariaPage() {
                     </button>
                   </div>
                 </div>
-                <Button type="submit" className="w-full bg-primary text-primary-foreground hover:bg-primary/90">
-                  Entrar
+                <Button
+                  type="submit"
+                  disabled={authLoading}
+                  className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+                >
+                  {authLoading ? "Entrando..." : "Entrar"}
                 </Button>
               </form>
               <p className="text-center text-sm text-muted-foreground mt-4">
@@ -1107,14 +1258,17 @@ export default function BarbeariaPage() {
                 <div className="grid grid-cols-4 sm:grid-cols-5 gap-2">
                   {horarios.map((horario) => {
                     const isSelecionado = horarioSelecionado === horario
+                    const isOcupado = occupiedTimes.includes(horario)
                     
                     return (
                       <button
                         key={horario}
-                        disabled={false}
+                        disabled={isOcupado}
                         onClick={() => setHorarioSelecionado(horario)}
                         className={`py-2 px-3 rounded-lg text-sm font-medium transition-all ${
-                          isSelecionado
+                          isOcupado
+                            ? 'bg-secondary/50 text-muted-foreground/50 cursor-not-allowed'
+                            : isSelecionado
                             ? 'bg-primary text-primary-foreground'
                             : 'bg-card hover:bg-primary/10 text-foreground'
                         }`}
@@ -1183,6 +1337,11 @@ export default function BarbeariaPage() {
 
             {/* Formulário do Cliente */}
             <div className="space-y-4">
+              {erroAgendamento ? (
+                <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">
+                  {erroAgendamento}
+                </div>
+              ) : null}
               <div>
                 <Label htmlFor="nome" className="text-foreground">Seu nome</Label>
                 <Input
@@ -1247,16 +1406,16 @@ export default function BarbeariaPage() {
             
             <Button
               className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
-              disabled={!podeAvancar()}
+              disabled={!podeAvancar() || bookingLoading}
               onClick={() => {
                 if (etapa < 4) {
                   setEtapa(etapa + 1)
                 } else {
-                  confirmarAgendamento()
+                  void confirmarAgendamento()
                 }
               }}
             >
-              {etapa === 4 ? 'Confirmar Agendamento' : 'Continuar'}
+              {etapa === 4 ? (bookingLoading ? 'Confirmando...' : 'Confirmar Agendamento') : 'Continuar'}
               {etapa < 4 && <ChevronRight className="w-4 h-4 ml-1" />}
             </Button>
           </div>

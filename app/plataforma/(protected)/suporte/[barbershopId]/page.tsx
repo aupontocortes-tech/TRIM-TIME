@@ -22,11 +22,18 @@ export default function PlataformaSuporteChatPage() {
   const [text, setText] = useState("")
   const [sending, setSending] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState("")
 
   const load = useCallback(() => {
     if (!barbershopId) return
+    setError("")
     fetch(`/api/admin/support/${barbershopId}/messages`)
-      .then((r) => (r.ok ? r.json() : []))
+      .then(async (r) => {
+        if (r.ok) return r.json()
+        const data = await r.json().catch(() => ({}))
+        setError(typeof data.error === "string" ? data.error : "Não foi possível carregar as mensagens.")
+        return []
+      })
       .then(setMessages)
       .finally(() => setLoading(false))
   }, [barbershopId])
@@ -48,6 +55,9 @@ export default function PlataformaSuporteChatPage() {
       if (r.ok) {
         setText("")
         load()
+      } else {
+        const data = await r.json().catch(() => ({}))
+        setError(typeof data.error === "string" ? data.error : "Não foi possível enviar a mensagem.")
       }
     } finally {
       setSending(false)
@@ -69,6 +79,7 @@ export default function PlataformaSuporteChatPage() {
         </Button>
       </div>
       <h1 className="text-xl font-bold text-white">Conversa</h1>
+      {error ? <div className="rounded-lg border border-red-500/30 bg-red-950/40 p-3 text-sm text-red-200">{error}</div> : null}
 
       <Card className="bg-zinc-950 border-[#D4AF37]/35 min-h-[320px] flex flex-col">
         <CardContent className="p-4 flex-1 flex flex-col gap-3">

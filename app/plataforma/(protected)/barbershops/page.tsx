@@ -35,6 +35,10 @@ const ROLE_LABELS: Record<BarbershopRole, string> = {
 export default function PlataformaBarbershopsPage() {
   const [list, setList] = useState<BarbershopWithSub[]>([])
   const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [busyImpersonateId, setBusyImpersonateId] = useState<string | null>(null)
+  const [error, setError] = useState("")
+  const [success, setSuccess] = useState("")
   const [editing, setEditing] = useState<BarbershopWithSub | null>(null)
   const [form, setForm] = useState({
     name: "",
@@ -47,6 +51,7 @@ export default function PlataformaBarbershopsPage() {
   })
 
   const load = () => {
+    setError("")
     fetch("/api/admin/barbershops")
       .then((r) => (r.ok ? r.json() : []))
       .then(setList)
@@ -72,6 +77,9 @@ export default function PlataformaBarbershopsPage() {
 
   const saveEdit = async () => {
     if (!editing) return
+    setSaving(true)
+    setError("")
+    setSuccess("")
     const res = await fetch(`/api/admin/barbershops/${editing.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -88,17 +96,29 @@ export default function PlataformaBarbershopsPage() {
     if (res.ok) {
       setEditing(null)
       load()
+      setSuccess("Barbearia atualizada com sucesso.")
+    } else {
+      const data = await res.json().catch(() => ({}))
+      setError(typeof data.error === "string" ? data.error : "Não foi possível salvar a barbearia.")
     }
+    setSaving(false)
   }
 
   const impersonate = async (barbershopId: string) => {
+    setBusyImpersonateId(barbershopId)
+    setError("")
     const res = await fetch("/api/admin/impersonate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ barbershop_id: barbershopId }),
     })
     const data = await res.json().catch(() => ({}))
-    if (data.redirect) window.location.href = data.redirect
+    if (data.redirect) {
+      window.location.href = data.redirect
+      return
+    }
+    setError(typeof data.error === "string" ? data.error : "Não foi possível entrar como usuário.")
+    setBusyImpersonateId(null)
   }
 
   return (
@@ -107,6 +127,8 @@ export default function PlataformaBarbershopsPage() {
         <h1 className="text-2xl font-bold text-white">Barbearias</h1>
         <p className="text-zinc-400">Lista de todas as barbearias cadastradas</p>
       </div>
+      {error ? <div className="rounded-lg border border-red-500/30 bg-red-950/40 p-3 text-sm text-red-200">{error}</div> : null}
+      {success ? <div className="rounded-lg border border-green-500/30 bg-green-950/30 p-3 text-sm text-green-200">{success}</div> : null}
 
       <Card className="bg-zinc-950 border-[#D4AF37]/35">
         <CardHeader>
@@ -158,10 +180,11 @@ export default function PlataformaBarbershopsPage() {
                       variant="outline"
                       size="sm"
                       onClick={() => impersonate(b.id)}
+                      disabled={busyImpersonateId === b.id}
                       className="border-zinc-600 text-zinc-200 hover:bg-zinc-800"
                     >
                       <LogIn className="w-4 h-4 mr-1" />
-                      Entrar como usuário
+                      {busyImpersonateId === b.id ? "Entrando..." : "Entrar como usuário"}
                     </Button>
                   </div>
                 </div>
@@ -265,8 +288,8 @@ export default function PlataformaBarbershopsPage() {
             <Button variant="outline" onClick={() => setEditing(null)} className="border-zinc-600 text-zinc-200">
               Cancelar
             </Button>
-            <Button onClick={saveEdit} className="bg-[#D4AF37] text-black hover:bg-[#c9a227]">
-              Salvar
+            <Button onClick={saveEdit} disabled={saving} className="bg-[#D4AF37] text-black hover:bg-[#c9a227]">
+              {saving ? "Salvando..." : "Salvar"}
             </Button>
           </DialogFooter>
         </DialogContent>

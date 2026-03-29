@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server"
 import { getBarbershopIdFromRequest } from "@/lib/tenant"
+import { hashPassword } from "@/lib/auth/password"
+import { withBarbershopPasswordHash } from "@/lib/barbershop-auth-settings"
 import { createTrialEndDate } from "@/lib/subscription"
 import { prisma } from "@/lib/prisma"
 import { toBarbershopApi } from "@/lib/prisma-barbershop"
@@ -55,12 +57,21 @@ export async function GET() {
 /** Cadastro de nova barbearia: cria barbershop + assinatura em trial (7 dias Premium). Usa Prisma para não depender do cache do Supabase. */
 export async function POST(request: Request) {
   try {
-    const body = await request.json() as { name: string; email: string; phone?: string; telefone?: string }
-    if (!body.name?.trim() || !body.email?.trim()) {
+    const body = await request.json() as {
+      name: string
+      email: string
+      phone?: string
+      telefone?: string
+      password?: string
+    }
+    if (!body.name?.trim() || !body.email?.trim() || !body.password?.trim()) {
       return NextResponse.json(
-        { error: "Nome e email são obrigatórios" },
+        { error: "Nome, email e senha são obrigatórios" },
         { status: 400 }
       )
+    }
+    if (body.password.trim().length < 6) {
+      return NextResponse.json({ error: "A senha deve ter pelo menos 6 caracteres" }, { status: 400 })
     }
     const phone = (body.phone ?? body.telefone ?? "")?.trim() || null
     let slug = slugify(body.name)
@@ -76,6 +87,7 @@ export async function POST(request: Request) {
         phone,
         slug,
         role: isSuperAdmin ? "super_admin" : "admin_barbershop",
+        settings: withBarbershopPasswordHash(null, hashPassword(body.password.trim())),
       },
     })
     await prisma.subscription.create({

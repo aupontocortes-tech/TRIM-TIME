@@ -11,9 +11,9 @@ export type PersistedClientBookingV1 = {
   unitName: string | null
   dataIso: string
   horario: string
-  profissionalId: number
+  profissionalId: string
   profissionalNome: string
-  servicos: { id: number; nome: string; preco: number; duracao: number }[]
+  servicos: { id: string; nome: string; preco: number; duracao: number }[]
   nomeExibicao: string
   totalPreco: number
   totalDuracao: number

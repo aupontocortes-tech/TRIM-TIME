@@ -58,6 +58,7 @@ function CadastroPageContent() {
             name: formData.nomeBarbearia || formData.nome,
             email: formData.email,
             phone: formData.telefone?.replace(/\D/g, "") ? formData.telefone : undefined,
+            password: formData.password,
           }),
         })
         if (!res.ok) {

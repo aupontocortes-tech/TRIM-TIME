@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { createServiceRoleClient } from "@/lib/supabase/server"
 import { requireBarbershopId } from "@/lib/tenant"
+import { sanitizeClientNotes } from "@/lib/client-auth-notes"
 import type { Client } from "@/lib/db/types"
 
 export async function GET(request: Request) {
@@ -19,7 +20,12 @@ export async function GET(request: Request) {
     }
     const { data, error } = await query
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json(data as Client[])
+    return NextResponse.json(
+      ((data as Client[]) ?? []).map((client) => ({
+        ...client,
+        notes: sanitizeClientNotes(client.notes),
+      }))
+    )
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Não autorizado" },
@@ -48,7 +54,10 @@ export async function POST(request: Request) {
       .select()
       .single()
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json(data as Client)
+    return NextResponse.json({
+      ...(data as Client),
+      notes: sanitizeClientNotes((data as Client).notes),
+    })
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Erro ao criar cliente" },

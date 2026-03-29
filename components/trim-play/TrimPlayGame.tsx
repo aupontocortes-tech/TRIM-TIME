@@ -58,12 +58,47 @@ export type TrimPlayImpactFX = {
   shakeMs: number
   flash: "off" | "micro" | "strong" | "mega"
   flashMs: number
+  darken: boolean
+  darkenMs: number
   particles: Particle[]
   particleDurMs: number
   ray: boolean
   rayMs: number
   ring: boolean
   ringMs: number
+}
+
+type RemoteVisualEventKey = "combo1" | "combo2" | "combo3" | "combo4" | "combo5" | "victory" | "gameover"
+type RemoteVisualEffectKey =
+  | "efeito_texto"
+  | "efeito_brilho"
+  | "efeito_tremer"
+  | "efeito_flash"
+  | "efeito_particulas"
+  | "efeito_explosao"
+  | "efeito_raio"
+  | "efeito_escurecer"
+
+const REMOTE_VISUAL_TTL_MS = 15000
+
+let remoteVisualLoadedAt = 0
+let remoteVisualCategories: Record<RemoteVisualEventKey, RemoteVisualEffectKey[]> = {
+  combo1: [],
+  combo2: [],
+  combo3: [],
+  combo4: [],
+  combo5: [],
+  victory: [],
+  gameover: [],
+}
+const remoteVisualNextIndex: Record<RemoteVisualEventKey, number> = {
+  combo1: 0,
+  combo2: 0,
+  combo3: 0,
+  combo4: 0,
+  combo5: 0,
+  victory: 0,
+  gameover: 0,
 }
 
 function buildImpactParticles(
@@ -129,6 +164,8 @@ function impactSpecCombo(level: 1 | 2 | 3 | 4 | 5, token: number): Omit<TrimPlay
     shakeMs,
     flash,
     flashMs,
+    darken: false,
+    darkenMs: 0,
     particles,
     particleDurMs,
     ray: level >= 4,
@@ -152,6 +189,8 @@ function impactSpecVictory(token: number): Omit<TrimPlayImpactFX, "token"> {
     shakeMs: 1320,
     flash: "mega",
     flashMs: 360,
+    darken: false,
+    darkenMs: 0,
     particles,
     particleDurMs: 1550,
     ray: true,
@@ -159,6 +198,173 @@ function impactSpecVictory(token: number): Omit<TrimPlayImpactFX, "token"> {
     ring: true,
     ringMs: 1280,
   }
+}
+
+async function loadRemoteVisualEffects() {
+  const now = Date.now()
+  if (now - remoteVisualLoadedAt < REMOTE_VISUAL_TTL_MS) return
+  remoteVisualLoadedAt = now
+  try {
+    const res = await fetch("/api/trimplay/visual-effects", { credentials: "include" })
+    if (!res.ok) return
+    const data = (await res.json().catch(() => ({}))) as {
+      categories?: Partial<Record<RemoteVisualEventKey, Array<{ effectKey?: string }>>>
+    }
+    remoteVisualCategories = {
+      combo1: Array.isArray(data.categories?.combo1)
+        ? data.categories!.combo1!
+            .map((x) => x.effectKey)
+            .filter((x): x is RemoteVisualEffectKey => typeof x === "string")
+        : [],
+      combo2: Array.isArray(data.categories?.combo2)
+        ? data.categories!.combo2!
+            .map((x) => x.effectKey)
+            .filter((x): x is RemoteVisualEffectKey => typeof x === "string")
+        : [],
+      combo3: Array.isArray(data.categories?.combo3)
+        ? data.categories!.combo3!
+            .map((x) => x.effectKey)
+            .filter((x): x is RemoteVisualEffectKey => typeof x === "string")
+        : [],
+      combo4: Array.isArray(data.categories?.combo4)
+        ? data.categories!.combo4!
+            .map((x) => x.effectKey)
+            .filter((x): x is RemoteVisualEffectKey => typeof x === "string")
+        : [],
+      combo5: Array.isArray(data.categories?.combo5)
+        ? data.categories!.combo5!
+            .map((x) => x.effectKey)
+            .filter((x): x is RemoteVisualEffectKey => typeof x === "string")
+        : [],
+      victory: Array.isArray(data.categories?.victory)
+        ? data.categories!.victory!
+            .map((x) => x.effectKey)
+            .filter((x): x is RemoteVisualEffectKey => typeof x === "string")
+        : [],
+      gameover: Array.isArray(data.categories?.gameover)
+        ? data.categories!.gameover!
+            .map((x) => x.effectKey)
+            .filter((x): x is RemoteVisualEffectKey => typeof x === "string")
+        : [],
+    }
+  } catch {
+    // fallback para efeitos hardcoded
+  }
+}
+
+function consumeRemoteVisualEffect(eventKey: RemoteVisualEventKey): RemoteVisualEffectKey | null {
+  const list = remoteVisualCategories[eventKey] ?? []
+  if (list.length === 0) return null
+  const idx = remoteVisualNextIndex[eventKey] % list.length
+  remoteVisualNextIndex[eventKey] = (idx + 1) % list.length
+  return list[idx] ?? null
+}
+
+function strongerShake(shake: ScreenShakeLevel | null): ScreenShakeLevel {
+  if (shake === "mega") return "mega"
+  if (shake === "heavy") return "mega"
+  if (shake === "med") return "heavy"
+  if (shake === "light") return "med"
+  return "light"
+}
+
+function strongerFlash(flash: TrimPlayImpactFX["flash"]): TrimPlayImpactFX["flash"] {
+  if (flash === "mega") return "mega"
+  if (flash === "strong") return "mega"
+  if (flash === "micro") return "strong"
+  return "micro"
+}
+
+function applyRemoteVisualEffect(
+  spec: Omit<TrimPlayImpactFX, "token">,
+  eventKey: RemoteVisualEventKey,
+  token: number
+): Omit<TrimPlayImpactFX, "token"> {
+  const effect = consumeRemoteVisualEffect(eventKey)
+  if (!effect || effect === "efeito_texto") return spec
+
+  if (effect === "efeito_brilho") {
+    return {
+      ...spec,
+      flash: strongerFlash(spec.flash),
+      flashMs: Math.max(spec.flashMs, 260),
+      ring: true,
+      ringMs: Math.max(spec.ringMs, 980),
+    }
+  }
+
+  if (effect === "efeito_tremer") {
+    return {
+      ...spec,
+      shake: strongerShake(spec.shake),
+      shakeMs: Math.max(spec.shakeMs, 980),
+    }
+  }
+
+  if (effect === "efeito_flash") {
+    return {
+      ...spec,
+      flash: strongerFlash(strongerFlash(spec.flash)),
+      flashMs: Math.max(spec.flashMs, 320),
+    }
+  }
+
+  if (effect === "efeito_particulas") {
+    return {
+      ...spec,
+      particles: [
+        ...spec.particles,
+        ...buildImpactParticles(34, `${eventKey}-extra`, token, {
+          burst: 66,
+          sizeLo: 4,
+          sizeHi: 14,
+          sparkRatio: 0.78,
+        }),
+      ],
+      particleDurMs: Math.max(spec.particleDurMs, 1450),
+    }
+  }
+
+  if (effect === "efeito_explosao") {
+    return {
+      ...spec,
+      flash: strongerFlash(spec.flash),
+      flashMs: Math.max(spec.flashMs, 300),
+      shake: strongerShake(spec.shake),
+      shakeMs: Math.max(spec.shakeMs, 1120),
+      ring: true,
+      ringMs: Math.max(spec.ringMs, 1180),
+      particles: [
+        ...spec.particles,
+        ...buildImpactParticles(42, `${eventKey}-boom`, token, {
+          burst: 74,
+          sizeLo: 5,
+          sizeHi: 16,
+          sparkRatio: 0.82,
+        }),
+      ],
+    }
+  }
+
+  if (effect === "efeito_raio") {
+    return {
+      ...spec,
+      ray: true,
+      rayMs: Math.max(spec.rayMs, 1320),
+      flash: strongerFlash(spec.flash),
+      flashMs: Math.max(spec.flashMs, 280),
+    }
+  }
+
+  if (effect === "efeito_escurecer") {
+    return {
+      ...spec,
+      darken: true,
+      darkenMs: Math.max(spec.darkenMs, 950),
+    }
+  }
+
+  return spec
 }
 
 /** iOS/Android: permite preventDefault no arrasto e evita scroll “roubar” o gesto */
@@ -786,6 +992,7 @@ export function TrimPlayGame({
 
   useEffect(() => {
     setSoundMuted(getTrimPlayMuted())
+    void loadRemoteVisualEffects()
   }, [])
 
   useEffect(() => {
@@ -1027,10 +1234,15 @@ export function TrimPlayGame({
         // Vitória usa Howl próprio (não reutiliza combo), assim o áudio do último combo não é cortado.
         window.setTimeout(() => playTrimPlayVictory(), 240)
         showToast("AUGE! Tabuleiro limpo!")
-        launchImpact(impactSpecVictory(Date.now() + Math.random()))
+        const token = Date.now() + Math.random()
+        void loadRemoteVisualEffects()
+        launchImpact(applyRemoteVisualEffect(impactSpecVictory(token), "victory", token))
       } else if (clearedThisMove) {
         const level = Math.max(1, Math.min(5, nextCombo)) as 1 | 2 | 3 | 4 | 5
-        launchImpact(impactSpecCombo(level, Date.now() + Math.random()))
+        const eventKey = `combo${level}` as RemoteVisualEventKey
+        const token = Date.now() + Math.random()
+        void loadRemoteVisualEffects()
+        launchImpact(applyRemoteVisualEffect(impactSpecCombo(level, token), eventKey, token))
       }
 
       const placePoints = piece.cells.length * 3
@@ -1328,6 +1540,14 @@ export function TrimPlayGame({
                 : "trimplay-impact-flash--micro",
           ].join(" ")}
           style={{ animationDuration: `${impactFX.flashMs}ms` }}
+        />
+      ) : null}
+
+      {impactFX?.darken ? (
+        <div
+          key={`darken-${impactFX.token}`}
+          className="fixed inset-0 z-[2147483647] pointer-events-none trimplay-viz-darken"
+          style={{ ["--dur" as string]: `${impactFX.darkenMs}ms` } as CSSProperties}
         />
       ) : null}
 
