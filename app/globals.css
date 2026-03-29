@@ -201,9 +201,10 @@
 }
 
 @keyframes trimplay-viz-ray {
-  from { opacity: 0; transform: scale(0.98) rotate(-8deg); }
-  25% { opacity: 0.55; }
-  to { opacity: 0; transform: scale(1.02) rotate(0deg); }
+  from { opacity: 0; transform: scale(0.96) rotate(-10deg); }
+  22% { opacity: 0.88; }
+  50% { opacity: 0.62; }
+  to { opacity: 0; transform: scale(1.04) rotate(0deg); }
 }
 
 .trimplay-viz-ray {
@@ -216,12 +217,18 @@
     top: var(--y1);
     opacity: 1;
     transform: scale(1);
+    filter: brightness(1.15);
+  }
+  55% {
+    opacity: 1;
+    filter: brightness(1.25);
   }
   to {
     left: var(--x2);
     top: var(--y2);
     opacity: 0;
-    transform: scale(0);
+    transform: scale(0.35);
+    filter: brightness(1);
   }
 }
 
@@ -230,19 +237,23 @@
   width: var(--size, 4px);
   height: var(--size, 4px);
   border-radius: 9999px;
-  background: hsla(var(--h, 45), 100%, 60%, 0.95);
+  background: hsla(var(--h, 48), 100%, 68%, 1);
+  box-shadow:
+    0 0 6px hsla(var(--h, 48), 100%, 55%, 0.95),
+    0 0 14px hsla(var(--h, 48), 100%, 50%, 0.55);
   animation-name: trimplay-particle-fly;
   animation-duration: var(--dur, 650ms);
-  animation-timing-function: ease-out;
+  animation-timing-function: cubic-bezier(0.22, 0.82, 0.38, 1);
   animation-delay: var(--delay, 0ms);
   animation-fill-mode: both;
   pointer-events: none;
 }
 
 @keyframes trimplay-explosion-ring {
-  from { opacity: 0; transform: scale(0.6); filter: blur(0px); }
-  30% { opacity: 0.9; }
-  to { opacity: 0; transform: scale(1.45); filter: blur(1px); }
+  from { opacity: 0; transform: scale(0.52); filter: blur(0px); }
+  28% { opacity: 1; }
+  55% { opacity: 0.92; }
+  to { opacity: 0; transform: scale(1.72); filter: blur(2px); }
 }
 
 .trimplay-explosion-ring {
@@ -253,9 +264,11 @@
   height: 40%;
   transform: translate(-50%, -50%);
   border-radius: 9999px;
-  border: 2px solid rgba(255, 212, 107, 0.65);
-  box-shadow: 0 0 20px rgba(255, 212, 107, 0.25);
-  animation: trimplay-explosion-ring var(--dur, 780ms) ease-out forwards;
+  border: 2px solid rgba(255, 224, 140, 0.9);
+  box-shadow:
+    0 0 28px rgba(255, 212, 107, 0.55),
+    0 0 48px rgba(255, 160, 50, 0.35);
+  animation: trimplay-explosion-ring var(--dur, 780ms) cubic-bezier(0.2, 0.85, 0.35, 1) forwards;
   pointer-events: none;
 }
 
@@ -288,16 +301,16 @@
     transform: translate3d(0, 0, 0);
   }
   20% {
-    transform: translate3d(-6px, 3px, 0) rotate(-0.35deg);
+    transform: translate3d(-9px, 4px, 0) rotate(-0.45deg);
   }
   40% {
-    transform: translate3d(7px, -2px, 0) rotate(0.35deg);
+    transform: translate3d(10px, -4px, 0) rotate(0.45deg);
   }
   60% {
-    transform: translate3d(-5px, 2px, 0);
+    transform: translate3d(-8px, 3px, 0);
   }
   80% {
-    transform: translate3d(4px, -3px, 0);
+    transform: translate3d(7px, -4px, 0);
   }
 }
 
@@ -307,16 +320,16 @@
     transform: translate3d(0, 0, 0);
   }
   15% {
-    transform: translate3d(-11px, 5px, 0) rotate(-0.6deg);
+    transform: translate3d(-15px, 7px, 0) rotate(-0.75deg);
   }
   35% {
-    transform: translate3d(12px, -6px, 0) rotate(0.6deg);
+    transform: translate3d(16px, -8px, 0) rotate(0.75deg);
   }
   55% {
-    transform: translate3d(-10px, 4px, 0);
+    transform: translate3d(-13px, 6px, 0);
   }
   75% {
-    transform: translate3d(9px, -5px, 0);
+    transform: translate3d(12px, -7px, 0);
   }
 }
 
@@ -326,19 +339,19 @@
     transform: translate3d(0, 0, 0);
   }
   12% {
-    transform: translate3d(-18px, 10px, 0) rotate(-1deg);
+    transform: translate3d(-24px, 13px, 0) rotate(-1.15deg);
   }
   28% {
-    transform: translate3d(20px, -9px, 0) rotate(1deg);
+    transform: translate3d(26px, -12px, 0) rotate(1.1deg);
   }
   44% {
-    transform: translate3d(-16px, 8px, 0);
+    transform: translate3d(-21px, 11px, 0);
   }
   60% {
-    transform: translate3d(17px, -10px, 0) rotate(0.8deg);
+    transform: translate3d(22px, -13px, 0) rotate(0.95deg);
   }
   76% {
-    transform: translate3d(-12px, 6px, 0);
+    transform: translate3d(-16px, 8px, 0);
   }
 }
 
@@ -348,22 +361,22 @@
     transform: translate3d(0, 0, 0);
   }
   10% {
-    transform: translate3d(-22px, 14px, 0) rotate(-1.25deg);
+    transform: translate3d(-28px, 17px, 0) rotate(-1.45deg);
   }
   22% {
-    transform: translate3d(24px, -12px, 0) rotate(1.15deg);
+    transform: translate3d(30px, -15px, 0) rotate(1.35deg);
   }
   38% {
-    transform: translate3d(-20px, 11px, 0) rotate(-0.9deg);
+    transform: translate3d(-25px, 14px, 0) rotate(-1.05deg);
   }
   52% {
-    transform: translate3d(22px, -14px, 0) rotate(1deg);
+    transform: translate3d(27px, -17px, 0) rotate(1.15deg);
   }
   68% {
-    transform: translate3d(-16px, 9px, 0);
+    transform: translate3d(-20px, 11px, 0);
   }
   84% {
-    transform: translate3d(14px, -8px, 0) rotate(-0.5deg);
+    transform: translate3d(18px, -10px, 0) rotate(-0.65deg);
   }
 }
 
@@ -438,9 +451,10 @@
 .trimplay-impact-flash--micro {
   background: linear-gradient(
     180deg,
-    rgba(255, 255, 255, 0.95) 0%,
-    rgba(255, 236, 180, 0.55) 38%,
-    transparent 88%
+    rgba(255, 255, 255, 1) 0%,
+    rgba(255, 240, 200, 0.72) 42%,
+    rgba(255, 200, 100, 0.28) 72%,
+    transparent 95%
   );
   mix-blend-mode: screen;
   animation-name: trimplay-impact-flash-micro;
@@ -450,8 +464,9 @@
   background: linear-gradient(
     180deg,
     rgba(255, 255, 255, 1) 0%,
-    rgba(255, 214, 120, 0.82) 32%,
-    rgba(255, 160, 60, 0.35) 68%,
+    rgba(255, 220, 130, 0.92) 28%,
+    rgba(255, 150, 50, 0.5) 62%,
+    rgba(255, 100, 30, 0.12) 88%,
     transparent 100%
   );
   mix-blend-mode: screen;
@@ -460,16 +475,18 @@
 
 .trimplay-impact-flash--mega {
   background: radial-gradient(
-      ellipse 120% 80% at 50% 30%,
-      rgba(255, 255, 255, 0.95) 0%,
-      rgba(255, 220, 140, 0.88) 28%,
-      rgba(255, 140, 40, 0.45) 55%,
-      transparent 78%
+      ellipse 130% 90% at 50% 28%,
+      rgba(255, 255, 255, 1) 0%,
+      rgba(255, 228, 150, 0.95) 22%,
+      rgba(255, 160, 50, 0.62) 48%,
+      rgba(255, 90, 20, 0.22) 72%,
+      transparent 88%
     ),
     linear-gradient(
       180deg,
-      rgba(255, 248, 220, 0.9) 0%,
-      rgba(255, 180, 70, 0.55) 45%,
+      rgba(255, 250, 230, 0.95) 0%,
+      rgba(255, 190, 80, 0.68) 40%,
+      rgba(255, 120, 40, 0.25) 78%,
       transparent 100%
     );
   mix-blend-mode: screen;
@@ -509,20 +526,21 @@
 }
 
 .trimplay-particle-spark {
-  width: calc(var(--size, 5px) * 2.8) !important;
-  height: calc(var(--size, 5px) * 0.55) !important;
+  width: calc(var(--size, 5px) * 3.2) !important;
+  height: calc(var(--size, 5px) * 0.62) !important;
   border-radius: 9999px;
   background: linear-gradient(
     90deg,
     transparent,
-    hsla(var(--h, 45), 100%, 70%, 0.95),
-    rgba(255, 255, 255, 0.95),
-    hsla(var(--h, 45), 100%, 68%, 0.9),
+    hsla(var(--h, 48), 100%, 76%, 1),
+    rgba(255, 255, 255, 1),
+    hsla(var(--h, 48), 100%, 72%, 0.98),
     transparent
   ) !important;
   box-shadow:
-    0 0 10px hsla(var(--h, 45), 100%, 58%, 0.95),
-    0 0 18px hsla(var(--h, 45), 100%, 50%, 0.5);
+    0 0 14px hsla(var(--h, 48), 100%, 62%, 1),
+    0 0 28px hsla(var(--h, 48), 100%, 52%, 0.65),
+    0 0 42px hsla(var(--h, 48), 100%, 45%, 0.35);
 }
 
 .trimplay-viz-ray-strong {
@@ -530,13 +548,14 @@
 }
 
 .trimplay-explosion-ring--impact {
-  width: min(78vw, 460px);
-  height: min(78vw, 460px);
-  border-width: 3px;
+  width: min(85vw, 520px);
+  height: min(85vw, 520px);
+  border-width: 4px;
+  border-color: rgba(255, 236, 170, 0.95);
   box-shadow:
-    0 0 52px rgba(255, 212, 107, 0.62),
-    0 0 88px rgba(255, 160, 60, 0.28),
-    inset 0 0 28px rgba(255, 200, 80, 0.28);
+    0 0 64px rgba(255, 220, 120, 0.75),
+    0 0 110px rgba(255, 150, 50, 0.42),
+    inset 0 0 36px rgba(255, 210, 100, 0.38);
 }
 
 @keyframes trimplay-go-backdrop {

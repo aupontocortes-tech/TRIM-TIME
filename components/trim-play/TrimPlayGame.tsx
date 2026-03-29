@@ -108,21 +108,20 @@ function impactSpecCombo(level: 1 | 2 | 3 | 4 | 5, token: number): Omit<TrimPlay
             : "LENDÁRIO!"
   const heroMs = level <= 2 ? 960 : level === 3 ? 1040 : level === 4 ? 1180 : 1320
   const shake: ScreenShakeLevel | null =
-    level <= 1 ? null : level === 2 ? "light" : level === 3 ? "med" : level === 4 ? "heavy" : "mega"
-  const shakeMs = level === 2 ? 680 : level === 3 ? 820 : level === 4 ? 1020 : level >= 5 ? 1240 : 0
-  const flash: TrimPlayImpactFX["flash"] =
-    level >= 5 ? "mega" : level >= 4 ? "strong" : level >= 3 ? "micro" : "off"
-  const flashMs = flash === "mega" ? 280 : flash === "strong" ? 220 : flash === "micro" ? 175 : 0
-  const count = level === 1 ? 24 : level === 2 ? 34 : level === 3 ? 50 : level === 4 ? 66 : 82
-  const burst = level === 1 ? 28 : level === 2 ? 34 : level === 3 ? 42 : level === 4 ? 52 : 60
-  const sparkRatio = level === 1 ? 0.32 : level === 2 ? 0.42 : level === 3 ? 0.52 : level === 4 ? 0.62 : 0.72
+    level === 1 ? "light" : level === 2 ? "light" : level === 3 ? "med" : level === 4 ? "heavy" : "mega"
+  const shakeMs = level === 1 ? 560 : level === 2 ? 760 : level === 3 ? 920 : level === 4 ? 1120 : 1380
+  const flash: TrimPlayImpactFX["flash"] = level >= 5 ? "mega" : level >= 4 ? "strong" : "micro"
+  const flashMs = flash === "mega" ? 340 : flash === "strong" ? 280 : flash === "micro" ? 210 : 0
+  const count = level === 1 ? 38 : level === 2 ? 52 : level === 3 ? 72 : level === 4 ? 92 : 110
+  const burst = level === 1 ? 34 : level === 2 ? 40 : level === 3 ? 50 : level === 4 ? 60 : 72
+  const sparkRatio = level === 1 ? 0.45 : level === 2 ? 0.55 : level === 3 ? 0.65 : level === 4 ? 0.75 : 0.82
   const particles = buildImpactParticles(count, `cb${level}`, token, {
     burst,
-    sizeLo: level >= 3 ? 3.8 : 3.2,
-    sizeHi: level >= 5 ? 14 : level >= 4 ? 12 : level >= 3 ? 10 : 7.5,
+    sizeLo: level >= 3 ? 4.5 : 3.8,
+    sizeHi: level >= 5 ? 18 : level >= 4 ? 15 : level >= 3 ? 12 : 9,
     sparkRatio,
   })
-  const particleDurMs = level >= 5 ? 1280 : level >= 4 ? 1180 : level >= 3 ? 1020 : 900
+  const particleDurMs = level >= 5 ? 1520 : level >= 4 ? 1420 : level >= 3 ? 1240 : 1080
   return {
     heroText,
     heroMs,
@@ -132,33 +131,33 @@ function impactSpecCombo(level: 1 | 2 | 3 | 4 | 5, token: number): Omit<TrimPlay
     flashMs,
     particles,
     particleDurMs,
-    ray: level >= 5,
-    rayMs: level >= 5 ? 1120 : 0,
-    ring: level >= 4,
-    ringMs: level >= 5 ? 1080 : level >= 4 ? 960 : 0,
+    ray: level >= 4,
+    rayMs: level >= 5 ? 1280 : level >= 4 ? 1000 : 0,
+    ring: level >= 3,
+    ringMs: level >= 5 ? 1200 : level >= 4 ? 1080 : level >= 3 ? 920 : 0,
   }
 }
 
 function impactSpecVictory(token: number): Omit<TrimPlayImpactFX, "token"> {
-  const particles = buildImpactParticles(84, "vic", token, {
-    burst: 58,
-    sizeLo: 4.2,
-    sizeHi: 15,
-    sparkRatio: 0.62,
+  const particles = buildImpactParticles(118, "vic", token, {
+    burst: 68,
+    sizeLo: 5,
+    sizeHi: 18,
+    sparkRatio: 0.72,
   })
   return {
     heroText: "PERFEITO!",
     heroMs: 1380,
     shake: "mega",
-    shakeMs: 1180,
+    shakeMs: 1320,
     flash: "mega",
-    flashMs: 300,
+    flashMs: 360,
     particles,
-    particleDurMs: 1320,
+    particleDurMs: 1550,
     ray: true,
-    rayMs: 1240,
+    rayMs: 1380,
     ring: true,
-    ringMs: 1120,
+    ringMs: 1280,
   }
 }
 
@@ -1340,7 +1339,7 @@ export function TrimPlayGame({
             {
               ["--dur" as string]: `${impactFX.rayMs}ms`,
               background:
-                "linear-gradient(118deg, rgba(255,212,107,0) 22%, rgba(255,245,200,0.65) 48%, rgba(255,180,60,0.5) 52%, rgba(255,212,107,0) 78%)",
+                "linear-gradient(118deg, rgba(255,212,107,0) 18%, rgba(255,252,220,0.92) 44%, rgba(255,200,80,0.78) 50%, rgba(255,140,40,0.55) 56%, rgba(255,212,107,0) 82%)",
             } as CSSProperties
           }
         />
