@@ -54,18 +54,8 @@ export default function LoginPage() {
         credentials: "include",
       })
       if (!res.ok) {
-        const err = (await res.json().catch(() => ({}))) as {
-          error?: string
-          usePlatformLogin?: boolean
-        }
-        if (err.usePlatformLogin) {
-          setError(
-            err.error ||
-              "Use o acesso Plataforma Trim Time (link abaixo) para este e-mail."
-          )
-        } else {
-          setError(err.error || "Email ou senha inválidos")
-        }
+        const err = (await res.json().catch(() => ({}))) as { error?: string }
+        setError(err.error || "Email ou senha inválidos")
         setIsLoading(false)
         return
       }
