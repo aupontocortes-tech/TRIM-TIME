@@ -34,7 +34,14 @@ export async function POST(
           { phone: emailOuTelefone },
         ],
       },
-      select: { id: true, name: true, email: true, phone: true, notes: true },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        notes: true,
+        photoUrl: true,
+      },
     })
     if (!candidate) {
       return NextResponse.json({ error: "Email/telefone ou senha incorretos" }, { status: 401 })

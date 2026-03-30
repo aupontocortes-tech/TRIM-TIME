@@ -14,6 +14,8 @@ import {
   type HorarioDiaUi,
 } from "@/lib/barbershop-settings-ui"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { formatCpfDisplay } from "@/lib/cpf"
+import { compressImageToJpegDataUrl } from "@/lib/client-image-compress"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
@@ -36,6 +38,7 @@ import {
   Shield,
   Smartphone,
   Building2,
+  UserPlus,
 } from "lucide-react"
 import {
   Dialog,
@@ -135,8 +138,16 @@ export default function ConfiguracoesPage() {
   const [editing, setEditing] = useState<Barber | null>(null)
   const [editName, setEditName] = useState("")
   const [editPhone, setEditPhone] = useState("")
+  const [editEmail, setEditEmail] = useState("")
+  const [editCpf, setEditCpf] = useState("")
+  const [editPhotoDraft, setEditPhotoDraft] = useState<string | null>(null)
   const [editCommission, setEditCommission] = useState("50")
   const [editActive, setEditActive] = useState(true)
+  const [inviteUrl, setInviteUrl] = useState<string | null>(null)
+  const [inviteExpiry, setInviteExpiry] = useState<string | null>(null)
+  const [inviteBusy, setInviteBusy] = useState(false)
+  const [inviteCopied, setInviteCopied] = useState(false)
+  const [inviteError, setInviteError] = useState<string | null>(null)
 
   const [isSaving, setIsSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -601,9 +612,42 @@ export default function ConfiguracoesPage() {
     setEditing(b)
     setEditName(b.name)
     setEditPhone(b.phone ?? "")
+    setEditEmail(b.email ?? "")
+    setEditCpf(formatCpfDisplay(b.cpf ?? ""))
+    setEditPhotoDraft(b.photo_url ?? null)
     setEditCommission(String(Number(b.commission) || 0))
     setEditActive(b.active)
     setEditOpen(true)
+  }
+
+  const gerarLinkConvite = async () => {
+    setInviteBusy(true)
+    setInviteError(null)
+    setInviteCopied(false)
+    try {
+      const r = await fetch("/api/barbers/invites", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ days_valid: 7 }),
+      })
+      const j = (await r.json().catch(() => ({}))) as {
+        error?: string
+        token?: string
+        expires_at?: string
+      }
+      if (!r.ok || !j.token) {
+        setInviteError(typeof j.error === "string" ? j.error : "Não foi possível gerar o link")
+        return
+      }
+      const base = origin || (typeof window !== "undefined" ? window.location.origin : "")
+      setInviteUrl(`${base}/convite/barbeiro/${j.token}`)
+      setInviteExpiry(j.expires_at ?? null)
+    } catch {
+      setInviteError("Erro de rede")
+    } finally {
+      setInviteBusy(false)
+    }
   }
 
   const handleAddBarber = async () => {
@@ -653,9 +697,14 @@ export default function ConfiguracoesPage() {
     setEquipeBusy(true)
     setEquipeError(null)
     try {
-      const patch: Partial<Pick<Barber, "name" | "phone" | "active" | "commission">> = {
+      const patch: Partial<
+        Pick<Barber, "name" | "phone" | "email" | "cpf" | "photo_url" | "active" | "commission">
+      > = {
         name: editName.trim(),
         phone: editPhone.trim() || null,
+        email: editEmail.trim() || null,
+        cpf: editCpf.trim() || null,
+        photo_url: editPhotoDraft,
         active: editActive,
       }
       if (commissionFeature) {
@@ -1408,6 +1457,61 @@ export default function ConfiguracoesPage() {
               </Dialog>
             </CardHeader>
             <CardContent>
+              <div className="mb-6 p-4 rounded-lg border border-primary/20 bg-primary/5 space-y-3">
+                <div className="flex items-start gap-3">
+                  <UserPlus className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-foreground">Convidar profissional por link</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Gere um link único e envie por WhatsApp. O profissional preenche nome, e-mail, telefone, CPF e foto —
+                      válido por 7 dias ou até ser usado.
+                    </p>
+                    {inviteError ? (
+                      <p className="text-xs text-destructive mt-2">{inviteError}</p>
+                    ) : null}
+                    {inviteUrl ? (
+                      <div className="mt-3 space-y-2">
+                        <Input readOnly value={inviteUrl} className="text-xs bg-background border-border font-mono" />
+                        {inviteExpiry ? (
+                          <p className="text-xs text-muted-foreground">
+                            Expira em {new Date(inviteExpiry).toLocaleString("pt-BR")}
+                          </p>
+                        ) : null}
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="border-border"
+                          disabled={inviteBusy}
+                          onClick={async () => {
+                            try {
+                              await navigator.clipboard.writeText(inviteUrl)
+                              setInviteCopied(true)
+                              setTimeout(() => setInviteCopied(false), 2000)
+                            } catch {
+                              setInviteError("Não foi possível copiar")
+                            }
+                          }}
+                        >
+                          {inviteCopied ? <Check className="w-4 h-4 mr-2" /> : <Copy className="w-4 h-4 mr-2" />}
+                          {inviteCopied ? "Copiado" : "Copiar link"}
+                        </Button>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  className="w-full sm:w-auto"
+                  disabled={inviteBusy}
+                  onClick={() => void gerarLinkConvite()}
+                >
+                  {inviteBusy ? "Gerando…" : inviteUrl ? "Gerar novo link" : "Gerar link de convite"}
+                </Button>
+              </div>
+
               {equipeError && (
                 <div className="mb-4 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
                   {equipeError}
@@ -1445,7 +1549,10 @@ export default function ConfiguracoesPage() {
                         <p className={`font-medium ${prof.active ? "text-foreground" : "text-muted-foreground"}`}>
                           {prof.name}
                         </p>
-                        {prof.phone && <p className="text-sm text-muted-foreground">{prof.phone}</p>}
+                        <div className="text-sm text-muted-foreground space-y-0.5">
+                          {prof.phone && <p>{prof.phone}</p>}
+                          {prof.email && <p className="truncate">{prof.email}</p>}
+                        </div>
                       </div>
                       <div className="text-center min-w-[72px]">
                         <p className="text-lg font-semibold text-primary">
@@ -1510,6 +1617,58 @@ export default function ConfiguracoesPage() {
                       value={editPhone}
                       onChange={(e) => setEditPhone(e.target.value)}
                     />
+                  </Field>
+                  <Field>
+                    <FieldLabel>E-mail</FieldLabel>
+                    <Input
+                      type="email"
+                      className="bg-input border-border text-foreground"
+                      value={editEmail}
+                      onChange={(e) => setEditEmail(e.target.value)}
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel>CPF</FieldLabel>
+                    <Input
+                      className="bg-input border-border text-foreground"
+                      value={editCpf}
+                      onChange={(e) => setEditCpf(formatCpfDisplay(e.target.value))}
+                      maxLength={14}
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel>Foto</FieldLabel>
+                    <Input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      className="bg-input border-border text-foreground cursor-pointer"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0]
+                        if (!f) return
+                        void compressImageToJpegDataUrl(f, 640, 0.8)
+                          .then((url) => setEditPhotoDraft(url))
+                          .catch(() => setEquipeError("Não foi possível ler a imagem"))
+                      }}
+                    />
+                    {editPhotoDraft ? (
+                      <>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={editPhotoDraft}
+                          alt=""
+                          className="mt-2 w-20 h-20 rounded-full object-cover border border-border"
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="mt-1 h-auto py-1 px-0 text-muted-foreground"
+                          onClick={() => setEditPhotoDraft(null)}
+                        >
+                          Remover foto
+                        </Button>
+                      </>
+                    ) : null}
                   </Field>
                   {commissionFeature && (
                     <Field>

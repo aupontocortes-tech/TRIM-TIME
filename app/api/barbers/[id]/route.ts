@@ -4,6 +4,8 @@ import type { Barber } from "@/lib/db/types"
 import { canUseBarberCommission, getUpgradeMessage } from "@/lib/plans"
 import { prisma } from "@/lib/prisma"
 import { resolveEffectivePlanForActiveSession } from "@/lib/barbershop-effective-plan-server"
+import { assertValidProfilePhotoDataUrl } from "@/lib/photo-data-url"
+import { cpfDigits } from "@/lib/cpf"
 
 export async function PATCH(
   _request: Request,
@@ -12,20 +14,53 @@ export async function PATCH(
   try {
     const barbershopId = await requireBarbershopId()
     const { id } = await params
-    const body = await _request.json() as Partial<Pick<Barber, "name" | "phone" | "commission" | "active">>
+    const body = await _request.json() as Partial<
+      Pick<Barber, "name" | "phone" | "email" | "cpf" | "photo_url" | "commission" | "active">
+    >
     const barbershop = await prisma.barbershop.findUnique({
       where: { id: barbershopId },
       select: { role: true, isTest: true },
     })
     const plan = await resolveEffectivePlanForActiveSession(barbershopId)
 
-    const update: { name?: string; phone?: string | null; active?: boolean; commission?: number } = {}
+    const update: {
+      name?: string
+      phone?: string | null
+      email?: string | null
+      cpf?: string | null
+      photoUrl?: string | null
+      active?: boolean
+      commission?: number
+    } = {}
     if (body.name !== undefined) {
       const n = String(body.name).trim()
       if (!n) return NextResponse.json({ error: "Nome não pode ser vazio." }, { status: 400 })
       update.name = n
     }
     if (body.phone !== undefined) update.phone = body.phone?.trim() || null
+    if (body.email !== undefined) {
+      const e = String(body.email).trim().toLowerCase()
+      update.email = e || null
+    }
+    if (body.cpf !== undefined) {
+      const raw = String(body.cpf).trim()
+      if (!raw) update.cpf = null
+      else {
+        const d = cpfDigits(raw)
+        if (!d) return NextResponse.json({ error: "CPF inválido (use 11 dígitos)." }, { status: 400 })
+        update.cpf = d
+      }
+    }
+    if (body.photo_url !== undefined) {
+      try {
+        update.photoUrl = assertValidProfilePhotoDataUrl(body.photo_url)
+      } catch (e) {
+        return NextResponse.json(
+          { error: e instanceof Error ? e.message : "Foto inválida" },
+          { status: 400 }
+        )
+      }
+    }
     if (body.active !== undefined) update.active = Boolean(body.active)
 
     if (body.commission !== undefined) {
@@ -62,6 +97,9 @@ export async function PATCH(
       barbershop_id: data.barbershopId,
       name: data.name,
       phone: data.phone,
+      email: data.email,
+      cpf: data.cpf,
+      photo_url: data.photoUrl,
       commission: Number(data.commission),
       active: data.active,
       role: data.role,

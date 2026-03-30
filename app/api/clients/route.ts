@@ -1,31 +1,63 @@
 import { NextResponse } from "next/server"
-import { createServiceRoleClient } from "@/lib/supabase/server"
 import { requireBarbershopId } from "@/lib/tenant"
 import { sanitizeClientNotes } from "@/lib/client-auth-notes"
 import type { Client } from "@/lib/db/types"
+import { prisma } from "@/lib/prisma"
+import { assertValidProfilePhotoDataUrl } from "@/lib/photo-data-url"
+import { cpfDigits } from "@/lib/cpf"
+
+function mapClient(c: {
+  id: string
+  barbershopId: string
+  name: string
+  phone: string | null
+  email: string | null
+  notes: string | null
+  cpf: string | null
+  photoUrl: string | null
+  loyaltyPoints: number
+  createdAt: Date
+  updatedAt: Date
+}): Client {
+  return {
+    id: c.id,
+    barbershop_id: c.barbershopId,
+    name: c.name,
+    phone: c.phone,
+    email: c.email,
+    notes: sanitizeClientNotes(c.notes),
+    cpf: c.cpf,
+    photo_url: c.photoUrl,
+    loyalty_points: c.loyaltyPoints,
+    created_at: c.createdAt.toISOString(),
+    updated_at: c.updatedAt.toISOString(),
+  }
+}
 
 export async function GET(request: Request) {
   try {
     const barbershopId = await requireBarbershopId()
     const { searchParams } = new URL(request.url)
     const q = searchParams.get("q")?.trim() || ""
-    const supabase = createServiceRoleClient()
-    let query = supabase
-      .from("clients")
-      .select("*")
-      .eq("barbershop_id", barbershopId)
-      .order("name")
-    if (q) {
-      query = query.or(`name.ilike.%${q}%,phone.ilike.%${q}%,email.ilike.%${q}%`)
+
+    const where = {
+      barbershopId,
+      ...(q
+        ? {
+            OR: [
+              { name: { contains: q, mode: "insensitive" as const } },
+              { phone: { contains: q, mode: "insensitive" as const } },
+              { email: { contains: q, mode: "insensitive" as const } },
+            ],
+          }
+        : {}),
     }
-    const { data, error } = await query
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json(
-      ((data as Client[]) ?? []).map((client) => ({
-        ...client,
-        notes: sanitizeClientNotes(client.notes),
-      }))
-    )
+
+    const rows = await prisma.client.findMany({
+      where,
+      orderBy: { name: "asc" },
+    })
+    return NextResponse.json(rows.map(mapClient))
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Não autorizado" },
@@ -37,27 +69,49 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const barbershopId = await requireBarbershopId()
-    const body = await request.json() as { name: string; phone?: string; email?: string; notes?: string }
+    const body = await request.json() as {
+      name: string
+      phone?: string
+      email?: string
+      notes?: string
+      cpf?: string
+      photo_url?: string | null
+    }
     if (!body.name?.trim()) {
       return NextResponse.json({ error: "Nome é obrigatório" }, { status: 400 })
     }
-    const supabase = createServiceRoleClient()
-    const { data, error } = await supabase
-      .from("clients")
-      .insert({
-        barbershop_id: barbershopId,
+
+    let photoUrl: string | null = null
+    try {
+      photoUrl = assertValidProfilePhotoDataUrl(body.photo_url ?? null)
+    } catch (e) {
+      return NextResponse.json(
+        { error: e instanceof Error ? e.message : "Foto inválida" },
+        { status: 400 }
+      )
+    }
+
+    const cpfRaw = String(body.cpf ?? "").trim()
+    let cpfNorm: string | null = null
+    if (cpfRaw) {
+      cpfNorm = cpfDigits(cpfRaw)
+      if (!cpfNorm) {
+        return NextResponse.json({ error: "CPF inválido (use 11 dígitos)." }, { status: 400 })
+      }
+    }
+
+    const data = await prisma.client.create({
+      data: {
+        barbershopId,
         name: body.name.trim(),
         phone: body.phone?.trim() ?? null,
-        email: body.email?.trim() ?? null,
+        email: body.email?.trim().toLowerCase() ?? null,
         notes: body.notes?.trim() ?? null,
-      })
-      .select()
-      .single()
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json({
-      ...(data as Client),
-      notes: sanitizeClientNotes((data as Client).notes),
+        cpf: cpfNorm,
+        photoUrl,
+      },
     })
+    return NextResponse.json(mapClient(data))
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Erro ao criar cliente" },

@@ -53,6 +53,7 @@ export async function GET(
             id: true,
             name: true,
             phone: true,
+            photoUrl: true,
           },
           orderBy: { createdAt: "asc" },
         },
@@ -86,6 +87,7 @@ export async function GET(
         id: barber.id,
         name: barber.name,
         phone: barber.phone,
+        photo_url: barber.photoUrl,
       })),
     })
   } catch (e) {

@@ -15,6 +15,7 @@ import {
   User,
   Filter,
 } from "lucide-react"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   Dialog,
   DialogContent,
@@ -29,6 +30,7 @@ type AgendaItem = {
   hora: string
   cliente: string
   telefone: string
+  clienteFoto: string | null
   servico: string
   duracao: number
   valor: number
@@ -62,6 +64,7 @@ function mapAgendaItem(appointment: Appointment): AgendaItem {
     hora: typeof appointment.time === "string" ? appointment.time.slice(0, 5) : String(appointment.time),
     cliente: appointment.client?.name ?? "Cliente",
     telefone: appointment.client?.phone ?? "",
+    clienteFoto: appointment.client?.photo_url ?? null,
     servico: appointment.service?.name ?? "Serviço",
     duracao: appointment.service?.duration ?? 0,
     valor: Number(appointment.total_price ?? appointment.service?.price ?? 0),
@@ -393,6 +396,17 @@ export default function AgendaPage() {
                   onClick={() => setAgendamentoSelecionado(agendamento)}
                   className="flex items-center gap-4 p-4 rounded-lg bg-secondary/30 border border-border/50 cursor-pointer hover:border-primary/50 transition-colors"
                 >
+                  <Avatar className="w-11 h-11 shrink-0 border border-border">
+                    <AvatarImage src={agendamento.clienteFoto ?? undefined} alt="" />
+                    <AvatarFallback className="bg-primary/15 text-primary text-sm font-medium">
+                      {agendamento.cliente
+                        .split(" ")
+                        .map((n) => n[0])
+                        .join("")
+                        .slice(0, 2)
+                        .toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
                   <div className="text-center min-w-[60px]">
                     <p className="text-lg font-bold text-primary">{agendamento.hora}</p>
                     <p className="text-xs text-muted-foreground">{agendamento.duracao}min</p>
@@ -480,9 +494,12 @@ export default function AgendaPage() {
           {agendamentoSelecionado && (
             <div className="space-y-4">
               <div className="flex items-center gap-4 p-4 bg-secondary/50 rounded-lg">
-                <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center">
-                  <User className="w-6 h-6 text-primary" />
-                </div>
+                <Avatar className="w-14 h-14 border-2 border-primary/25">
+                  <AvatarImage src={agendamentoSelecionado.clienteFoto ?? undefined} alt="" />
+                  <AvatarFallback className="bg-primary/20 text-primary">
+                    <User className="w-7 h-7" />
+                  </AvatarFallback>
+                </Avatar>
                 <div>
                   <p className="font-semibold text-foreground">{agendamentoSelecionado.cliente}</p>
                   {agendamentoSelecionado.telefone ? (

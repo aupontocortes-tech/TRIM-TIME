@@ -44,7 +44,7 @@ export async function POST(
           ...(normalizedPhone ? [{ phone: telefone }] : []),
         ],
       },
-      select: { id: true, name: true, email: true, phone: true, notes: true },
+      select: { id: true, name: true, email: true, phone: true, notes: true, photoUrl: true },
     })
 
     let client
@@ -63,7 +63,7 @@ export async function POST(
             passwordHash: hashPassword(senha),
           }),
         },
-        select: { id: true, name: true, email: true, phone: true },
+        select: { id: true, name: true, email: true, phone: true, photoUrl: true },
       })
     } else {
       client = await prisma.client.create({
@@ -74,7 +74,7 @@ export async function POST(
           phone: telefone || null,
           notes: buildClientNotes(null, { passwordHash: hashPassword(senha) }),
         },
-        select: { id: true, name: true, email: true, phone: true },
+        select: { id: true, name: true, email: true, phone: true, photoUrl: true },
       })
     }
 

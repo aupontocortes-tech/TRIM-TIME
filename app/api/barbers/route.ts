@@ -4,6 +4,8 @@ import { canAddBarber, canUseBarberCommission, getBarberLimitMessage, getUpgrade
 import { resolveEffectivePlanForActiveSession } from "@/lib/barbershop-effective-plan-server"
 import { prisma } from "@/lib/prisma"
 import type { Barber } from "@/lib/db/types"
+import { assertValidProfilePhotoDataUrl } from "@/lib/photo-data-url"
+import { cpfDigits } from "@/lib/cpf"
 
 export async function GET() {
   try {
@@ -18,6 +20,9 @@ export async function GET() {
         barbershop_id: b.barbershopId,
         name: b.name,
         phone: b.phone,
+        email: b.email,
+        cpf: b.cpf,
+        photo_url: b.photoUrl,
         commission: Number(b.commission),
         active: b.active,
         role: b.role,
@@ -57,10 +62,36 @@ export async function POST(request: Request) {
       )
     }
 
-    const body = await request.json() as { name: string; phone?: string; commission?: number }
+    const body = await request.json() as {
+      name: string
+      phone?: string
+      email?: string
+      cpf?: string
+      photo_url?: string | null
+      commission?: number
+    }
     if (!body.name?.trim()) {
       return NextResponse.json({ error: "Nome é obrigatório" }, { status: 400 })
     }
+
+    let photoUrl: string | null = null
+    try {
+      photoUrl = assertValidProfilePhotoDataUrl(body.photo_url ?? null)
+    } catch (e) {
+      return NextResponse.json(
+        { error: e instanceof Error ? e.message : "Foto inválida" },
+        { status: 400 }
+      )
+    }
+    const cpfRaw = String(body.cpf ?? "").trim()
+    let cpfNorm: string | null = null
+    if (cpfRaw) {
+      cpfNorm = cpfDigits(cpfRaw)
+      if (!cpfNorm) {
+        return NextResponse.json({ error: "CPF inválido (use 11 dígitos)." }, { status: 400 })
+      }
+    }
+    const emailTrim = body.email?.trim().toLowerCase() || null
 
     const commissionAllowed = canUseBarberCommission(
       plan,
@@ -89,6 +120,9 @@ export async function POST(request: Request) {
         barbershopId,
         name: body.name.trim(),
         phone: body.phone?.trim() ?? null,
+        email: emailTrim,
+        cpf: cpfNorm,
+        photoUrl,
         commission,
         active: true,
       },
@@ -98,6 +132,9 @@ export async function POST(request: Request) {
       barbershop_id: data.barbershopId,
       name: data.name,
       phone: data.phone,
+      email: data.email,
+      cpf: data.cpf,
+      photo_url: data.photoUrl,
       commission: Number(data.commission),
       active: data.active,
       role: data.role,

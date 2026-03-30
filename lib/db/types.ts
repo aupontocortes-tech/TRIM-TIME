@@ -77,6 +77,9 @@ export interface Barber {
   barbershop_id: string
   name: string
   phone: string | null
+  email?: string | null
+  cpf?: string | null
+  photo_url?: string | null
   commission: number
   active: boolean
   role?: BarberRole
@@ -91,6 +94,9 @@ export interface Client {
   phone: string | null
   email: string | null
   notes: string | null
+  cpf?: string | null
+  photo_url?: string | null
+  loyalty_points?: number
   created_at: string
   updated_at: string
 }

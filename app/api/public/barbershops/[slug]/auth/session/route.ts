@@ -24,7 +24,7 @@ export async function GET(
 
     const client = await prisma.client.findFirst({
       where: { id: session.clientId, barbershopId: shop.id },
-      select: { id: true, name: true, email: true, phone: true },
+      select: { id: true, name: true, email: true, phone: true, photoUrl: true },
     })
     if (!client) {
       cookieStore.delete(publicClientCookieName(slug))

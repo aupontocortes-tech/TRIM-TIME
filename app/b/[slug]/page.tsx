@@ -30,6 +30,7 @@ import {
 } from "@/lib/cliente-booking-persist"
 import { openingHoursFromSettings } from "@/lib/barbershop-settings-ui"
 import type { BarbershopSettings } from "@/lib/db/types"
+import { compressImageToJpegDataUrl } from "@/lib/client-image-compress"
 import { AppInstallPrompt } from "@/components/app-install-prompt"
 import { TrimPlayGame } from "@/components/trim-play/TrimPlayGame"
 import { TrimPlaySplash } from "@/components/trim-play/TrimPlaySplash"
@@ -112,6 +113,7 @@ type ClienteAgendamento = {
   nome: string
   email: string
   telefone: string
+  photo_url?: string | null
 }
 
 type PublicUnit = {
@@ -136,7 +138,7 @@ type PublicShopPayload = {
   opening_hours?: BarbershopSettings["opening_hours"] | null
   units: PublicUnit[]
   services: { id: string; name: string; price: number; duration: number }[]
-  barbers: { id: string; name: string; phone: string | null }[]
+  barbers: { id: string; name: string; phone: string | null; photo_url?: string | null }[]
 }
 
 export default function BarbeariaPage() {
@@ -153,7 +155,7 @@ export default function BarbeariaPage() {
   const [profissionalSelecionado, setProfissionalSelecionado] = useState<string | null>(null)
   const [dataSelecionada, setDataSelecionada] = useState<Date | null>(null)
   const [horarioSelecionado, setHorarioSelecionado] = useState<string | null>(null)
-  const [dadosCliente, setDadosCliente] = useState({ nome: "", telefone: "", email: "" })
+  const [dadosCliente, setDadosCliente] = useState({ nome: "", telefone: "", email: "", foto: "" })
   const [agendamentoConfirmado, setAgendamentoConfirmado] = useState(false)
   const [bookingSummary, setBookingSummary] = useState<PersistedClientBookingV1 | null>(null)
   const [bookingLoading, setBookingLoading] = useState(false)
@@ -225,7 +227,12 @@ export default function BarbeariaPage() {
         if (c) {
           setClienteLogado(c)
           setAuthPhase("logado")
-          setDadosCliente({ nome: c.nome, telefone: c.telefone, email: c.email })
+          setDadosCliente({
+            nome: c.nome,
+            telefone: c.telefone,
+            email: c.email,
+            foto: c.photo_url ?? "",
+          })
           return
         }
         if (forceAccountUi) {
@@ -260,6 +267,7 @@ export default function BarbeariaPage() {
       nome: p.nomeExibicao || c.nome,
       telefone: c.telefone,
       email: c.email,
+      foto: c.photo_url ?? "",
     })
   }, [authPhase, clienteLogado, slug])
 
@@ -337,7 +345,12 @@ export default function BarbeariaPage() {
         return
       }
       setClienteLogado(data.client)
-      setDadosCliente({ nome: data.client.nome, telefone: data.client.telefone, email: data.client.email })
+      setDadosCliente({
+        nome: data.client.nome,
+        telefone: data.client.telefone,
+        email: data.client.email,
+        foto: data.client.photo_url ?? "",
+      })
       setAuthPhase("logado")
     } catch {
       setErroCadastro("Erro ao criar conta. Tente novamente.")
@@ -366,7 +379,12 @@ export default function BarbeariaPage() {
         return
       }
       setClienteLogado(data.client)
-      setDadosCliente({ nome: data.client.nome, telefone: data.client.telefone, email: data.client.email })
+      setDadosCliente({
+        nome: data.client.nome,
+        telefone: data.client.telefone,
+        email: data.client.email,
+        foto: data.client.photo_url ?? "",
+      })
       setAuthPhase("logado")
     } catch {
       setErroLogin("Erro ao entrar. Tente novamente.")
@@ -387,13 +405,18 @@ export default function BarbeariaPage() {
     setProfissionalSelecionado(null)
     setDataSelecionada(null)
     setHorarioSelecionado(null)
-    setDadosCliente({ nome: "", telefone: "", email: "" })
+    setDadosCliente({ nome: "", telefone: "", email: "", foto: "" })
   }
 
   const entrarComoConvidado = () => {
     setClienteLogado(null)
     setAuthPhase("logado")
-    setDadosCliente((prev) => ({ nome: prev.nome || "", telefone: prev.telefone || "", email: prev.email || "" }))
+    setDadosCliente((prev) => ({
+      nome: prev.nome || "",
+      telefone: prev.telefone || "",
+      email: prev.email || "",
+      foto: prev.foto || "",
+    }))
     setEtapa(1)
     setServicosSelecionados([])
     setProfissionalSelecionado(null)
@@ -423,7 +446,7 @@ export default function BarbeariaPage() {
         ? publicMeta.barbers.map((barber) => ({
             id: barber.id,
             nome: barber.name,
-            foto: "/placeholder.svg",
+            foto: barber.photo_url || "/placeholder.svg",
             especialidade: barber.phone ? `Contato: ${barber.phone}` : "Profissional",
           }))
         : barbeariaData.profissionais.map((barber) => ({ ...barber, id: String(barber.id) })),
@@ -607,6 +630,7 @@ export default function BarbeariaPage() {
             nome: dadosCliente.nome,
             telefone: dadosCliente.telefone,
             email: dadosCliente.email,
+            photo_url: dadosCliente.foto.trim() ? dadosCliente.foto : undefined,
           },
         }),
       })
@@ -1380,6 +1404,36 @@ export default function BarbeariaPage() {
                   onChange={(e) => setDadosCliente(prev => ({ ...prev, telefone: formatPhone(e.target.value) }))}
                   className="mt-1 bg-card border-border focus:border-primary"
                 />
+              </div>
+              <div>
+                <Label htmlFor="foto-cliente" className="text-foreground">Sua foto (opcional)</Label>
+                <Input
+                  id="foto-cliente"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="mt-1 bg-card border-border cursor-pointer"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0]
+                    if (!f) return
+                    void compressImageToJpegDataUrl(f, 640, 0.8)
+                      .then((url) =>
+                        setDadosCliente((prev) => ({ ...prev, foto: url.length > 400_000 ? "" : url }))
+                      )
+                      .catch(() => setErroAgendamento("Não foi possível ler a imagem."))
+                  }}
+                />
+                {dadosCliente.foto ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={dadosCliente.foto}
+                    alt=""
+                    className="mt-2 w-16 h-16 rounded-full object-cover border border-border"
+                  />
+                ) : (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Ajuda o profissional a reconhecê-lo na agenda.
+                  </p>
+                )}
               </div>
             </div>
           </div>

@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server"
 import { cookies } from "next/headers"
 import { prisma } from "@/lib/prisma"
-import { getActiveBarbershopBySlug } from "@/lib/public-booking"
+import { getActiveBarbershopBySlug, toPublicClientSession } from "@/lib/public-booking"
 import { publicClientCookieName, verifyPublicClientSession } from "@/lib/public-client-session"
+import { assertValidProfilePhotoDataUrl } from "@/lib/photo-data-url"
+import { cpfDigits } from "@/lib/cpf"
 
 function normalizeTime(time: string) {
   const raw = String(time ?? "").trim()
@@ -74,7 +76,7 @@ export async function POST(
       date?: string
       time?: string
       unit_id?: string | null
-      client?: { nome?: string; telefone?: string; email?: string }
+      client?: { nome?: string; telefone?: string; email?: string; cpf?: string; photo_url?: string | null }
     }
 
     const barberId = String(body.barber_id ?? "").trim()
@@ -138,13 +140,42 @@ export async function POST(
     let client = session
       ? await prisma.client.findFirst({
           where: { id: session.clientId, barbershopId: shop.id },
-          select: { id: true, name: true, email: true, phone: true },
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+            photoUrl: true,
+            cpf: true,
+            notes: true,
+          },
         })
       : null
 
     const nome = String(clientPayload.nome ?? client?.name ?? "").trim()
     const telefone = String(clientPayload.telefone ?? client?.phone ?? "").trim()
     const email = String(clientPayload.email ?? client?.email ?? "").trim().toLowerCase()
+    const cpfPayload = String(clientPayload.cpf ?? "").trim()
+    let cpfUpdate: string | null | undefined = undefined
+    if (cpfPayload) {
+      const d = cpfDigits(cpfPayload)
+      if (!d) {
+        return NextResponse.json({ error: "CPF inválido (11 dígitos)" }, { status: 400 })
+      }
+      cpfUpdate = d
+    }
+
+    let photoUpdate: string | null | undefined = undefined
+    if (clientPayload.photo_url !== undefined) {
+      try {
+        photoUpdate = assertValidProfilePhotoDataUrl(clientPayload.photo_url)
+      } catch (e) {
+        return NextResponse.json(
+          { error: e instanceof Error ? e.message : "Foto inválida" },
+          { status: 400 }
+        )
+      }
+    }
 
     if (!client) {
       if (!nome || !telefone) {
@@ -156,18 +187,38 @@ export async function POST(
           name: nome,
           phone: telefone || null,
           email: email || null,
+          cpf: cpfUpdate ?? null,
+          photoUrl: photoUpdate ?? null,
         },
-        select: { id: true, name: true, email: true, phone: true },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          photoUrl: true,
+          cpf: true,
+          notes: true,
+        },
       })
-    } else if (nome || telefone || email) {
+    } else if (nome || telefone || email || cpfUpdate !== undefined || photoUpdate !== undefined) {
       client = await prisma.client.update({
         where: { id: client.id },
         data: {
           name: nome || client.name,
           phone: telefone || client.phone || null,
           email: email || client.email || null,
+          ...(cpfUpdate !== undefined ? { cpf: cpfUpdate } : {}),
+          ...(photoUpdate !== undefined ? { photoUrl: photoUpdate } : {}),
         },
-        select: { id: true, name: true, email: true, phone: true },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          photoUrl: true,
+          cpf: true,
+          notes: true,
+        },
       })
     }
 
@@ -215,12 +266,7 @@ export async function POST(
     return NextResponse.json({
       ok: true,
       appointment_ids: created.map((item) => item.id),
-      client: {
-        id: client.id,
-        nome: client.name,
-        telefone: client.phone ?? "",
-        email: client.email ?? "",
-      },
+      client: toPublicClientSession(client),
     })
   } catch (e) {
     return NextResponse.json(

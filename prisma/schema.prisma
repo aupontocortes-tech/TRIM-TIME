@@ -83,9 +83,24 @@ model Barbershop {
   marketingCampaigns   MarketingCampaign[]
   supportMessages      SupportMessage[]
   trimPlayScores      TrimPlayScore[]
+  barberInvites       BarberInvite[]
 
   @@index([email])
   @@index([role])
+}
+
+/// Convite por link para o profissional completar o cadastro (nome, e-mail, telefone, CPF, foto).
+model BarberInvite {
+  id           String     @id @default(uuid()) @db.Uuid
+  barbershopId String     @map("barbershop_id") @db.Uuid
+  barbershop   Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  token        String     @unique
+  expiresAt    DateTime   @map("expires_at") @db.Timestamptz
+  usedAt       DateTime?  @map("used_at") @db.Timestamptz
+  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([barbershopId])
+  @@map("barber_invites")
 }
 
 // ========== SUPORTE (CHAT ADMIN ↔ BARBEARIA) ==========
@@ -219,6 +234,11 @@ model Barber {
   barbershop   Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
   name         String
   phone        String?
+  email        String?
+  /// Apenas dígitos (11), quando informado.
+  cpf          String?
+  /// URL pública ou data URL (imagem comprimida no cliente).
+  photoUrl     String?  @map("photo_url") @db.Text
   commission   Decimal  @default(0) @db.Decimal(5, 2)
   active       Boolean  @default(true)
   role         String   @default("user") // admin_barbershop | user
@@ -241,6 +261,9 @@ model Client {
   phone         String?
   email         String?
   notes         String?
+  /// Apenas dígitos (11), opcional.
+  cpf           String?
+  photoUrl      String?  @map("photo_url") @db.Text
   loyaltyPoints Int      @default(0) @map("loyalty_points")
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz
