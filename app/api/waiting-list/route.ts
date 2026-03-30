@@ -2,13 +2,13 @@ import { NextResponse } from "next/server"
 import { createServiceRoleClient } from "@/lib/supabase/server"
 import { requireBarbershopId } from "@/lib/tenant"
 import { hasFeature, getUpgradeMessage } from "@/lib/plans"
-import { resolveEffectivePlanForBarbershop } from "@/lib/barbershop-effective-plan-server"
+import { resolveEffectivePlanForActiveSession } from "@/lib/barbershop-effective-plan-server"
 import type { WaitingListItem } from "@/lib/db/types"
 
 export async function GET(request: Request) {
   try {
     const barbershopId = await requireBarbershopId()
-    const plan = await resolveEffectivePlanForBarbershop(barbershopId)
+    const plan = await resolveEffectivePlanForActiveSession(barbershopId)
     if (!plan || !hasFeature(plan, "waiting_list")) {
       return NextResponse.json(
         { error: getUpgradeMessage("waiting_list") },
@@ -38,7 +38,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const barbershopId = await requireBarbershopId()
-    const plan = await resolveEffectivePlanForBarbershop(barbershopId)
+    const plan = await resolveEffectivePlanForActiveSession(barbershopId)
     if (!plan || !hasFeature(plan, "waiting_list")) {
       return NextResponse.json(
         { error: getUpgradeMessage("waiting_list") },

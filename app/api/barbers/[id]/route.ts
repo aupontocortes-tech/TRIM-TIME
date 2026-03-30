@@ -3,7 +3,7 @@ import { requireBarbershopId } from "@/lib/tenant"
 import type { Barber } from "@/lib/db/types"
 import { canUseBarberCommission, getUpgradeMessage } from "@/lib/plans"
 import { prisma } from "@/lib/prisma"
-import { resolveEffectivePlanForBarbershop } from "@/lib/barbershop-effective-plan-server"
+import { resolveEffectivePlanForActiveSession } from "@/lib/barbershop-effective-plan-server"
 
 export async function PATCH(
   _request: Request,
@@ -17,7 +17,7 @@ export async function PATCH(
       where: { id: barbershopId },
       select: { role: true, isTest: true },
     })
-    const plan = await resolveEffectivePlanForBarbershop(barbershopId)
+    const plan = await resolveEffectivePlanForActiveSession(barbershopId)
 
     const update: { name?: string; phone?: string | null; active?: boolean; commission?: number } = {}
     if (body.name !== undefined) {

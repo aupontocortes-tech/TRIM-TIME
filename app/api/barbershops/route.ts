@@ -5,7 +5,7 @@ import { withBarbershopPasswordHash } from "@/lib/barbershop-auth-settings"
 import { createTrialEndDate } from "@/lib/subscription"
 import { prisma } from "@/lib/prisma"
 import { toBarbershopApi } from "@/lib/prisma-barbershop"
-import { resolveEffectivePlanForBarbershop } from "@/lib/barbershop-effective-plan-server"
+import { resolveEffectivePlanForActiveSession } from "@/lib/barbershop-effective-plan-server"
 import type { Barbershop, BarbershopSettings } from "@/lib/db/types"
 import type { Prisma } from "@prisma/client"
 
@@ -41,7 +41,7 @@ export async function GET() {
         { status: 403 }
       )
     }
-    const effectivePlan = await resolveEffectivePlanForBarbershop(barbershopId)
+    const effectivePlan = await resolveEffectivePlanForActiveSession(barbershopId)
     return NextResponse.json({
       ...toBarbershopApi(barbershop),
       effective_plan: effectivePlan,
@@ -157,7 +157,7 @@ export async function PATCH(request: Request) {
         ...(mergedSettings !== undefined && { settings: mergedSettings }),
       },
     })
-    const effectivePlan = await resolveEffectivePlanForBarbershop(barbershopId)
+    const effectivePlan = await resolveEffectivePlanForActiveSession(barbershopId)
     return NextResponse.json({
       ...toBarbershopApi(barbershop),
       effective_plan: effectivePlan,

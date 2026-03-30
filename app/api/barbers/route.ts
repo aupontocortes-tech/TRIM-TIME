@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { requireBarbershopId } from "@/lib/tenant"
 import { canAddBarber, canUseBarberCommission, getBarberLimitMessage, getUpgradeMessage } from "@/lib/plans"
-import { resolveEffectivePlanForBarbershop } from "@/lib/barbershop-effective-plan-server"
+import { resolveEffectivePlanForActiveSession } from "@/lib/barbershop-effective-plan-server"
 import { prisma } from "@/lib/prisma"
 import type { Barber } from "@/lib/db/types"
 
@@ -41,7 +41,7 @@ export async function POST(request: Request) {
         where: { id: barbershopId },
         select: { role: true, isTest: true },
       }),
-      resolveEffectivePlanForBarbershop(barbershopId),
+      resolveEffectivePlanForActiveSession(barbershopId),
       prisma.barber.count({ where: { barbershopId } }),
     ])
     if (!plan) {

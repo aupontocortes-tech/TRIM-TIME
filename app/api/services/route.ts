@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { requireBarbershopId } from "@/lib/tenant"
 import { hasFeature, getUpgradeMessage } from "@/lib/plans"
-import { resolveEffectivePlanForBarbershop } from "@/lib/barbershop-effective-plan-server"
+import { resolveEffectivePlanForActiveSession } from "@/lib/barbershop-effective-plan-server"
 import { prisma } from "@/lib/prisma"
 import type { Service } from "@/lib/db/types"
 
@@ -35,7 +35,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const barbershopId = await requireBarbershopId()
-    const plan = await resolveEffectivePlanForBarbershop(barbershopId)
+    const plan = await resolveEffectivePlanForActiveSession(barbershopId)
     if (!plan || !hasFeature(plan, "services_prices")) {
       return NextResponse.json(
         { error: getUpgradeMessage("services_prices") },

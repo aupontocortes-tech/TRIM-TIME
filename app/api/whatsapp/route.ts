@@ -2,13 +2,13 @@ import { NextResponse } from "next/server"
 import { createServiceRoleClient } from "@/lib/supabase/server"
 import { requireBarbershopId } from "@/lib/tenant"
 import { hasFeature, getUpgradeMessage } from "@/lib/plans"
-import { resolveEffectivePlanForBarbershop } from "@/lib/barbershop-effective-plan-server"
+import { resolveEffectivePlanForActiveSession } from "@/lib/barbershop-effective-plan-server"
 import type { WhatsAppIntegration } from "@/lib/db/types"
 
 export async function GET() {
   try {
     const barbershopId = await requireBarbershopId()
-    const plan = await resolveEffectivePlanForBarbershop(barbershopId)
+    const plan = await resolveEffectivePlanForActiveSession(barbershopId)
     if (!plan || !hasFeature(plan, "whatsapp_integration")) {
       return NextResponse.json(
         { error: getUpgradeMessage("whatsapp_integration") },
@@ -35,7 +35,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const barbershopId = await requireBarbershopId()
-    const plan = await resolveEffectivePlanForBarbershop(barbershopId)
+    const plan = await resolveEffectivePlanForActiveSession(barbershopId)
     if (!plan || !hasFeature(plan, "whatsapp_integration")) {
       return NextResponse.json(
         { error: getUpgradeMessage("whatsapp_integration") },
