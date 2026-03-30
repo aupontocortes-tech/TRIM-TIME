@@ -1,10 +1,16 @@
 import { NextResponse } from "next/server"
-import { createServiceRoleClient } from "@/lib/supabase/server"
 import { requireBarbershopId } from "@/lib/tenant"
 import { hasBarberSlotConflict } from "@/lib/scheduling"
 import { saleCommissionAmount } from "@/lib/commissions"
 import { resolveSelectedUnitId } from "@/lib/unit-context"
 import type { Appointment, AppointmentStatus } from "@/lib/db/types"
+import { prisma } from "@/lib/prisma"
+import {
+  appointmentApiInclude,
+  mapAppointmentRowToApi,
+  parseAppointmentDate,
+} from "@/lib/appointment-prisma-helpers"
+import { normalizeAppointmentTime } from "@/lib/scheduling"
 
 export async function PATCH(
   _request: Request,
@@ -21,30 +27,31 @@ export async function PATCH(
       barber_id?: string
       service_id?: string
     }
-    const supabase = createServiceRoleClient()
-    const selectedUnitId = await resolveSelectedUnitId(supabase, barbershopId)
+    const selectedUnitId = await resolveSelectedUnitId(barbershopId)
 
-    let beforeQuery = supabase
-      .from("appointments")
-      .select("*")
-      .eq("id", id)
-      .eq("barbershop_id", barbershopId)
-    if (selectedUnitId) beforeQuery = beforeQuery.eq("unit_id", selectedUnitId)
-    const { data: before, error: beforeErr } = await beforeQuery.single()
-    if (beforeErr || !before) {
+    const before = await prisma.appointment.findFirst({
+      where: {
+        id,
+        barbershopId,
+        ...(selectedUnitId ? { unitId: selectedUnitId } : {}),
+      },
+      include: appointmentApiInclude,
+    })
+    if (!before) {
       return NextResponse.json({ error: "Agendamento não encontrado" }, { status: 404 })
     }
 
-    const nextDate = body.date ?? (before as Appointment).date
-    const nextTime = body.time ?? (before as Appointment).time
-    const nextBarberId = body.barber_id ?? (before as Appointment).barber_id
+    const beforeApi = mapAppointmentRowToApi(before)
+    const nextDate = body.date ?? beforeApi.date
+    const nextTime = body.time ?? beforeApi.time
+    const nextBarberId = body.barber_id ?? beforeApi.barber_id
 
     if (
       body.date !== undefined ||
       body.time !== undefined ||
       body.barber_id !== undefined
     ) {
-      const conflict = await hasBarberSlotConflict(supabase, {
+      const conflict = await hasBarberSlotConflict({
         barbershopId,
         barberId: nextBarberId,
         date: nextDate,
@@ -59,45 +66,59 @@ export async function PATCH(
       }
     }
 
-    const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
-    if (body.status !== undefined) updates.status = body.status
-    if (body.total_price !== undefined) updates.total_price = body.total_price
-    if (body.date !== undefined) updates.date = body.date
-    if (body.time !== undefined) updates.time = body.time
-    if (body.barber_id !== undefined) updates.barber_id = body.barber_id
-    if (body.service_id !== undefined) updates.service_id = body.service_id
-
     const finalPrice =
       body.total_price !== undefined
         ? Number(body.total_price)
-        : Number((before as Appointment).total_price) || 0
+        : Number(beforeApi.total_price) || 0
 
-    if (body.status === "completed" && (before as Appointment).status !== "completed") {
-      const { data: barber } = await supabase
-        .from("barbers")
-        .select("commission")
-        .eq("id", nextBarberId)
-        .eq("barbershop_id", barbershopId)
-        .single()
+    let commissionPercent: number | undefined
+    let commissionAmount: number | undefined
+    if (body.status === "completed" && beforeApi.status !== "completed") {
+      const barber = await prisma.barber.findFirst({
+        where: { id: nextBarberId, barbershopId },
+        select: { commission: true },
+      })
       const pct = Number(barber?.commission) || 0
-      updates.commission_percent = pct
-      updates.commission_amount = saleCommissionAmount(finalPrice, pct)
+      commissionPercent = pct
+      commissionAmount = saleCommissionAmount(finalPrice, pct)
     }
 
-    let updateQuery = supabase
-      .from("appointments")
-      .update(updates)
-      .eq("id", id)
-      .eq("barbershop_id", barbershopId)
-    if (selectedUnitId) updateQuery = updateQuery.eq("unit_id", selectedUnitId)
-    const { data, error } = await updateQuery
-      .select("*, client:clients(*), barber:barbers(*), service:services(*)")
-      .single()
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    if (!data) return NextResponse.json({ error: "Agendamento não encontrado" }, { status: 404 })
+    const patch: {
+      status?: AppointmentStatus
+      totalPrice?: number
+      date?: Date
+      time?: string
+      barberId?: string
+      serviceId?: string
+      commissionPercent?: number
+      commissionAmount?: number
+    } = {}
+    if (body.status !== undefined) patch.status = body.status
+    if (body.total_price !== undefined) patch.totalPrice = body.total_price
+    if (body.date !== undefined) patch.date = parseAppointmentDate(body.date)
+    if (body.time !== undefined) patch.time = normalizeAppointmentTime(body.time)
+    if (body.barber_id !== undefined) patch.barberId = body.barber_id
+    if (body.service_id !== undefined) patch.serviceId = body.service_id
+    if (commissionPercent !== undefined) patch.commissionPercent = commissionPercent
+    if (commissionAmount !== undefined) patch.commissionAmount = commissionAmount
+
+    const unitFilter = selectedUnitId ? { unitId: selectedUnitId } : {}
+    const { count } = await prisma.appointment.updateMany({
+      where: { id, barbershopId, ...unitFilter },
+      data: patch,
+    })
+    if (count === 0) {
+      return NextResponse.json({ error: "Agendamento não encontrado" }, { status: 404 })
+    }
+
+    const updated = await prisma.appointment.findFirstOrThrow({
+      where: { id, barbershopId },
+      include: appointmentApiInclude,
+    })
+    const data = mapAppointmentRowToApi(updated)
 
     if (body.status === "canceled") {
-      await notifyFirstWaitingList(supabase, barbershopId, data as Appointment)
+      await notifyFirstWaitingList(barbershopId, data)
     }
     return NextResponse.json(data as Appointment)
   } catch (e) {
@@ -108,34 +129,29 @@ export async function PATCH(
   }
 }
 
-async function notifyFirstWaitingList(supabase: ReturnType<typeof import("@supabase/supabase-js").createClient>, barbershopId: string, appointment: Appointment) {
-  const { data: first } = await supabase
-    .from("waiting_list")
-    .select("id, client_id, service_id")
-    .eq("barbershop_id", barbershopId)
-    .eq("status", "waiting")
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .single()
+async function notifyFirstWaitingList(barbershopId: string, appointment: Appointment) {
+  const first = await prisma.waitingListItem.findFirst({
+    where: { barbershopId, status: "waiting" },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, clientId: true, serviceId: true },
+  })
   if (!first) return
-  await supabase
-    .from("waiting_list")
-    .update({
-      status: "notified",
-      notified_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", first.id)
-  await supabase.from("notification_log").insert({
-    barbershop_id: barbershopId,
-    client_id: first.client_id,
-    appointment_id: appointment.id,
-    type: "push",
-    event: "waiting_list_slot_available",
-    payload: {
-      date: appointment.date,
-      time: appointment.time,
-      service_id: appointment.service_id,
+  await prisma.waitingListItem.update({
+    where: { id: first.id },
+    data: { status: "notified", notifiedAt: new Date() },
+  })
+  await prisma.notificationLog.create({
+    data: {
+      barbershopId,
+      clientId: first.clientId,
+      appointmentId: appointment.id,
+      type: "push",
+      event: "waiting_list_slot_available",
+      payload: {
+        date: appointment.date,
+        time: appointment.time,
+        service_id: appointment.service_id,
+      },
     },
   })
 }
@@ -147,24 +163,28 @@ export async function DELETE(
   try {
     const barbershopId = await requireBarbershopId()
     const { id } = await params
-    const supabase = createServiceRoleClient()
-    const selectedUnitId = await resolveSelectedUnitId(supabase, barbershopId)
-    let appointmentQuery = supabase
-      .from("appointments")
-      .select("*")
-      .eq("id", id)
-      .eq("barbershop_id", barbershopId)
-    if (selectedUnitId) appointmentQuery = appointmentQuery.eq("unit_id", selectedUnitId)
-    const { data: appointment } = await appointmentQuery.single()
-    if (appointment) await notifyFirstWaitingList(supabase, barbershopId, appointment as Appointment)
-    let deleteQuery = supabase
-      .from("appointments")
-      .delete()
-      .eq("id", id)
-      .eq("barbershop_id", barbershopId)
-    if (selectedUnitId) deleteQuery = deleteQuery.eq("unit_id", selectedUnitId)
-    const { error } = await deleteQuery
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    const selectedUnitId = await resolveSelectedUnitId(barbershopId)
+    const appointment = await prisma.appointment.findFirst({
+      where: {
+        id,
+        barbershopId,
+        ...(selectedUnitId ? { unitId: selectedUnitId } : {}),
+      },
+      include: appointmentApiInclude,
+    })
+    if (appointment) {
+      await notifyFirstWaitingList(barbershopId, mapAppointmentRowToApi(appointment))
+    }
+    const del = await prisma.appointment.deleteMany({
+      where: {
+        id,
+        barbershopId,
+        ...(selectedUnitId ? { unitId: selectedUnitId } : {}),
+      },
+    })
+    if (del.count === 0) {
+      return NextResponse.json({ error: "Agendamento não encontrado" }, { status: 404 })
+    }
     return NextResponse.json({ ok: true })
   } catch (e) {
     return NextResponse.json(

@@ -18,7 +18,7 @@ export async function PATCH(
   try {
     const barbershopId = await requireBarbershopId()
     const { plan, barbershopRole } = await fetchBarbershopPlanContext(barbershopId)
-    if (barbershopRole !== "super_admin" && !hasFeature(plan, "multi_units")) {
+    if (barbershopRole !== "super_admin" && (!plan || !hasFeature(plan, "multi_units"))) {
       return NextResponse.json(
         { error: "Multiunidade disponível apenas no plano Premium." },
         { status: 403 }

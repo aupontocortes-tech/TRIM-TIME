@@ -2,27 +2,20 @@ import { NextResponse } from "next/server"
 import { createServiceRoleClient } from "@/lib/supabase/server"
 import { requireBarbershopId } from "@/lib/tenant"
 import { hasFeature, getUpgradeMessage } from "@/lib/plans"
-import { getEffectivePlanForBarbershop } from "@/lib/subscription"
+import { resolveEffectivePlanForBarbershop } from "@/lib/barbershop-effective-plan-server"
 import type { WhatsAppIntegration } from "@/lib/db/types"
 
 export async function GET() {
   try {
     const barbershopId = await requireBarbershopId()
-    const supabase = createServiceRoleClient()
-    const [{ data: barbershop }, { data: sub }] = await Promise.all([
-      supabase.from("barbershops").select("role").eq("id", barbershopId).single(),
-      supabase.from("subscriptions").select("plan, status, trial_end").eq("barbershop_id", barbershopId).single(),
-    ])
-    const plan = getEffectivePlanForBarbershop(
-      barbershop as { role?: string } | null,
-      sub as { plan: "basic" | "pro" | "premium"; status: string; trial_end: string | null } | null
-    )
+    const plan = await resolveEffectivePlanForBarbershop(barbershopId)
     if (!plan || !hasFeature(plan, "whatsapp_integration")) {
       return NextResponse.json(
         { error: getUpgradeMessage("whatsapp_integration") },
         { status: 403 }
       )
     }
+    const supabase = createServiceRoleClient()
     const { data, error } = await supabase
       .from("whatsapp_integrations")
       .select("id, phone_number, api_provider, connected_at")
@@ -42,21 +35,14 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const barbershopId = await requireBarbershopId()
-    const supabase = createServiceRoleClient()
-    const [{ data: barbershop }, { data: sub }] = await Promise.all([
-      supabase.from("barbershops").select("role").eq("id", barbershopId).single(),
-      supabase.from("subscriptions").select("plan, status, trial_end").eq("barbershop_id", barbershopId).single(),
-    ])
-    const plan = getEffectivePlanForBarbershop(
-      barbershop as { role?: string } | null,
-      sub as { plan: "basic" | "pro" | "premium"; status: string; trial_end: string | null } | null
-    )
+    const plan = await resolveEffectivePlanForBarbershop(barbershopId)
     if (!plan || !hasFeature(plan, "whatsapp_integration")) {
       return NextResponse.json(
         { error: getUpgradeMessage("whatsapp_integration") },
         { status: 403 }
       )
     }
+    const supabase = createServiceRoleClient()
     const body = await request.json() as { phone_number: string; api_provider?: string; api_token?: string }
     if (!body.phone_number?.trim()) {
       return NextResponse.json({ error: "Número é obrigatório" }, { status: 400 })

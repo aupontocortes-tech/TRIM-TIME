@@ -11,7 +11,7 @@ export async function GET() {
   try {
     const barbershopId = await requireBarbershopId()
     const supabase = createServiceRoleClient()
-    const selectedUnitId = await resolveSelectedUnitId(supabase, barbershopId)
+    const selectedUnitId = await resolveSelectedUnitId(barbershopId)
     const today = new Date().toISOString().slice(0, 10)
     const startOfMonth = new Date()
     startOfMonth.setDate(1)

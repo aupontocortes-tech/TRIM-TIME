@@ -31,6 +31,7 @@ export const PLAN_FEATURES = {
   basic: [
     "Agenda de horários",
     "Bloqueio de horários",
+    "Cadastro de serviços e preços",
     "Cadastro de clientes",
     "Histórico de cortes",
     "Anotações de clientes",
@@ -70,7 +71,8 @@ const FEATURE_KEYS: Record<string, SubscriptionPlan[]> = {
   waiting_list: ["pro", "premium"],
   financial: ["pro", "premium"],
   barber_commission: ["pro", "premium"],
-  services_prices: ["pro", "premium"],
+  /** Cadastro de serviços e preços: necessário no Básico para agenda funcionar. */
+  services_prices: ["basic", "pro", "premium"],
   email_notifications: ["pro", "premium"],
   backup: ["pro", "premium"],
   online_booking: ["premium"],

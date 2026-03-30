@@ -1,11 +1,13 @@
 /**
  * Regras de agenda: conflito de horário por barbeiro (evita double booking).
- * Usa as mesmas tabelas/colunas que as API routes (Supabase).
+ * Dados via Prisma (tabelas reais do Postgres / Supabase).
  */
-import type { SupabaseClient } from "@supabase/supabase-js"
+import { AppointmentStatus } from "@prisma/client"
+import { prisma } from "@/lib/prisma"
+import { parseAppointmentDate } from "@/lib/appointment-prisma-helpers"
 
 /** Status que ocupam o slot (não cancelado / não concluído como “livre” para o mesmo horário). */
-export const SLOT_BLOCKING_STATUSES = ["pending", "confirmed"] as const
+export const SLOT_BLOCKING_STATUSES = ["pending", "confirmed"] as const satisfies readonly AppointmentStatus[]
 
 /** Normaliza "09:30", "09:30:00" → "09:30" para comparar com o que o DB devolve. */
 export function normalizeAppointmentTime(time: string): string {
@@ -14,28 +16,23 @@ export function normalizeAppointmentTime(time: string): string {
   return t
 }
 
-export async function hasBarberSlotConflict(
-  supabase: SupabaseClient,
-  args: {
-    barbershopId: string
-    barberId: string
-    date: string
-    time: string
-    excludeAppointmentId?: string
-  }
-): Promise<boolean> {
+export async function hasBarberSlotConflict(args: {
+  barbershopId: string
+  barberId: string
+  date: string
+  time: string
+  excludeAppointmentId?: string
+}): Promise<boolean> {
   const want = normalizeAppointmentTime(args.time)
-  let q = supabase
-    .from("appointments")
-    .select("id, time")
-    .eq("barbershop_id", args.barbershopId)
-    .eq("barber_id", args.barberId)
-    .eq("date", args.date)
-    .in("status", [...SLOT_BLOCKING_STATUSES])
-  if (args.excludeAppointmentId) {
-    q = q.neq("id", args.excludeAppointmentId)
-  }
-  const { data, error } = await q
-  if (error) throw new Error(error.message)
-  return (data ?? []).some((row: { time?: string }) => normalizeAppointmentTime(String(row.time ?? "")) === want)
+  const rows = await prisma.appointment.findMany({
+    where: {
+      barbershopId: args.barbershopId,
+      barberId: args.barberId,
+      date: parseAppointmentDate(args.date),
+      status: { in: [...SLOT_BLOCKING_STATUSES] },
+      ...(args.excludeAppointmentId ? { id: { not: args.excludeAppointmentId } } : {}),
+    },
+    select: { time: true },
+  })
+  return rows.some((row) => normalizeAppointmentTime(String(row.time ?? "")) === want)
 }

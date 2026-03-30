@@ -301,14 +301,15 @@ export default function ConfiguracoesPage() {
     const full = o && barbershop?.slug ? `${o}/b/${barbershop.slug}` : ""
     if (!full) return
     try {
-      if (typeof navigator !== "undefined" && "share" in navigator) {
-        await navigator.share({
+      const nav = typeof navigator !== "undefined" ? navigator : undefined
+      if (nav && "share" in nav && typeof nav.share === "function") {
+        await nav.share({
           title: `Agendamento - ${barbershop?.name ?? "Barbearia"}`,
           text: "Agende seu horário por este link:",
           url: full,
         })
-      } else {
-        await navigator.clipboard.writeText(full)
+      } else if (nav?.clipboard) {
+        await nav.clipboard.writeText(full)
       }
       setLinkCompartilhado(true)
       setTimeout(() => setLinkCompartilhado(false), 2000)

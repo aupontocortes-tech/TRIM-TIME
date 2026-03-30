@@ -37,7 +37,7 @@ export async function GET(request: Request) {
     }
 
     const supabase = createServiceRoleClient()
-    const selectedUnitId = await resolveSelectedUnitId(supabase, barbershopId)
+    const selectedUnitId = await resolveSelectedUnitId(barbershopId)
     const { total, byBarber } = await aggregateCommissionsForRange(
       supabase,
       barbershopId,

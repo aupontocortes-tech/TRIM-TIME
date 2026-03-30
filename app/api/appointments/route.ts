@@ -1,9 +1,14 @@
 import { NextResponse } from "next/server"
-import { createServiceRoleClient } from "@/lib/supabase/server"
 import { requireBarbershopId } from "@/lib/tenant"
-import { hasBarberSlotConflict } from "@/lib/scheduling"
+import { hasBarberSlotConflict, normalizeAppointmentTime } from "@/lib/scheduling"
 import { resolveSelectedUnitId } from "@/lib/unit-context"
-import type { Appointment, AppointmentStatus } from "@/lib/db/types"
+import type { Appointment } from "@/lib/db/types"
+import { prisma } from "@/lib/prisma"
+import {
+  appointmentApiInclude,
+  mapAppointmentRowToApi,
+  parseAppointmentDate,
+} from "@/lib/appointment-prisma-helpers"
 
 export async function GET(request: Request) {
   try {
@@ -11,19 +16,18 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const date = searchParams.get("date") // YYYY-MM-DD
     const barberId = searchParams.get("barber_id")
-    const supabase = createServiceRoleClient()
-    const selectedUnitId = await resolveSelectedUnitId(supabase, barbershopId)
-    let query = supabase
-      .from("appointments")
-      .select("*, client:clients(*), barber:barbers(*), service:services(*)")
-      .eq("barbershop_id", barbershopId)
-      .order("time")
-    if (selectedUnitId) query = query.eq("unit_id", selectedUnitId)
-    if (date) query = query.eq("date", date)
-    if (barberId) query = query.eq("barber_id", barberId)
-    const { data, error } = await query
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json(data as Appointment[])
+    const selectedUnitId = await resolveSelectedUnitId(barbershopId)
+    const rows = await prisma.appointment.findMany({
+      where: {
+        barbershopId,
+        ...(selectedUnitId ? { unitId: selectedUnitId } : {}),
+        ...(date ? { date: parseAppointmentDate(date) } : {}),
+        ...(barberId ? { barberId } : {}),
+      },
+      include: appointmentApiInclude,
+      orderBy: { time: "asc" },
+    })
+    return NextResponse.json(rows.map(mapAppointmentRowToApi) as Appointment[])
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Não autorizado" },
@@ -50,35 +54,34 @@ export async function POST(request: Request) {
         { status: 400 }
       )
     }
-    const supabase = createServiceRoleClient()
-    const selectedUnitId = await resolveSelectedUnitId(supabase, barbershopId)
+    const selectedUnitId = await resolveSelectedUnitId(barbershopId)
     const effectiveUnitId = body.unit_id ?? selectedUnitId
     if (effectiveUnitId) {
-      const { data: unitData } = await supabase
-        .from("barbershop_units")
-        .select("id")
-        .eq("id", effectiveUnitId)
-        .eq("barbershop_id", barbershopId)
-        .maybeSingle()
-      if (!unitData?.id) {
+      const unit = await prisma.barbershopUnit.findFirst({
+        where: { id: effectiveUnitId, barbershopId },
+        select: { id: true },
+      })
+      if (!unit) {
         return NextResponse.json({ error: "Unidade inválida para esta barbearia" }, { status: 400 })
       }
     }
-    // Um cliente só pode ter um agendamento por dia (excluindo cancelados)
-    const { data: existing } = await supabase
-      .from("appointments")
-      .select("id")
-      .eq("barbershop_id", barbershopId)
-      .eq("client_id", body.client_id)
-      .eq("date", body.date)
-      .neq("status", "canceled")
-    if (existing && existing.length > 0) {
+    const apptDate = parseAppointmentDate(body.date)
+    const existing = await prisma.appointment.findFirst({
+      where: {
+        barbershopId,
+        clientId: body.client_id,
+        date: apptDate,
+        status: { not: "canceled" },
+      },
+      select: { id: true },
+    })
+    if (existing) {
       return NextResponse.json(
         { error: "Você já possui um agendamento neste dia. Cancele-o para poder fazer outro." },
         { status: 400 }
       )
     }
-    const conflict = await hasBarberSlotConflict(supabase, {
+    const conflict = await hasBarberSlotConflict({
       barbershopId,
       barberId: body.barber_id,
       date: body.date,
@@ -90,30 +93,26 @@ export async function POST(request: Request) {
         { status: 409 }
       )
     }
-    const { data: service } = await supabase
-      .from("services")
-      .select("price")
-      .eq("id", body.service_id)
-      .eq("barbershop_id", barbershopId)
-      .single()
-    const totalPrice = body.total_price ?? (service?.price ?? 0)
-    const { data, error } = await supabase
-      .from("appointments")
-      .insert({
-        barbershop_id: barbershopId,
-        client_id: body.client_id,
-        barber_id: body.barber_id,
-        service_id: body.service_id,
-        unit_id: effectiveUnitId ?? null,
-        date: body.date,
-        time: body.time,
+    const service = await prisma.service.findFirst({
+      where: { id: body.service_id, barbershopId },
+      select: { price: true },
+    })
+    const totalPrice = body.total_price ?? (service != null ? Number(service.price) : 0)
+    const created = await prisma.appointment.create({
+      data: {
+        barbershopId,
+        clientId: body.client_id,
+        barberId: body.barber_id,
+        serviceId: body.service_id,
+        unitId: effectiveUnitId ?? null,
+        date: apptDate,
+        time: normalizeAppointmentTime(body.time),
         status: "pending",
-        total_price: totalPrice,
-      })
-      .select("*, client:clients(*), barber:barbers(*), service:services(*)")
-      .single()
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json(data as Appointment)
+        totalPrice,
+      },
+      include: appointmentApiInclude,
+    })
+    return NextResponse.json(mapAppointmentRowToApi(created) as Appointment)
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Erro ao criar agendamento" },

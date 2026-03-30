@@ -322,13 +322,13 @@ function tryPlayRemote(category: RemoteCategory): boolean {
       html5: true,
       preload: true,
       volume: Math.max(0, Math.min(1.5, cfg.volume || 1)),
-      sprite: hasTrim ? { clip: [start, end - start] } : undefined,
-    })
+      ...(hasTrim ? { sprite: { clip: [start, end - start] as [number, number] } } : {}),
+    } as ConstructorParameters<typeof Howl>[0])
     remoteHowls.set(sig, howl)
   }
   try {
     const hasTrim = Math.max(0, cfg.end || 0) > Math.max(0, cfg.start || 0)
-    if (hasTrim) howl.play("clip")
+    if (hasTrim) void (howl as Howl & { play(id?: string): number }).play("clip")
     else howl.play()
     return true
   } catch {

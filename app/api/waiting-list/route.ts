@@ -2,25 +2,20 @@ import { NextResponse } from "next/server"
 import { createServiceRoleClient } from "@/lib/supabase/server"
 import { requireBarbershopId } from "@/lib/tenant"
 import { hasFeature, getUpgradeMessage } from "@/lib/plans"
-import { getEffectivePlanForBarbershop } from "@/lib/subscription"
+import { resolveEffectivePlanForBarbershop } from "@/lib/barbershop-effective-plan-server"
 import type { WaitingListItem } from "@/lib/db/types"
 
 export async function GET(request: Request) {
   try {
     const barbershopId = await requireBarbershopId()
-    const supabase = createServiceRoleClient()
-    const { data: sub } = await supabase
-      .from("subscriptions")
-      .select("plan, status, trial_end")
-      .eq("barbershop_id", barbershopId)
-      .single()
-    const plan = getEffectivePlan(sub as { plan: "basic" | "pro" | "premium"; status: string; trial_end: string | null } | null)
+    const plan = await resolveEffectivePlanForBarbershop(barbershopId)
     if (!plan || !hasFeature(plan, "waiting_list")) {
       return NextResponse.json(
         { error: getUpgradeMessage("waiting_list") },
         { status: 403 }
       )
     }
+    const supabase = createServiceRoleClient()
     const { searchParams } = new URL(request.url)
     const status = searchParams.get("status")
     let query = supabase
@@ -43,21 +38,14 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const barbershopId = await requireBarbershopId()
-    const supabase = createServiceRoleClient()
-    const [{ data: barbershop }, { data: sub }] = await Promise.all([
-      supabase.from("barbershops").select("role").eq("id", barbershopId).single(),
-      supabase.from("subscriptions").select("plan, status, trial_end").eq("barbershop_id", barbershopId).single(),
-    ])
-    const plan = getEffectivePlanForBarbershop(
-      barbershop as { role?: string } | null,
-      sub as { plan: "basic" | "pro" | "premium"; status: string; trial_end: string | null } | null
-    )
+    const plan = await resolveEffectivePlanForBarbershop(barbershopId)
     if (!plan || !hasFeature(plan, "waiting_list")) {
       return NextResponse.json(
         { error: getUpgradeMessage("waiting_list") },
         { status: 403 }
       )
     }
+    const supabase = createServiceRoleClient()
     const body = await request.json() as {
       client_id: string
       service_id: string
