@@ -7,7 +7,7 @@ import { prisma } from "@/lib/prisma"
 
 /**
  * Login do app barbearias: email → cookie → /dashboard-barbearia.
- * Conta com role super_admin (ou e-mail = SUPER_ADMIN_EMAIL) usa /plataforma/login — não entra aqui.
+ * Super Admin também pode entrar por aqui para usar o painel como barbearia.
  */
 export async function POST(request: Request) {
   try {
@@ -27,20 +27,6 @@ export async function POST(request: Request) {
     }
     if (barbershop.suspendedAt) {
       return NextResponse.json({ error: "Conta suspensa. Entre em contato com o suporte." }, { status: 403 })
-    }
-
-    const superAdminEmail = process.env.SUPER_ADMIN_EMAIL?.trim()?.toLowerCase()
-    const mustUsePlataforma =
-      barbershop.role === "super_admin" || (!!superAdminEmail && email === superAdminEmail)
-    if (mustUsePlataforma) {
-      return NextResponse.json(
-        {
-          error:
-            "Este e-mail é da equipe da plataforma. Use o acesso Plataforma Trim Time (link na tela de login).",
-          usePlatformLogin: true,
-        },
-        { status: 403 }
-      )
     }
 
     const storedHash = getBarbershopPasswordHash(barbershop.settings)
