@@ -34,8 +34,16 @@ export function getEffectivePlanForBarbershop(
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .trim()
-  const isNamedFullAccess =
-    normalizedName === "auto cortes" || normalizedName === "bsb thiago lins"
+  const normalizedNameCompact = normalizedName.replace(/[^a-z0-9]+/g, " ").trim()
+
+  // Contas internas com acesso total (aceita variações de pontuação/plural/acento).
+  const namedFullAccessPatterns = [
+    /^auto\s*cortes?$/i, // Auto Corte / Auto Cortes / Auto.Corte
+    /^bsb\s*t+h?iago\s*lins$/i, // BSB Tiago Lins / BSB Thiago Lins
+  ]
+  const isNamedFullAccess = namedFullAccessPatterns.some((re) =>
+    re.test(normalizedNameCompact)
+  )
 
   if (isUnlockAllPlanFeaturesEnv()) return "premium"
   if (barbershop?.role === "super_admin") return "premium"

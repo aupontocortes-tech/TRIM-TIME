@@ -525,6 +525,10 @@ export default function BarbeariaPage() {
   }
 
   useEffect(() => {
+    if (!publicMeta) {
+      setOccupiedTimes([])
+      return
+    }
     if (!dataSelecionada || !profissionalSelecionado) {
       setOccupiedTimes([])
       return
@@ -573,13 +577,17 @@ export default function BarbeariaPage() {
       }
       case 2: return profissionalSelecionado !== null
       case 3: return dataSelecionada !== null && horarioSelecionado !== null
-      case 4: return dadosCliente.nome.trim() !== "" && dadosCliente.telefone.trim() !== ""
+      case 4: return publicMeta !== null && dadosCliente.nome.trim() !== "" && dadosCliente.telefone.trim() !== ""
       default: return false
     }
   }
 
   const confirmarAgendamento = async () => {
     if (!dataSelecionada || !horarioSelecionado || profissionalSelecionado === null) return
+    if (!publicMeta) {
+      setErroAgendamento("Não foi possível carregar a barbearia. Atualize a página e tente novamente.")
+      return
+    }
     const prof = barbearia.profissionais.find((p) => p.id === profissionalSelecionado)
     if (!prof) return
     setBookingLoading(true)
