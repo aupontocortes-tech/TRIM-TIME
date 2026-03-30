@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server"
-import { createServiceRoleClient } from "@/lib/supabase/server"
 import { requireBarbershopId } from "@/lib/tenant"
 import type { Barber } from "@/lib/db/types"
-import { fetchBarbershopPlanContext } from "@/lib/barbershop-plan-server"
 import { canUseBarberCommission, getUpgradeMessage } from "@/lib/plans"
+import { prisma } from "@/lib/prisma"
+import { resolveEffectivePlanForBarbershop } from "@/lib/barbershop-effective-plan-server"
 
 export async function PATCH(
   _request: Request,
@@ -13,11 +13,13 @@ export async function PATCH(
     const barbershopId = await requireBarbershopId()
     const { id } = await params
     const body = await _request.json() as Partial<Pick<Barber, "name" | "phone" | "commission" | "active">>
-    const supabase = createServiceRoleClient()
+    const barbershop = await prisma.barbershop.findUnique({
+      where: { id: barbershopId },
+      select: { role: true, isTest: true },
+    })
+    const plan = await resolveEffectivePlanForBarbershop(barbershopId)
 
-    const update: Record<string, unknown> = {
-      updated_at: new Date().toISOString(),
-    }
+    const update: { name?: string; phone?: string | null; active?: boolean; commission?: number } = {}
     if (body.name !== undefined) {
       const n = String(body.name).trim()
       if (!n) return NextResponse.json({ error: "Nome não pode ser vazio." }, { status: 400 })
@@ -27,8 +29,7 @@ export async function PATCH(
     if (body.active !== undefined) update.active = Boolean(body.active)
 
     if (body.commission !== undefined) {
-      const { plan, barbershopRole } = await fetchBarbershopPlanContext(barbershopId)
-      const allowed = canUseBarberCommission(plan, barbershopRole)
+      const allowed = canUseBarberCommission(plan, barbershop?.role ?? null, barbershop?.isTest ?? false)
       const c = Number(body.commission)
       if (!allowed) {
         if (c !== 0) {
@@ -46,16 +47,27 @@ export async function PATCH(
       }
     }
 
-    const { data, error } = await supabase
-      .from("barbers")
-      .update(update)
-      .eq("id", id)
-      .eq("barbershop_id", barbershopId)
-      .select()
-      .single()
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    if (!data) return NextResponse.json({ error: "Barbeiro não encontrado" }, { status: 404 })
-    return NextResponse.json(data as Barber)
+    const existing = await prisma.barber.findFirst({
+      where: { id, barbershopId },
+      select: { id: true },
+    })
+    if (!existing) return NextResponse.json({ error: "Barbeiro não encontrado" }, { status: 404 })
+
+    const data = await prisma.barber.update({
+      where: { id },
+      data: update,
+    })
+    return NextResponse.json({
+      id: data.id,
+      barbershop_id: data.barbershopId,
+      name: data.name,
+      phone: data.phone,
+      commission: Number(data.commission),
+      active: data.active,
+      role: data.role,
+      created_at: data.createdAt.toISOString(),
+      updated_at: data.updatedAt.toISOString(),
+    } as Barber)
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Erro ao atualizar" },
@@ -71,13 +83,9 @@ export async function DELETE(
   try {
     const barbershopId = await requireBarbershopId()
     const { id } = await params
-    const supabase = createServiceRoleClient()
-    const { error } = await supabase
-      .from("barbers")
-      .delete()
-      .eq("id", id)
-      .eq("barbershop_id", barbershopId)
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    await prisma.barber.deleteMany({
+      where: { id, barbershopId },
+    })
     return NextResponse.json({ ok: true })
   } catch (e) {
     return NextResponse.json(

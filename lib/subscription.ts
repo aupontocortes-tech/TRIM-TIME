@@ -26,12 +26,21 @@ export function getEffectivePlan(subscription: Subscription | null): Subscriptio
 
 /** Plano efetivo para limites e `hasFeature`: super_admin, conta teste, env, trial/assinatura. */
 export function getEffectivePlanForBarbershop(
-  barbershop: { role?: string; is_test?: boolean } | null,
+  barbershop: { role?: string; is_test?: boolean; name?: string | null } | null,
   subscription: Subscription | null
 ): SubscriptionPlan | null {
+  const normalizedName = (barbershop?.name ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim()
+  const isNamedFullAccess =
+    normalizedName === "auto cortes" || normalizedName === "bsb thiago lins"
+
   if (isUnlockAllPlanFeaturesEnv()) return "premium"
   if (barbershop?.role === "super_admin") return "premium"
   if (barbershop?.is_test === true) return "premium"
+  if (isNamedFullAccess) return "premium"
   return getEffectivePlan(subscription)
 }
 

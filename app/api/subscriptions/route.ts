@@ -1,8 +1,29 @@
 import { NextResponse } from "next/server"
-import { createServiceRoleClient } from "@/lib/supabase/server"
 import { getBarbershopIdFromRequest } from "@/lib/tenant"
-import { createTrialEndDate } from "@/lib/subscription"
+import { prisma } from "@/lib/prisma"
 import type { Subscription } from "@/lib/db/types"
+
+function toSubscriptionApi(sub: {
+  id: string
+  barbershopId: string
+  plan: string
+  status: string
+  trialEnd: Date | null
+  nextPayment: Date | null
+  createdAt: Date
+  updatedAt: Date
+}): Subscription {
+  return {
+    id: sub.id,
+    barbershop_id: sub.barbershopId,
+    plan: sub.plan as Subscription["plan"],
+    status: sub.status as Subscription["status"],
+    trial_end: sub.trialEnd?.toISOString() ?? null,
+    next_payment: sub.nextPayment?.toISOString() ?? null,
+    created_at: sub.createdAt.toISOString(),
+    updated_at: sub.updatedAt.toISOString(),
+  }
+}
 
 export async function GET() {
   try {
@@ -13,17 +34,11 @@ export async function GET() {
         { status: 401 }
       )
     }
-    const supabase = createServiceRoleClient()
-    const { data, error } = await supabase
-      .from("subscriptions")
-      .select("*")
-      .eq("barbershop_id", barbershopId)
-      .single()
-    if (error) {
-      if (error.code === "PGRST116") return NextResponse.json(null, { status: 404 })
-      return NextResponse.json({ error: error.message }, { status: 500 })
-    }
-    return NextResponse.json(data as Subscription)
+    const data = await prisma.subscription.findUnique({
+      where: { barbershopId },
+    })
+    if (!data) return NextResponse.json(null, { status: 404 })
+    return NextResponse.json(toSubscriptionApi(data))
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Erro ao buscar assinatura" },
@@ -47,45 +62,93 @@ export async function POST(request: Request) {
     if (!plan || !["basic", "pro", "premium"].includes(plan)) {
       return NextResponse.json({ error: "Plano inválido" }, { status: 400 })
     }
-    const supabase = createServiceRoleClient()
-    const { data: existing } = await supabase
-      .from("subscriptions")
-      .select("id")
-      .eq("barbershop_id", barbershopId)
-      .single()
-    if (existing) {
-      const { data, error } = await supabase
-        .from("subscriptions")
-        .update({
-          plan,
-          status: "active",
-          trial_end: null,
-          next_payment: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-          updated_at: new Date().toISOString(),
-        })
-        .eq("barbershop_id", barbershopId)
-        .select()
-        .single()
-      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-      return NextResponse.json(data as Subscription)
-    }
-    const trialEnd = createTrialEndDate()
-    const { data, error } = await supabase
-      .from("subscriptions")
-      .insert({
-        barbershop_id: barbershopId,
-        plan: "premium",
-        status: "trial",
-        trial_end: trialEnd.toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .select()
-      .single()
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json(data as Subscription)
+    const barbershop = await prisma.barbershop.findUnique({
+      where: { id: barbershopId },
+      select: { id: true },
+    })
+    if (!barbershop) return NextResponse.json({ error: "Barbearia não encontrada" }, { status: 404 })
+
+    const nextPayment = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+    const data = await prisma.subscription.upsert({
+      where: { barbershopId },
+      update: {
+        plan,
+        status: "active",
+        trialEnd: null,
+        nextPayment,
+      },
+      create: {
+        barbershopId,
+        plan,
+        status: "active",
+        trialEnd: null,
+        nextPayment,
+      },
+    })
+    return NextResponse.json(toSubscriptionApi(data))
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Erro ao criar/atualizar assinatura" },
+      { status: 500 }
+    )
+  }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    const barbershopId = await getBarbershopIdFromRequest()
+    if (!barbershopId) {
+      return NextResponse.json(
+        { error: "Barbershop não identificada" },
+        { status: 401 }
+      )
+    }
+
+    const body = (await request.json().catch(() => ({}))) as {
+      action?: "cancel" | "reactivate"
+      plan?: Subscription["plan"]
+    }
+    const action = body.action
+    if (!action || !["cancel", "reactivate"].includes(action)) {
+      return NextResponse.json({ error: "Ação inválida" }, { status: 400 })
+    }
+
+    const current = await prisma.subscription.findUnique({
+      where: { barbershopId },
+    })
+    if (!current) {
+      return NextResponse.json({ error: "Assinatura não encontrada" }, { status: 404 })
+    }
+
+    if (action === "cancel") {
+      const data = await prisma.subscription.update({
+        where: { barbershopId },
+        data: {
+          status: "canceled",
+          trialEnd: null,
+          nextPayment: null,
+        },
+      })
+      return NextResponse.json(toSubscriptionApi(data))
+    }
+
+    const reactivationPlan =
+      body.plan && ["basic", "pro", "premium"].includes(body.plan)
+        ? body.plan
+        : (current.plan as Subscription["plan"])
+    const data = await prisma.subscription.update({
+      where: { barbershopId },
+      data: {
+        plan: reactivationPlan,
+        status: "active",
+        trialEnd: null,
+        nextPayment: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      },
+    })
+    return NextResponse.json(toSubscriptionApi(data))
+  } catch (e) {
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : "Erro ao atualizar assinatura" },
       { status: 500 }
     )
   }

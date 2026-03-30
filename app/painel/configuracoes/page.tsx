@@ -4,8 +4,8 @@ import { useState, useEffect, useCallback } from "react"
 import Link from "next/link"
 import { useBarbershop } from "@/hooks/use-barbershop"
 import { useUnits } from "@/hooks/use-units"
-import { hasFeature, PLAN_LABELS } from "@/lib/plans"
-import type { Barber, Service, BarbershopUnit } from "@/lib/db/types"
+import { hasFeature, PLAN_FEATURES, PLAN_LABELS, PLAN_PRICES } from "@/lib/plans"
+import type { Barber, Service, BarbershopUnit, SubscriptionPlan } from "@/lib/db/types"
 import {
   defaultHorariosUi,
   openingHoursFromSettings,
@@ -78,6 +78,7 @@ const emptyBarbearia: BarbeariaForm = {
 export default function ConfiguracoesPage() {
   const {
     plan,
+    subscription,
     barbershop,
     loading: barbershopLoading,
     error: barbershopError,
@@ -164,6 +165,9 @@ export default function ConfiguracoesPage() {
   const [editUnitCity, setEditUnitCity] = useState("")
   const [editUnitState, setEditUnitState] = useState("")
   const [editUnitCep, setEditUnitCep] = useState("")
+  const [subscriptionBusy, setSubscriptionBusy] = useState(false)
+  const [subscriptionError, setSubscriptionError] = useState<string | null>(null)
+  const [subscriptionOk, setSubscriptionOk] = useState<string | null>(null)
 
   useEffect(() => {
     // Garante que o origin já venha correto mesmo após navegações dentro do painel.
@@ -725,6 +729,94 @@ export default function ConfiguracoesPage() {
       setEquipeError("Erro de rede")
     } finally {
       setEquipeBusy(false)
+    }
+  }
+
+  const managedByBilling =
+    barbershop?.role !== "super_admin" && barbershop?.is_test !== true
+  const subscriptionCanceled = subscription?.status === "canceled"
+  const planCards: SubscriptionPlan[] = ["basic", "pro", "premium"]
+  const normalizedShopName = (barbershop?.name ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim()
+  const namedFullAccessAccount =
+    normalizedShopName === "auto cortes" || normalizedShopName === "bsb thiago lins"
+
+  const handleChoosePlan = async (targetPlan: SubscriptionPlan) => {
+    setSubscriptionBusy(true)
+    setSubscriptionError(null)
+    setSubscriptionOk(null)
+    try {
+      const r = await fetch("/api/subscriptions", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plan: targetPlan }),
+      })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) {
+        setSubscriptionError(typeof j.error === "string" ? j.error : "Não foi possível atualizar o plano")
+        return
+      }
+      setSubscriptionOk(`Plano ${PLAN_LABELS[targetPlan]} ativado com sucesso.`)
+      await refetch()
+    } catch {
+      setSubscriptionError("Erro de rede ao atualizar o plano.")
+    } finally {
+      setSubscriptionBusy(false)
+    }
+  }
+
+  const handleCancelPlan = async () => {
+    if (!confirm("Tem certeza que deseja cancelar o plano?")) return
+    setSubscriptionBusy(true)
+    setSubscriptionError(null)
+    setSubscriptionOk(null)
+    try {
+      const r = await fetch("/api/subscriptions", {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "cancel" }),
+      })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) {
+        setSubscriptionError(typeof j.error === "string" ? j.error : "Não foi possível cancelar o plano")
+        return
+      }
+      setSubscriptionOk("Plano cancelado com sucesso.")
+      await refetch()
+    } catch {
+      setSubscriptionError("Erro de rede ao cancelar plano.")
+    } finally {
+      setSubscriptionBusy(false)
+    }
+  }
+
+  const handleReactivatePlan = async () => {
+    setSubscriptionBusy(true)
+    setSubscriptionError(null)
+    setSubscriptionOk(null)
+    try {
+      const r = await fetch("/api/subscriptions", {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reactivate" }),
+      })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) {
+        setSubscriptionError(typeof j.error === "string" ? j.error : "Não foi possível reativar o plano")
+        return
+      }
+      setSubscriptionOk("Plano reativado com sucesso.")
+      await refetch()
+    } catch {
+      setSubscriptionError("Erro de rede ao reativar plano.")
+    } finally {
+      setSubscriptionBusy(false)
     }
   }
 
@@ -1452,56 +1544,186 @@ export default function ConfiguracoesPage() {
         </TabsContent>
 
         <TabsContent value="plano">
-          <Card className="bg-card border-border">
-            <CardHeader>
-              <CardTitle className="text-foreground">Plano efetivo e tipo de conta</CardTitle>
-              <CardDescription className="text-muted-foreground">
-                O que o sistema usa hoje para limites e recursos (agenda, comissões, WhatsApp, etc.)
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4 max-w-2xl text-sm text-muted-foreground">
-              <div>
-                <p className="text-foreground font-medium mb-1">Plano efetivo</p>
-                <p>
-                  {plan ? (
-                    <>
-                      <strong className="text-primary">{PLAN_LABELS[plan]}</strong> — recursos alinhados a este plano.
-                    </>
-                  ) : (
-                    "Nenhum plano ativo. Verifique a assinatura."
+          <div className="space-y-4">
+            <Card className="bg-card border-border">
+              <CardHeader>
+                <CardTitle className="text-foreground">Plano atual e cobrança</CardTitle>
+                <CardDescription className="text-muted-foreground">
+                  Aqui você pode contratar, fazer upgrade e cancelar o plano da sua barbearia.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4 text-sm text-muted-foreground">
+                <div className="p-3 rounded-lg border border-border bg-secondary/20">
+                  <p className="text-foreground font-medium mb-1">Status atual</p>
+                  <p>
+                    Plano efetivo:{" "}
+                    <strong className="text-primary">
+                      {plan ? PLAN_LABELS[plan] : "Sem plano ativo"}
+                    </strong>
+                    {" • "}
+                    Assinatura:{" "}
+                    <strong className="text-foreground">
+                      {subscription?.status ?? "não encontrada"}
+                    </strong>
+                  </p>
+                  {!managedByBilling && subscription?.plan && (
+                    <p className="mt-1">
+                      Plano contratado para teste:{" "}
+                      <strong className="text-foreground">{PLAN_LABELS[subscription.plan]}</strong>
+                    </p>
                   )}
-                </p>
-              </div>
-              <div>
-                <p className="text-foreground font-medium mb-1">Tipo de conta da barbearia</p>
-                {barbershop.role === "super_admin" ? (
-                  <p>
-                    <strong className="text-primary">Super Admin (Trim Time)</strong> — acesso total aos recursos do
-                    sistema sem cobrança. Use o{" "}
-                    <Link href="/plataforma" className="text-primary underline underline-offset-2">
-                      Plataforma Trim Time
-                    </Link>{" "}
-                    (login em /plataforma/login) para gerir barbearias, planos e suporte.
-                  </p>
-                ) : (
-                  <p>
-                    <strong className="text-foreground">Dono da barbearia</strong> — configura equipe, serviços e
-                    agenda aqui. O Super Admin da plataforma gere contas globalmente em{" "}
-                    <span className="text-foreground">/plataforma</span> (apenas para a equipe Trim Time).
-                  </p>
+                </div>
+
+                {subscriptionError && (
+                  <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+                    {subscriptionError}
+                  </div>
                 )}
-              </div>
-              <div className="p-3 rounded-lg border border-border bg-secondary/20">
-                <p className="text-foreground font-medium mb-1">Desenvolvimento</p>
+                {subscriptionOk && (
+                  <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/30 text-green-700 dark:text-green-400 text-sm">
+                    {subscriptionOk}
+                  </div>
+                )}
+
+                <div className="grid gap-3 md:grid-cols-3">
+                  {planCards.map((planOption) => {
+                    const isCurrent = plan === planOption && subscription?.status !== "canceled"
+                    const featuresPreview = PLAN_FEATURES[planOption].slice(0, 4)
+                    const actionLabel = isCurrent
+                      ? "Plano atual"
+                      : managedByBilling
+                        ? "Contratar plano"
+                        : "Selecionar para teste"
+                    return (
+                      <div
+                        key={planOption}
+                        className={`rounded-lg border p-4 ${
+                          isCurrent ? "border-primary bg-primary/5" : "border-border bg-secondary/10"
+                        }`}
+                      >
+                        <p className="font-semibold text-foreground">{PLAN_LABELS[planOption]}</p>
+                        <p className="text-primary text-lg font-bold mt-1">
+                          R$ {PLAN_PRICES[planOption]}/mês
+                        </p>
+                        <ul className="mt-3 space-y-1 text-xs text-muted-foreground">
+                          {featuresPreview.map((feature) => (
+                            <li key={`${planOption}_${feature}`}>- {feature}</li>
+                          ))}
+                        </ul>
+                        <Button
+                          type="button"
+                          className="w-full mt-3 bg-primary text-primary-foreground hover:bg-primary/90"
+                          disabled={subscriptionBusy || isCurrent}
+                          onClick={() => void handleChoosePlan(planOption)}
+                        >
+                          {actionLabel}
+                        </Button>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    disabled={subscriptionBusy || subscriptionCanceled || !subscription}
+                    onClick={() => void handleCancelPlan()}
+                  >
+                    Cancelar plano
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="border-border"
+                    disabled={subscriptionBusy || !subscriptionCanceled}
+                    onClick={() => void handleReactivatePlan()}
+                  >
+                    Reativar plano atual
+                  </Button>
+                </div>
                 <p>
-                  No servidor, a variável <code className="text-xs bg-muted px-1 rounded">TRIMTIME_UNLOCK_ALL_PLAN_FEATURES=true</code>{" "}
-                  faz todas as barbearias usarem recursos equivalentes ao <strong>Premium</strong> (útil antes do
-                  pagamento estar ligado). Em produção com cobrança real, remova ou defina como{" "}
-                  <code className="text-xs bg-muted px-1 rounded">false</code>.
+                  Se sua conta estiver no plano <strong className="text-foreground">Básico</strong>, você pode subir
+                  para <strong className="text-foreground">Pro</strong> ou{" "}
+                  <strong className="text-foreground">Premium</strong> por aqui.
                 </p>
-              </div>
-            </CardContent>
-          </Card>
+                {!managedByBilling && (
+                  <div className="p-3 rounded-lg border border-primary/30 bg-primary/10">
+                    {barbershop.role === "super_admin" ? (
+                      <div className="space-y-2">
+                        <p>
+                          <strong className="text-primary">Conta Super Admin</strong>: acesso total liberado (equivalente ao
+                          Premium). A gestão global de planos fica na{" "}
+                          <Link href="/plataforma" className="text-primary underline underline-offset-2">
+                            Plataforma Trim Time
+                          </Link>
+                          .
+                        </p>
+                        <p className="text-foreground/90">
+                          Recursos liberados nesta conta: serviços, profissionais, agenda, clientes, financeiro,
+                          unidades e integrações.
+                        </p>
+                        {namedFullAccessAccount && (
+                          <p className="text-foreground/90">
+                            Esta conta está no grupo de acesso total que você citou (Auto.Cortes e BSB Thiago Lins).
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <p>
+                          <strong className="text-primary">Conta de teste</strong>: acesso total liberado (equivalente ao
+                          Premium) sem cobrança.
+                        </p>
+                        <p className="text-foreground/90">
+                          Recursos liberados nesta conta: serviços, profissionais, agenda, clientes, financeiro,
+                          unidades e integrações.
+                        </p>
+                        {namedFullAccessAccount && (
+                          <p className="text-foreground/90">
+                            Esta conta está no grupo de acesso total que você citou (Auto.Cortes e BSB Thiago Lins).
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="bg-card border-border">
+              <CardHeader>
+                <CardTitle className="text-foreground">Informações de conta</CardTitle>
+                <CardDescription className="text-muted-foreground">
+                  Contexto sobre tipo de conta e desbloqueios de desenvolvimento.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4 max-w-2xl text-sm text-muted-foreground">
+                <div>
+                  <p className="text-foreground font-medium mb-1">Tipo de conta da barbearia</p>
+                  {barbershop.role === "super_admin" ? (
+                    <p>
+                      <strong className="text-primary">Super Admin (Trim Time)</strong> — acesso total aos recursos do
+                      sistema sem cobrança.
+                    </p>
+                  ) : (
+                    <p>
+                      <strong className="text-foreground">Dono da barbearia</strong> — configura equipe, serviços e agenda
+                      neste painel.
+                    </p>
+                  )}
+                </div>
+                <div className="p-3 rounded-lg border border-border bg-secondary/20">
+                  <p className="text-foreground font-medium mb-1">Desenvolvimento</p>
+                  <p>
+                    No servidor, a variável{" "}
+                    <code className="text-xs bg-muted px-1 rounded">TRIMTIME_UNLOCK_ALL_PLAN_FEATURES=true</code> faz
+                    todas as barbearias usarem recursos equivalentes ao <strong>Premium</strong>.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
         <TabsContent value="unidades">

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
-import { createServiceRoleClient } from "@/lib/supabase/server"
 import { requireBarbershopId } from "@/lib/tenant"
+import { prisma } from "@/lib/prisma"
 import type { Service } from "@/lib/db/types"
 
 export async function PATCH(
@@ -11,20 +11,31 @@ export async function PATCH(
     const barbershopId = await requireBarbershopId()
     const { id } = await params
     const body = await _request.json() as Partial<Pick<Service, "name" | "price" | "duration" | "active">>
-    const supabase = createServiceRoleClient()
-    const updates: Record<string, unknown> = { ...body, updated_at: new Date().toISOString() }
-    if (body.price !== undefined) updates.price = body.price
-    if (body.duration !== undefined) updates.duration = body.duration
-    const { data, error } = await supabase
-      .from("services")
-      .update(updates)
-      .eq("id", id)
-      .eq("barbershop_id", barbershopId)
-      .select()
-      .single()
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    if (!data) return NextResponse.json({ error: "Serviço não encontrado" }, { status: 404 })
-    return NextResponse.json(data as Service)
+    const existing = await prisma.service.findFirst({
+      where: { id, barbershopId },
+      select: { id: true },
+    })
+    if (!existing) return NextResponse.json({ error: "Serviço não encontrado" }, { status: 404 })
+
+    const data = await prisma.service.update({
+      where: { id },
+      data: {
+        ...(body.name !== undefined && { name: body.name.trim() }),
+        ...(body.price !== undefined && { price: Number(body.price) }),
+        ...(body.duration !== undefined && { duration: Math.max(1, Number(body.duration) || 30) }),
+        ...(body.active !== undefined && { active: Boolean(body.active) }),
+      },
+    })
+    return NextResponse.json({
+      id: data.id,
+      barbershop_id: data.barbershopId,
+      name: data.name,
+      price: Number(data.price),
+      duration: data.duration,
+      active: data.active,
+      created_at: data.createdAt.toISOString(),
+      updated_at: data.updatedAt.toISOString(),
+    } as Service)
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Erro ao atualizar" },
@@ -40,13 +51,9 @@ export async function DELETE(
   try {
     const barbershopId = await requireBarbershopId()
     const { id } = await params
-    const supabase = createServiceRoleClient()
-    const { error } = await supabase
-      .from("services")
-      .delete()
-      .eq("id", id)
-      .eq("barbershop_id", barbershopId)
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    await prisma.service.deleteMany({
+      where: { id, barbershopId },
+    })
     return NextResponse.json({ ok: true })
   } catch (e) {
     return NextResponse.json(

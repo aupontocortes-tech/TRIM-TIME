@@ -1,21 +1,29 @@
 import { NextResponse } from "next/server"
-import { createServiceRoleClient } from "@/lib/supabase/server"
 import { requireBarbershopId } from "@/lib/tenant"
 import { hasFeature, getUpgradeMessage } from "@/lib/plans"
-import { getEffectivePlanForBarbershop } from "@/lib/subscription"
+import { resolveEffectivePlanForBarbershop } from "@/lib/barbershop-effective-plan-server"
+import { prisma } from "@/lib/prisma"
 import type { Service } from "@/lib/db/types"
 
 export async function GET() {
   try {
     const barbershopId = await requireBarbershopId()
-    const supabase = createServiceRoleClient()
-    const { data, error } = await supabase
-      .from("services")
-      .select("*")
-      .eq("barbershop_id", barbershopId)
-      .order("name")
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json(data as Service[])
+    const data = await prisma.service.findMany({
+      where: { barbershopId },
+      orderBy: { name: "asc" },
+    })
+    return NextResponse.json(
+      data.map((s) => ({
+        id: s.id,
+        barbershop_id: s.barbershopId,
+        name: s.name,
+        price: Number(s.price),
+        duration: s.duration,
+        active: s.active,
+        created_at: s.createdAt.toISOString(),
+        updated_at: s.updatedAt.toISOString(),
+      })) as Service[]
+    )
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Não autorizado" },
@@ -27,15 +35,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const barbershopId = await requireBarbershopId()
-    const supabase = createServiceRoleClient()
-    const [{ data: barbershop }, { data: sub }] = await Promise.all([
-      supabase.from("barbershops").select("role").eq("id", barbershopId).single(),
-      supabase.from("subscriptions").select("plan, status, trial_end").eq("barbershop_id", barbershopId).single(),
-    ])
-    const plan = getEffectivePlanForBarbershop(
-      barbershop as { role?: string } | null,
-      sub as { plan: "basic" | "pro" | "premium"; status: string; trial_end: string | null } | null
-    )
+    const plan = await resolveEffectivePlanForBarbershop(barbershopId)
     if (!plan || !hasFeature(plan, "services_prices")) {
       return NextResponse.json(
         { error: getUpgradeMessage("services_prices") },
@@ -50,19 +50,25 @@ export async function POST(request: Request) {
     if (Number.isNaN(price) || price < 0) {
       return NextResponse.json({ error: "Preço inválido" }, { status: 400 })
     }
-    const { data, error } = await supabase
-      .from("services")
-      .insert({
-        barbershop_id: barbershopId,
+    const data = await prisma.service.create({
+      data: {
+        barbershopId,
         name: body.name.trim(),
         price,
         duration: Math.max(1, Number(body.duration) || 30),
         active: true,
-      })
-      .select()
-      .single()
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json(data as Service)
+      },
+    })
+    return NextResponse.json({
+      id: data.id,
+      barbershop_id: data.barbershopId,
+      name: data.name,
+      price: Number(data.price),
+      duration: data.duration,
+      active: data.active,
+      created_at: data.createdAt.toISOString(),
+      updated_at: data.updatedAt.toISOString(),
+    } as Service)
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Erro ao criar serviço" },

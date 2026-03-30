@@ -27,7 +27,7 @@ export async function resolveEffectivePlanForBarbershop(
   const [bs, sub] = await Promise.all([
     prisma.barbershop.findUnique({
       where: { id: barbershopId },
-      select: { role: true, isTest: true },
+      select: { name: true, role: true, isTest: true },
     }),
     prisma.subscription.findUnique({
       where: { barbershopId },
@@ -49,7 +49,7 @@ export async function resolveEffectivePlanForBarbershop(
     : null
 
   return getEffectivePlanForBarbershop(
-    bs ? { role: bs.role, is_test: bs.isTest } : null,
+    bs ? { name: bs.name, role: bs.role, is_test: bs.isTest } : null,
     subscription
   )
 }

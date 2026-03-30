@@ -14,7 +14,7 @@ export type BarbershopPlanContext = {
 async function loadPlanContext(barbershopId: string): Promise<BarbershopPlanContext> {
   const supabase = createServiceRoleClient()
   const [{ data: bs }, { data: sub }] = await Promise.all([
-    supabase.from("barbershops").select("role, is_test").eq("id", barbershopId).single(),
+    supabase.from("barbershops").select("name, role, is_test").eq("id", barbershopId).single(),
     supabase.from("subscriptions").select("plan, status, trial_end").eq("barbershop_id", barbershopId).single(),
   ])
   const subscription = sub
@@ -25,7 +25,7 @@ async function loadPlanContext(barbershopId: string): Promise<BarbershopPlanCont
       } as Subscription)
     : null
   const plan = getEffectivePlanForBarbershop(
-    bs as { role?: string; is_test?: boolean } | null,
+    bs as { name?: string; role?: string; is_test?: boolean } | null,
     subscription
   )
   const role = (bs as { role?: string } | null)?.role ?? null
