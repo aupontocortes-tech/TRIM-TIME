@@ -5,6 +5,7 @@ import { getActiveBarbershopBySlug, toPublicClientSession } from "@/lib/public-b
 import { publicClientCookieName, verifyPublicClientSession } from "@/lib/public-client-session"
 import { assertValidProfilePhotoDataUrl } from "@/lib/photo-data-url"
 import { cpfDigits } from "@/lib/cpf"
+import { trySendWhatsAppAppointmentConfirmation } from "@/lib/whatsapp-appointment-events"
 
 function normalizeTime(time: string) {
   const raw = String(time ?? "").trim()
@@ -262,6 +263,10 @@ export async function POST(
         })
       )
     )
+
+    if (created.length > 0) {
+      void trySendWhatsAppAppointmentConfirmation(shop.id, created[0].id)
+    }
 
     return NextResponse.json({
       ok: true,

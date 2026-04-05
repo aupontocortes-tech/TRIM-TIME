@@ -9,6 +9,7 @@ import {
   mapAppointmentRowToApi,
   parseAppointmentDate,
 } from "@/lib/appointment-prisma-helpers"
+import { trySendWhatsAppAppointmentConfirmation } from "@/lib/whatsapp-appointment-events"
 
 export async function GET(request: Request) {
   try {
@@ -112,6 +113,7 @@ export async function POST(request: Request) {
       },
       include: appointmentApiInclude,
     })
+    void trySendWhatsAppAppointmentConfirmation(barbershopId, created.id)
     return NextResponse.json(mapAppointmentRowToApi(created) as Appointment)
   } catch (e) {
     return NextResponse.json(

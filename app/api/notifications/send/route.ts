@@ -1,8 +1,13 @@
 import { NextResponse } from "next/server"
-import { createServiceRoleClient } from "@/lib/supabase/server"
+import type { Prisma } from "@prisma/client"
 import { requireBarbershopId } from "@/lib/tenant"
+import { prisma } from "@/lib/prisma"
 import type { NotificationEvent, NotificationType } from "@/lib/db/types"
 
+/**
+ * Registra notificação no banco (Prisma). O envio ativo de lembretes agendados roda em
+ * GET /api/cron/appointment-reminders com CRON_SECRET.
+ */
 export async function POST(request: Request) {
   try {
     const barbershopId = await requireBarbershopId()
@@ -17,22 +22,21 @@ export async function POST(request: Request) {
     if (body.barbershop_id !== barbershopId) {
       return NextResponse.json({ error: "Não autorizado" }, { status: 403 })
     }
-    const supabase = createServiceRoleClient()
-    await supabase.from("notification_log").insert({
-      barbershop_id: body.barbershop_id,
-      client_id: body.client_id ?? null,
-      appointment_id: body.appointment_id ?? null,
-      type: body.type,
-      event: body.event,
-      payload: body.payload ?? null,
+    await prisma.notificationLog.create({
+      data: {
+        barbershopId: body.barbershop_id,
+        clientId: body.client_id ?? null,
+        appointmentId: body.appointment_id ?? null,
+        type: body.type,
+        event: body.event,
+        payload: (body.payload ?? undefined) as Prisma.InputJsonValue | undefined,
+      },
     })
-    // TODO: integrar com provedores reais (Firebase FCM, Resend/SendGrid, Meta WhatsApp API)
-    // Por agora apenas logamos. Para push: verificar subscription do cliente; email: enviar template; WhatsApp: usar api_token da whatsapp_integrations
     return NextResponse.json({ ok: true })
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Erro ao enviar notificação" },
-      { status: 500 }
+      { status: e instanceof Error && e.message.includes("não identificada") ? 401 : 500 }
     )
   }
 }

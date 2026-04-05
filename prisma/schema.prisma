@@ -47,6 +47,7 @@ enum NotificationType {
 enum NotificationEvent {
   appointment_confirmation
   appointment_reminder
+  appointment_post_service
   appointment_canceled
   waiting_list_slot_available
   inactive_client_marketing
@@ -265,6 +266,8 @@ model Client {
   cpf           String?
   photoUrl      String?  @map("photo_url") @db.Text
   loyaltyPoints Int      @default(0) @map("loyalty_points")
+  /// Web Push subscription (JSON) para lembretes no PWA do cliente.
+  pushSubscription Json?  @map("push_subscription")
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
@@ -357,10 +360,13 @@ model WhatsAppIntegration {
   phoneNumber  String   @map("phone_number")
   apiProvider  String   @default("meta") @map("api_provider")
   apiToken     String?  @map("api_token")
+  /// Phone Number ID da Meta (Graph API) para enviar mensagens.
+  graphPhoneNumberId String? @map("graph_phone_number_id")
   connectedAt  DateTime @default(now()) @map("connected_at") @db.Timestamptz
   updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
   @@index([barbershopId])
+  @@map("whatsapp_integrations")
 }
 
 // ========== NOTIFICATION LOG ==========

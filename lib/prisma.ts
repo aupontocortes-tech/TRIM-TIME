@@ -25,6 +25,11 @@ function getDatabaseUrl(): string {
   return "postgresql://localhost:5432/trimtime"
 }
 
+/**
+ * Em desenvolvimento o Next reaproveita este singleton no hot reload. Depois de rodar
+ * `npx prisma generate` ou alterar `prisma/schema.prisma`, reinicie `npm run dev` —
+ * senão o cliente antigo pode acusar "Unknown field …" em queries novas.
+ */
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient | undefined }
 
 function createPrismaClient(): PrismaClient {

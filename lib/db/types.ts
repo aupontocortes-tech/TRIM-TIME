@@ -14,12 +14,43 @@ export type BarbershopRole = "super_admin" | "admin_barbershop"
 /** Horário por dia (chaves: segunda, terca, …) — guardado em barbershops.settings.opening_hours */
 export type BarbershopOpeningDay = { active: boolean; open: string; close: string }
 
+/** Preferências de lembrete de agendamento (salvas em `barbershops.settings.notification_settings`). */
+export type BarbershopNotificationSettings = {
+  /** Antes do horário do serviço, em minutos (ex.: 30, 60, 120, 1440 = 1 dia). */
+  reminder_offsets_minutes?: number[]
+  /** Antecedência extra em minutos (ex.: 180 = 3 h), além das opções fixas. */
+  reminder_custom_minutes?: number | null
+  /** Aviso no app / PWA do cliente. */
+  notify_app?: boolean
+  /** Envio por WhatsApp quando a integração estiver ativa (lembretes agendados). */
+  notify_whatsapp?: boolean
+  /** Confirmação automática por API ao criar agendamento (padrão: ativo se não definido). */
+  whatsapp_send_confirmation?: boolean
+  /** Mensagem pós-atendimento ao marcar como concluído (padrão: ativo se não definido). */
+  whatsapp_send_post_service?: boolean
+  /** Texto com placeholders: {{nome_cliente}}, {{data}}, {{horario}}, {{servico}}, {{barbearia}} */
+  app_reminder_template?: string
+  whatsapp_reminder_template?: string
+  /** Confirmação (API). Também aceita {{nome}} e {{hora}} (sinônimos). */
+  whatsapp_confirmation_template?: string
+  /** Pós-atendimento (API). */
+  whatsapp_post_service_template?: string
+  /**
+   * Nome da template oficial Meta (opcional). Quando preenchido, o backend pode priorizar
+   * envio por template aprovado em vez de texto livre (evolução futura).
+   */
+  whatsapp_meta_template_confirmation?: string
+  whatsapp_meta_template_reminder?: string
+  whatsapp_meta_template_post_service?: string
+}
+
 export type BarbershopSettings = {
   address?: string
   city?: string
   state?: string
   cep?: string
   opening_hours?: Record<string, BarbershopOpeningDay>
+  notification_settings?: BarbershopNotificationSettings
 }
 
 export interface Barbershop {
@@ -154,6 +185,8 @@ export interface WhatsAppIntegration {
   phone_number: string
   api_provider: string
   api_token: string | null
+  graph_phone_number_id?: string | null
+  has_api_token?: boolean
   connected_at: string
   updated_at: string
 }

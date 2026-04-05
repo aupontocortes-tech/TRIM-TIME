@@ -21,6 +21,7 @@ import {
   LogOut,
   Phone,
   Building2,
+  Bell,
 } from "lucide-react"
 import {
   clearConfirmedBooking,
@@ -31,6 +32,7 @@ import {
 import { openingHoursFromSettings } from "@/lib/barbershop-settings-ui"
 import type { BarbershopSettings } from "@/lib/db/types"
 import { compressImageToJpegDataUrl } from "@/lib/client-image-compress"
+import { urlBase64ToUint8Array } from "@/lib/push-client-utils"
 import { AppInstallPrompt } from "@/components/app-install-prompt"
 import { TrimPlayGame } from "@/components/trim-play/TrimPlayGame"
 import { TrimPlaySplash } from "@/components/trim-play/TrimPlaySplash"
@@ -162,6 +164,8 @@ export default function BarbeariaPage() {
   const [erroAgendamento, setErroAgendamento] = useState("")
   const [trimPlayStage, setTrimPlayStage] = useState<"intro" | "splash" | "game">("intro")
   const [trimPlayCliente, setTrimPlayCliente] = useState<null | { id: string; nome: string }>(null)
+  const [pushReminderMsg, setPushReminderMsg] = useState<string | null>(null)
+  const [pushReminderBusy, setPushReminderBusy] = useState(false)
 
   // Cadastro
   const [formCadastro, setFormCadastro] = useState({
@@ -394,6 +398,10 @@ export default function BarbeariaPage() {
   }
 
   const handleLogout = async () => {
+    await fetch(`/api/public/barbershops/${encodeURIComponent(slug)}/push-subscribe`, {
+      method: "DELETE",
+      credentials: "include",
+    }).catch(() => {})
     await fetch(`/api/public/barbershops/${encodeURIComponent(slug)}/auth/session`, {
       method: "DELETE",
       credentials: "include",
@@ -406,6 +414,56 @@ export default function BarbeariaPage() {
     setDataSelecionada(null)
     setHorarioSelecionado(null)
     setDadosCliente({ nome: "", telefone: "", email: "", foto: "" })
+    setPushReminderMsg(null)
+  }
+
+  const ativarLembretesPush = async () => {
+    setPushReminderMsg(null)
+    setPushReminderBusy(true)
+    try {
+      if (typeof window === "undefined" || !("serviceWorker" in navigator) || !("PushManager" in window)) {
+        setPushReminderMsg("Seu navegador não suporta notificações push neste modo.")
+        return
+      }
+      const pkRes = await fetch("/api/public/push/vapid-public-key")
+      if (!pkRes.ok) {
+        const j = (await pkRes.json().catch(() => ({}))) as { error?: string }
+        setPushReminderMsg(typeof j.error === "string" ? j.error : "Push ainda não configurado no servidor.")
+        return
+      }
+      const { publicKey } = (await pkRes.json()) as { publicKey?: string }
+      if (!publicKey) {
+        setPushReminderMsg("Chave pública de push indisponível.")
+        return
+      }
+      const perm = await Notification.requestPermission()
+      if (perm !== "granted") {
+        setPushReminderMsg("Permissão negada. Ative notificações nas configurações do navegador.")
+        return
+      }
+      const reg = await navigator.serviceWorker.ready
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey),
+      })
+      const json = sub.toJSON()
+      const saveRes = await fetch(`/api/public/barbershops/${encodeURIComponent(slug)}/push-subscribe`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subscription: json }),
+      })
+      const sj = (await saveRes.json().catch(() => ({}))) as { error?: string }
+      if (!saveRes.ok) {
+        setPushReminderMsg(typeof sj.error === "string" ? sj.error : "Não foi possível salvar o dispositivo.")
+        return
+      }
+      setPushReminderMsg("Pronto! Você receberá lembretes neste aparelho quando o cron estiver ativo.")
+    } catch {
+      setPushReminderMsg("Erro ao ativar lembretes. Tente de novo ou use outro navegador.")
+    } finally {
+      setPushReminderBusy(false)
+    }
   }
 
   const entrarComoConvidado = () => {
@@ -1041,20 +1099,42 @@ export default function BarbeariaPage() {
       <AppInstallPrompt storageSuffix={storageSuffix} variant="clientBooking" />
       {/* Barra: Sair */}
       {clienteLogado && (
-        <div className="sticky top-0 z-20 flex items-center justify-between px-4 py-2 bg-background/90 backdrop-blur border-b border-border">
-          <span className="text-sm text-muted-foreground truncate">
-            Olá, {clienteLogado.nome.split(" ")[0]}
-          </span>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="text-muted-foreground hover:text-foreground"
-            onClick={handleLogout}
-          >
-            <LogOut className="w-4 h-4 mr-1" />
-            Sair
-          </Button>
+        <div className="sticky top-0 z-20 border-b border-border bg-background/90 backdrop-blur">
+          <div className="flex items-center justify-between px-4 py-2">
+            <span className="text-sm text-muted-foreground truncate">
+              Olá, {clienteLogado.nome.split(" ")[0]}
+            </span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground hover:text-foreground"
+              onClick={handleLogout}
+            >
+              <LogOut className="w-4 h-4 mr-1" />
+              Sair
+            </Button>
+          </div>
+          <div className="px-4 pb-2 flex flex-col gap-1">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="w-full sm:w-auto border-border text-foreground"
+              disabled={pushReminderBusy}
+              onClick={() => void ativarLembretesPush()}
+            >
+              <Bell className="w-4 h-4 mr-2" />
+              {pushReminderBusy ? "Ativando…" : "Receber lembretes neste celular"}
+            </Button>
+            {pushReminderMsg ? (
+              <p className="text-xs text-muted-foreground">{pushReminderMsg}</p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Use após instalar o app ou manter a página salva; requer VAPID configurado no servidor.
+              </p>
+            )}
+          </div>
         </div>
       )}
 

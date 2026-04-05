@@ -1,9 +1,8 @@
 /**
- * Helpers de notificação para uso em API routes / Server Actions.
- * Registra em notification_log; integração com FCM/Email/WhatsApp pode ser feita aqui ou em worker.
+ * Registra em notification_log (Prisma). Envio ativo: ver processAppointmentReminders + cron.
  */
-
-import { createServiceRoleClient } from "@/lib/supabase/server"
+import type { Prisma } from "@prisma/client"
+import { prisma } from "@/lib/prisma"
 import type { NotificationEvent, NotificationType } from "@/lib/db/types"
 
 export type NotifyPayload = {
@@ -16,13 +15,14 @@ export type NotifyPayload = {
 }
 
 export async function logNotification(payload: NotifyPayload): Promise<void> {
-  const supabase = createServiceRoleClient()
-  await supabase.from("notification_log").insert({
-    barbershop_id: payload.barbershop_id,
-    client_id: payload.client_id ?? null,
-    appointment_id: payload.appointment_id ?? null,
-    type: payload.type,
-    event: payload.event,
-    payload: payload.payload ?? null,
+  await prisma.notificationLog.create({
+    data: {
+      barbershopId: payload.barbershop_id,
+      clientId: payload.client_id ?? null,
+      appointmentId: payload.appointment_id ?? null,
+      type: payload.type,
+      event: payload.event,
+      payload: (payload.payload ?? undefined) as Prisma.InputJsonValue | undefined,
+    },
   })
 }

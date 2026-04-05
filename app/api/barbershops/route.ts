@@ -128,6 +128,18 @@ function mergeBarbershopSettings(
         : {}
     base.opening_hours = { ...oldH, ...inc.opening_hours }
   }
+  if (inc.notification_settings !== undefined) {
+    const oldN =
+      base.notification_settings &&
+      typeof base.notification_settings === "object" &&
+      !Array.isArray(base.notification_settings)
+        ? (base.notification_settings as Record<string, unknown>)
+        : {}
+    base.notification_settings = {
+      ...oldN,
+      ...(inc.notification_settings as Record<string, unknown>),
+    }
+  }
   return base as Prisma.InputJsonValue
 }
 

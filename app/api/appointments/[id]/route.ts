@@ -11,6 +11,7 @@ import {
   parseAppointmentDate,
 } from "@/lib/appointment-prisma-helpers"
 import { normalizeAppointmentTime } from "@/lib/scheduling"
+import { trySendWhatsAppAppointmentPostService } from "@/lib/whatsapp-appointment-events"
 
 export async function PATCH(
   _request: Request,
@@ -119,6 +120,9 @@ export async function PATCH(
 
     if (body.status === "canceled") {
       await notifyFirstWaitingList(barbershopId, data)
+    }
+    if (body.status === "completed" && beforeApi.status !== "completed") {
+      void trySendWhatsAppAppointmentPostService(barbershopId, id)
     }
     return NextResponse.json(data as Appointment)
   } catch (e) {
