@@ -219,6 +219,8 @@ export default function ConfiguracoesPage() {
   const [waConnectOpen, setWaConnectOpen] = useState(false)
   const [waProvider, setWaProvider] = useState("meta")
   const [waHasApiToken, setWaHasApiToken] = useState(false)
+  /** GET /api/whatsapp retornou 403: credenciais só persistem no Premium; não limpamos o que o usuário digita. */
+  const [waPlanBlocked, setWaPlanBlocked] = useState(false)
   const [notifWaConfirmTpl, setNotifWaConfirmTpl] = useState(DEFAULT_WA_CONFIRM)
   const [notifWaPostTpl, setNotifWaPostTpl] = useState(DEFAULT_WA_POST)
   const [notifCustomReminderHours, setNotifCustomReminderHours] = useState("")
@@ -377,6 +379,13 @@ export default function ConfiguracoesPage() {
       const r = await fetch("/api/whatsapp", { credentials: "include" })
       const j = await r.json().catch(() => ({}))
       if (!r.ok) {
+        if (r.status === 403) {
+          setWaPlanBlocked(true)
+          setWaError(null)
+          setWaHasApiToken(false)
+          return
+        }
+        setWaPlanBlocked(false)
         setWaError(typeof j.error === "string" ? j.error : "Não foi possível carregar")
         setWaPhone("")
         setWaGraphId("")
@@ -384,6 +393,7 @@ export default function ConfiguracoesPage() {
         setWaProvider("meta")
         return
       }
+      setWaPlanBlocked(false)
       if (j && typeof j.phone_number === "string") {
         setWaPhone(j.phone_number)
         setWaGraphId(typeof j.graph_phone_number_id === "string" ? j.graph_phone_number_id : "")
@@ -2476,11 +2486,13 @@ export default function ConfiguracoesPage() {
                 WhatsApp Business
               </CardTitle>
               <CardDescription className="text-muted-foreground">
-                Cadastre o número da conta Business. Quando a API estiver conectada, a mensagem abaixo poderá ser usada
-                nos lembretes por WhatsApp.
+                Cadastre o número da conta Business. Use o guia das parceiras (Twilio, Zenvia, 360dialog), edite os
+                textos e horários abaixo. Envio automático pela API é Premium; modo simples (WhatsApp sem API) funciona em
+                qualquer plano.
                 {!whatsappIntegrationFeature ? (
                   <span className="block mt-2 text-amber-600 dark:text-amber-400">
-                    Integração WhatsApp completa disponível no plano Premium (ou conta de teste / super admin).
+                    Plano atual: sem API na nuvem. Faça upgrade para Premium para salvar token e disparo automático; até
+                    lá, configure textos aqui e use &quot;Abrir WhatsApp&quot; quando não houver token salvo.
                   </span>
                 ) : null}
               </CardDescription>
@@ -2523,14 +2535,14 @@ export default function ConfiguracoesPage() {
                   {waError}
                 </div>
               ) : null}
+              {waPlanBlocked ? (
+                <div className="p-3 rounded-lg border border-border bg-muted/40 text-sm text-muted-foreground">
+                  Credenciais de API não são carregadas neste plano (403). Você pode preencher os dados abaixo e tentar
+                  salvar após upgrade, ou usar só textos + modo simples.
+                </div>
+              ) : null}
 
-              <Button
-                type="button"
-                variant="secondary"
-                className="border border-border"
-                disabled={!whatsappIntegrationFeature}
-                onClick={() => setWaConnectOpen(true)}
-              >
+              <Button type="button" variant="secondary" className="border border-border" onClick={() => setWaConnectOpen(true)}>
                 Conectar WhatsApp
               </Button>
 
@@ -2586,7 +2598,6 @@ export default function ConfiguracoesPage() {
                             ? "Opcional para Twilio"
                             : "ID do número (Meta / 360dialog)"
                       }
-                      disabled={!whatsappIntegrationFeature}
                     />
                     <p className="text-xs text-muted-foreground mt-1">
                       {waProvider === "twilio"
@@ -2609,7 +2620,6 @@ export default function ConfiguracoesPage() {
                           : "Deixe em branco para manter o token já salvo"
                       }
                       autoComplete="off"
-                      disabled={!whatsappIntegrationFeature}
                     />
                     <label className="flex items-center gap-2 mt-2 text-xs text-muted-foreground cursor-pointer">
                       <input
@@ -2617,7 +2627,6 @@ export default function ConfiguracoesPage() {
                         checked={waClearToken}
                         onChange={(e) => setWaClearToken(e.target.checked)}
                         className="rounded border-border"
-                        disabled={!whatsappIntegrationFeature}
                       />
                       Remover token salvo no próximo envio
                     </label>
@@ -2629,14 +2638,13 @@ export default function ConfiguracoesPage() {
                       value={waPhone}
                       onChange={(e) => setWaPhone(e.target.value)}
                       placeholder="5511999998888"
-                      disabled={!whatsappIntegrationFeature}
                     />
                   </Field>
                   <Button
                     type="button"
                     variant="secondary"
                     className="border border-border"
-                    disabled={waBusy || !whatsappIntegrationFeature}
+                    disabled={waBusy}
                     onClick={() => void handleSaveWhatsapp()}
                   >
                     {waBusy ? "Salvando…" : "Salvar conexão"}
@@ -2646,14 +2654,9 @@ export default function ConfiguracoesPage() {
 
               <div className="border-t border-border pt-6 space-y-4">
                 <div className="flex items-center gap-2">
-                  <Switch
-                    checked={notifWa}
-                    onCheckedChange={setNotifWa}
-                    id="notif-wa"
-                    disabled={!whatsappIntegrationFeature}
-                  />
-                  <FieldLabel htmlFor="notif-wa" className={`cursor-pointer ${!whatsappIntegrationFeature ? "opacity-60" : ""}`}>
-                    Incluir lembrete por WhatsApp (quando integrado)
+                  <Switch checked={notifWa} onCheckedChange={setNotifWa} id="notif-wa" />
+                  <FieldLabel htmlFor="notif-wa" className="cursor-pointer">
+                    Incluir lembrete por WhatsApp (quando a API estiver ativa no plano Premium)
                   </FieldLabel>
                 </div>
               </div>
@@ -2666,7 +2669,6 @@ export default function ConfiguracoesPage() {
                     className="mt-1 bg-input border-border text-foreground min-h-[100px]"
                     value={notifWaConfirmTpl}
                     onChange={(e) => setNotifWaConfirmTpl(e.target.value)}
-                    disabled={!whatsappIntegrationFeature}
                   />
                   <p className="text-xs text-muted-foreground mt-2">
                     Ex.: Olá {"{{nome}}"}, seu horário está confirmado para {"{{data}}"} às {"{{hora}}"}.
@@ -2678,7 +2680,7 @@ export default function ConfiguracoesPage() {
                     className="mt-1 bg-input border-border text-foreground min-h-[100px]"
                     value={notifWaTpl}
                     onChange={(e) => setNotifWaTpl(e.target.value)}
-                    disabled={!notifWa || !whatsappIntegrationFeature}
+                    disabled={!notifWa}
                   />
                   <p className="text-xs text-muted-foreground mt-2">
                     Variáveis: {"{{nome_cliente}}"}, {"{{nome}}"}, {"{{data}}"}, {"{{horario}}"}, {"{{hora}}"},{" "}
@@ -2691,7 +2693,6 @@ export default function ConfiguracoesPage() {
                     className="mt-1 bg-input border-border text-foreground min-h-[100px]"
                     value={notifWaPostTpl}
                     onChange={(e) => setNotifWaPostTpl(e.target.value)}
-                    disabled={!whatsappIntegrationFeature}
                   />
                 </Field>
               </div>
@@ -2730,12 +2731,12 @@ export default function ConfiguracoesPage() {
                 </Field>
               </div>
 
-              {whatsappIntegrationFeature && !waHasApiToken ? (
+              {!waHasApiToken ? (
                 <div className="border-t border-border pt-6 space-y-3">
                   <p className="text-sm font-medium text-foreground">Modo simples (sem API)</p>
                   <p className="text-xs text-muted-foreground">
-                    Abre o WhatsApp com o texto da confirmação preenchido para você escolher o contato (plano sem envio
-                    automático pela API).
+                    Abre o WhatsApp com o texto da confirmação para você escolher o contato. Use quando ainda não há
+                    token salvo ou no plano sem disparo automático.
                   </p>
                   <Button
                     type="button"
