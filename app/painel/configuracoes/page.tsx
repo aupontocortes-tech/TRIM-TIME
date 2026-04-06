@@ -214,7 +214,6 @@ export default function ConfiguracoesPage() {
   const [saveOk, setSaveOk] = useState(false)
   const [linkCopiado, setLinkCopiado] = useState(false)
   const [linkCompartilhado, setLinkCompartilhado] = useState(false)
-  const [msgClienteCopiada, setMsgClienteCopiada] = useState(false)
 
   const [waLoading, setWaLoading] = useState(false)
   const [waError, setWaError] = useState<string | null>(null)
@@ -460,26 +459,12 @@ export default function ConfiguracoesPage() {
       ? `https://wa.me/${waDigitsOnly}?text=${encodeURIComponent(fallbackWaMessage)}`
       : `https://api.whatsapp.com/send?text=${encodeURIComponent(fallbackWaMessage)}`
 
-  /** Mesmo URL do card: uma vez no texto, para colar no WhatsApp (agendar + PWA pelo mesmo link). */
-  const textoMensagemClienteComLinks =
-    origin && barbershop?.slug
-      ? `Agende com a gente pelo mesmo link (também serve para colocar o app na tela inicial no celular):\n${origin}/b/${barbershop.slug}\n\nNo Android use Chrome; no iPhone, Safari — abra o link e use “Adicionar à tela de início”.`
-      : ""
-
   const copiarLink = () => {
     const o = typeof window !== "undefined" ? window.location.origin : origin
     const full = o && barbershop?.slug ? `${o}/b/${barbershop.slug}` : ""
     if (full) void navigator.clipboard.writeText(full)
     setLinkCopiado(true)
     setTimeout(() => setLinkCopiado(false), 2000)
-  }
-
-  const copiarMensagemCliente = () => {
-    if (textoMensagemClienteComLinks) {
-      void navigator.clipboard.writeText(textoMensagemClienteComLinks)
-    }
-    setMsgClienteCopiada(true)
-    setTimeout(() => setMsgClienteCopiada(false), 2000)
   }
 
   const compartilharLink = async () => {
@@ -491,7 +476,7 @@ export default function ConfiguracoesPage() {
       if (nav && "share" in nav && typeof nav.share === "function") {
         await nav.share({
           title: `Agendamento - ${barbershop?.name ?? "Barbearia"}`,
-          text: "Um link para agendar e instalar o app no celular:",
+          text: "Um único link: agendar pelo navegador e, no celular, adicionar o app à tela inicial (Chrome/Safari).",
           url: full,
         })
       } else if (nav?.clipboard) {
@@ -1214,54 +1199,34 @@ export default function ConfiguracoesPage() {
             <div className="flex-1">
               <h3 className="text-lg font-semibold text-foreground mb-1">Seu Link de Agendamento</h3>
               <p className="text-sm text-muted-foreground mb-3">
-                Um único link: o cliente agenda pelo navegador e, no celular, pode usar o mesmo endereço para fixar o
-                app na tela inicial (Chrome no Android, Safari no iPhone).
+                Só existe <span className="text-foreground font-medium">este</span> endereço: o cliente abre no
+                navegador para marcar horário e, no celular, usa o mesmo link para colocar o atalho na tela inicial
+                (Chrome no Android, Safari no iPhone — &quot;Adicionar à tela de início&quot;). Pode enviar o link por
+                WhatsApp tal como está; não precisa de segunda URL.
               </p>
               <div className="flex flex-col sm:flex-row sm:items-stretch gap-2 p-3 bg-background/50 rounded-lg border border-border">
                 <span className="text-primary font-medium flex-1 truncate min-w-0 py-2 sm:py-0 sm:flex sm:items-center">
                   {linkAgendamento}
                 </span>
-                <div className="flex flex-wrap gap-2 flex-shrink-0">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={copiarLink}
-                    className="border-primary/30 hover:bg-primary/10"
-                  >
-                    {linkCopiado ? (
-                      <>
-                        <Check className="w-4 h-4 mr-1 text-green-500" />
-                        Copiado!
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-4 h-4 mr-1" />
-                        Copiar link
-                      </>
-                    )}
-                  </Button>
-                  {textoMensagemClienteComLinks ? (
-                    <Button size="sm" variant="secondary" className="border border-border" onClick={copiarMensagemCliente}>
-                      {msgClienteCopiada ? (
-                        <>
-                          <Check className="w-4 h-4 mr-1 text-green-500" />
-                          Mensagem copiada!
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="w-4 h-4 mr-1" />
-                          Copiar mensagem (WhatsApp)
-                        </>
-                      )}
-                    </Button>
-                  ) : null}
-                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={copiarLink}
+                  className="border-primary/30 hover:bg-primary/10 flex-shrink-0"
+                >
+                  {linkCopiado ? (
+                    <>
+                      <Check className="w-4 h-4 mr-1 text-green-500" />
+                      Copiado!
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-4 h-4 mr-1" />
+                      Copiar
+                    </>
+                  )}
+                </Button>
               </div>
-              {textoMensagemClienteComLinks ? (
-                <p className="text-xs text-muted-foreground mt-2">
-                  O link acima é o mesmo que vai na mensagem — não há outro endereço para o cliente.
-                </p>
-              ) : null}
             </div>
             <div className="flex gap-2">
               <Button variant="outline" className="border-border" type="button" disabled>
