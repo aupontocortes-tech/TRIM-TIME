@@ -117,8 +117,7 @@ const WHATSAPP_PARTNER_LINKS = [
 const DEFAULT_APP_REMINDER =
   "Olá {{nome_cliente}}! Lembrete: você tem {{servico}} na {{barbearia}} em {{data}} às {{horario}}."
 
-const DEFAULT_WA_REMINDER =
-  "Olá {{nome_cliente}}! Lembrete do seu horário na {{barbearia}}: {{data}} às {{horario}} — {{servico}}."
+const DEFAULT_WA_REMINDER = "Olá {{nome}}, lembrando do seu horário amanhã às {{hora}}."
 
 const DEFAULT_WA_CONFIRM =
   "Olá {{nome}}, seu horário está confirmado para {{data}} às {{hora}}."
@@ -126,6 +125,13 @@ const DEFAULT_WA_CONFIRM =
 const DEFAULT_WA_POST = "Obrigado pela preferência! Esperamos você novamente."
 
 const ALLOWED_REMINDER_MINUTES = new Set<number>([30, 60, 120, 1440])
+
+/** Na área WhatsApp (especificação): só 1 h, 2 h e 1 dia — o card “Lembretes” acima mantém também 30 min. */
+const WA_SECTION_REMINDER_OPTIONS = [
+  { minutes: 60, label: "1 hora antes" },
+  { minutes: 120, label: "2 horas antes" },
+  { minutes: 1440, label: "1 dia antes" },
+] as const
 
 export default function ConfiguracoesPage() {
   const {
@@ -224,6 +230,9 @@ export default function ConfiguracoesPage() {
   const [notifWaConfirmTpl, setNotifWaConfirmTpl] = useState(DEFAULT_WA_CONFIRM)
   const [notifWaPostTpl, setNotifWaPostTpl] = useState(DEFAULT_WA_POST)
   const [notifCustomReminderHours, setNotifCustomReminderHours] = useState("")
+  const [notifMetaTplConfirm, setNotifMetaTplConfirm] = useState("")
+  const [notifMetaTplReminder, setNotifMetaTplReminder] = useState("")
+  const [notifMetaTplPost, setNotifMetaTplPost] = useState("")
 
   const [notifReminderOffsets, setNotifReminderOffsets] = useState<number[]>([60])
   const [notifApp, setNotifApp] = useState(true)
@@ -291,6 +300,9 @@ export default function ConfiguracoesPage() {
       setNotifWaConfirmTpl(DEFAULT_WA_CONFIRM)
       setNotifWaPostTpl(DEFAULT_WA_POST)
       setNotifCustomReminderHours("")
+      setNotifMetaTplConfirm("")
+      setNotifMetaTplReminder("")
+      setNotifMetaTplPost("")
       return
     }
     const offs = (ns.reminder_offsets_minutes ?? [60]).filter((m) => ALLOWED_REMINDER_MINUTES.has(m))
@@ -307,6 +319,9 @@ export default function ConfiguracoesPage() {
     setNotifCustomReminderHours(
       typeof cm === "number" && cm > 0 && Number.isFinite(cm) ? String(Math.round(cm / 60)) : ""
     )
+    setNotifMetaTplConfirm(ns.whatsapp_meta_template_confirmation?.trim() ?? "")
+    setNotifMetaTplReminder(ns.whatsapp_meta_template_reminder?.trim() ?? "")
+    setNotifMetaTplPost(ns.whatsapp_meta_template_post_service?.trim() ?? "")
   }, [
     barbershop?.id,
     barbershop?.updated_at,
@@ -439,7 +454,10 @@ export default function ConfiguracoesPage() {
       barbearia: barbershop?.name ?? "Barbearia",
     }
   )
-  const fallbackWhatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(fallbackWaMessage)}`
+  const fallbackWhatsappUrl =
+    waDigitsOnly.length >= 10
+      ? `https://wa.me/${waDigitsOnly}?text=${encodeURIComponent(fallbackWaMessage)}`
+      : `https://api.whatsapp.com/send?text=${encodeURIComponent(fallbackWaMessage)}`
 
   /** Mesmo URL do card: uma vez no texto, para colar no WhatsApp (agendar + PWA pelo mesmo link). */
   const textoMensagemClienteComLinks =
@@ -738,6 +756,9 @@ export default function ConfiguracoesPage() {
               whatsapp_reminder_template: notifWaTpl.trim() || DEFAULT_WA_REMINDER,
               whatsapp_confirmation_template: notifWaConfirmTpl.trim() || DEFAULT_WA_CONFIRM,
               whatsapp_post_service_template: notifWaPostTpl.trim() || DEFAULT_WA_POST,
+              whatsapp_meta_template_confirmation: notifMetaTplConfirm.trim(),
+              whatsapp_meta_template_reminder: notifMetaTplReminder.trim(),
+              whatsapp_meta_template_post_service: notifMetaTplPost.trim(),
             },
           },
         }),
@@ -2577,12 +2598,11 @@ export default function ConfiguracoesPage() {
                       className="mt-1 flex h-9 w-full rounded-md border border-border bg-input px-3 py-1 text-sm text-foreground shadow-xs"
                       value={waProvider}
                       onChange={(e) => setWaProvider(e.target.value)}
-                      disabled={!whatsappIntegrationFeature}
                     >
-                      <option value="meta">Meta (Cloud API)</option>
                       <option value="twilio">Twilio</option>
                       <option value="zenvia">Zenvia</option>
                       <option value="360dialog">360dialog</option>
+                      <option value="meta">Meta (Cloud API direta)</option>
                     </select>
                   </Field>
                   <Field>
@@ -2683,8 +2703,8 @@ export default function ConfiguracoesPage() {
                     disabled={!notifWa}
                   />
                   <p className="text-xs text-muted-foreground mt-2">
-                    Variáveis: {"{{nome_cliente}}"}, {"{{nome}}"}, {"{{data}}"}, {"{{horario}}"}, {"{{hora}}"},{" "}
-                    {"{{servico}}"}, {"{{barbearia}}"}.
+                    Ex.: Olá {"{{nome}}"}, lembrando do seu horário amanhã às {"{{hora}}"}. Também: {"{{nome_cliente}}"},{" "}
+                    {"{{data}}"}, {"{{horario}}"}, {"{{servico}}"}, {"{{barbearia}}"}.
                   </p>
                 </Field>
                 <Field>
@@ -2694,17 +2714,54 @@ export default function ConfiguracoesPage() {
                     value={notifWaPostTpl}
                     onChange={(e) => setNotifWaPostTpl(e.target.value)}
                   />
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Ex.: Obrigado pela preferência! Esperamos você novamente.
+                  </p>
                 </Field>
+                <div className="space-y-3 pt-2 border-t border-border">
+                  <p className="text-xs font-medium text-foreground">Templates oficiais Meta (opcional)</p>
+                  <p className="text-xs text-muted-foreground">
+                    Nomes aprovados no Gerenciador do WhatsApp; uso em envio por template (evolução da API). Deixe em
+                    branco para mensagens de texto livre.
+                  </p>
+                  <Field>
+                    <FieldLabel>Template confirmação (nome Meta)</FieldLabel>
+                    <Input
+                      className="bg-input border-border text-foreground font-mono text-sm"
+                      value={notifMetaTplConfirm}
+                      onChange={(e) => setNotifMetaTplConfirm(e.target.value)}
+                      placeholder="ex.: appointment_confirmed"
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel>Template lembrete (nome Meta)</FieldLabel>
+                    <Input
+                      className="bg-input border-border text-foreground font-mono text-sm"
+                      value={notifMetaTplReminder}
+                      onChange={(e) => setNotifMetaTplReminder(e.target.value)}
+                      placeholder="ex.: appointment_reminder"
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel>Template pós-atendimento (nome Meta)</FieldLabel>
+                    <Input
+                      className="bg-input border-border text-foreground font-mono text-sm"
+                      value={notifMetaTplPost}
+                      onChange={(e) => setNotifMetaTplPost(e.target.value)}
+                      placeholder="ex.: thank_you_visit"
+                    />
+                  </Field>
+                </div>
               </div>
 
               <div className="border-t border-border pt-6 space-y-3">
-                <p className="text-sm font-medium text-foreground">Horários do lembrete (WhatsApp / app)</p>
+                <p className="text-sm font-medium text-foreground">Configuração de horários (lembrete)</p>
                 <p className="text-xs text-muted-foreground">
-                  Os mesmos horários valem para push no app e para lembretes por WhatsApp quando ativados acima e na
-                  seção &quot;Lembretes antes do atendimento&quot;.
+                  Mesma configuração do card &quot;Lembretes antes do atendimento&quot; (push + WhatsApp). Aqui você pode
+                  marcar 1 h, 2 h e 1 dia; 30 min só no card acima.
                 </p>
                 <div className="flex flex-col gap-3">
-                  {REMINDER_OFFSET_OPTIONS.map((opt) => (
+                  {WA_SECTION_REMINDER_OPTIONS.map((opt) => (
                     <label
                       key={opt.minutes}
                       className="flex items-center gap-3 cursor-pointer text-sm text-foreground"
@@ -2735,8 +2792,9 @@ export default function ConfiguracoesPage() {
                 <div className="border-t border-border pt-6 space-y-3">
                   <p className="text-sm font-medium text-foreground">Modo simples (sem API)</p>
                   <p className="text-xs text-muted-foreground">
-                    Abre o WhatsApp com o texto da confirmação para você escolher o contato. Use quando ainda não há
-                    token salvo ou no plano sem disparo automático.
+                    Gera um link no formato wa.me com o número do WhatsApp acima e o texto da confirmação. Preencha o
+                    número (DDI + código, só dígitos) para usar wa.me; sem número, abre só o texto para você escolher o
+                    contato.
                   </p>
                   <Button
                     type="button"

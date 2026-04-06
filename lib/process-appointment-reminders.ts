@@ -22,8 +22,7 @@ const WINDOW_MS = 10 * 60 * 1000
 
 const DEFAULT_APP =
   "Olá {{nome_cliente}}! Lembrete: você tem {{servico}} na {{barbearia}} em {{data}} às {{horario}}."
-const DEFAULT_WA =
-  "Olá {{nome_cliente}}! Lembrete do seu horário na {{barbearia}}: {{data}} às {{horario}} — {{servico}}."
+const DEFAULT_WA = "Olá {{nome}}, lembrando do seu horário amanhã às {{hora}}."
 
 function formatDatePt(isoDate: string): string {
   const [y, m, d] = isoDate.split("-").map(Number)
