@@ -48,6 +48,7 @@ import {
   UserPlus,
   Bell,
   ExternalLink,
+  Plug,
 } from "lucide-react"
 import {
   Dialog,
@@ -1306,6 +1307,10 @@ export default function ConfiguracoesPage() {
             <Bell className="w-4 h-4 mr-2" />
             Notificações
           </TabsTrigger>
+          <TabsTrigger value="integracao" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+            <Plug className="w-4 h-4 mr-2" />
+            Integração
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="barbearia">
@@ -2500,6 +2505,23 @@ export default function ConfiguracoesPage() {
             </CardContent>
           </Card>
 
+          <div className="flex flex-wrap gap-3">
+            <Button
+              type="button"
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
+              disabled={notifBusy}
+              onClick={() => void handleSaveNotificacoes()}
+            >
+              {notifBusy ? "Salvando…" : "Salvar configurações de notificações"}
+            </Button>
+          </div>
+          <p className="text-sm text-muted-foreground max-w-2xl">
+            WhatsApp Business (API, templates e modo simples) ficou na aba{" "}
+            <strong className="text-foreground">Integração</strong>.
+          </p>
+        </TabsContent>
+
+        <TabsContent value="integracao" className="space-y-6">
           <Card className="bg-card border-border">
             <CardHeader>
               <CardTitle className="text-foreground flex items-center gap-2">
@@ -2507,9 +2529,10 @@ export default function ConfiguracoesPage() {
                 WhatsApp Business
               </CardTitle>
               <CardDescription className="text-muted-foreground">
-                Cadastre o número da conta Business. Use o guia das parceiras (Twilio, Zenvia, 360dialog), edite os
-                textos e horários abaixo. Envio automático pela API é Premium; modo simples (WhatsApp sem API) funciona em
-                qualquer plano.
+                Integração com APIs oficiais (não confundir com ficheiros <code className="text-foreground/90">.bin</code>{" "}
+                na pasta do projeto — isso não é a app). As mudanças são esta página: após <strong className="text-foreground">git pull</strong> ou novo deploy na Vercel, faça refresh no
+                navegador (Ctrl+F5). Cadastre o número Business, use o guia das parceiras (Twilio, Zenvia, 360dialog) e
+                edite textos abaixo. API automática: Premium; modo simples: qualquer plano.
                 {!whatsappIntegrationFeature ? (
                   <span className="block mt-2 text-amber-600 dark:text-amber-400">
                     Plano atual: sem API na nuvem. Faça upgrade para Premium para salvar token e disparo automático; até
@@ -2757,8 +2780,8 @@ export default function ConfiguracoesPage() {
               <div className="border-t border-border pt-6 space-y-3">
                 <p className="text-sm font-medium text-foreground">Configuração de horários (lembrete)</p>
                 <p className="text-xs text-muted-foreground">
-                  Mesma configuração do card &quot;Lembretes antes do atendimento&quot; (push + WhatsApp). Aqui você pode
-                  marcar 1 h, 2 h e 1 dia; 30 min só no card acima.
+                  Mesma configuração do card &quot;Lembretes antes do atendimento&quot; na aba Notificações (push +
+                  WhatsApp). Aqui: 1 h, 2 h e 1 dia; 30 min só na aba Notificações.
                 </p>
                 <div className="flex flex-col gap-3">
                   {WA_SECTION_REMINDER_OPTIONS.map((opt) => (
@@ -2816,7 +2839,7 @@ export default function ConfiguracoesPage() {
               disabled={notifBusy}
               onClick={() => void handleSaveNotificacoes()}
             >
-              {notifBusy ? "Salvando…" : "Salvar configurações de notificações"}
+              {notifBusy ? "Salvando…" : "Salvar textos e horários (WhatsApp / lembretes)"}
             </Button>
           </div>
         </TabsContent>
