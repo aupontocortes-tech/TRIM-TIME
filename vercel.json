@@ -2,11 +2,5 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
   "installCommand": "npm ci || (echo 'npm ci retry 1 em 12s…' && sleep 12 && npm ci) || (echo 'npm ci retry 2 em 24s…' && sleep 24 && npm ci)",
-  "buildCommand": "npm run build",
-  "crons": [
-    {
-      "path": "/api/cron/appointment-reminders",
-      "schedule": "0 12 * * *"
-    }
-  ]
+  "buildCommand": "npm run build"
 }
