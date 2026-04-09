@@ -2707,37 +2707,50 @@ export default function ConfiguracoesPage() {
                   </p>
                 </Field>
                 <div className="space-y-3 pt-2 border-t border-border">
-                  <p className="text-xs font-medium text-foreground">Templates oficiais Meta (opcional)</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs font-medium text-foreground">Nomes de modelo avançado (opcional)</p>
+                    <span className="text-[10px] bg-muted text-muted-foreground rounded px-1.5 py-0.5">Avançado</span>
+                  </div>
                   <p className="text-xs text-muted-foreground">
-                    Nomes aprovados no Gerenciador do WhatsApp; uso em envio por template (evolução da API). Deixe em
-                    branco para mensagens de texto livre.
+                    Só preencha se você tiver um modelo de mensagem <strong>aprovado pela Meta</strong> no Gerenciador do
+                    WhatsApp Business. Se não sabe o que é isso, <strong>deixe em branco</strong> — o sistema já envia
+                    as mensagens normalmente sem isso.
                   </p>
                   <Field>
-                    <FieldLabel>Template confirmação (nome Meta)</FieldLabel>
+                    <FieldLabel>Modelo de confirmação</FieldLabel>
                     <Input
                       className="bg-input border-border text-foreground font-mono text-sm"
                       value={notifMetaTplConfirm}
                       onChange={(e) => setNotifMetaTplConfirm(e.target.value)}
                       placeholder="ex.: appointment_confirmed"
                     />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Nome do modelo que aparece quando o cliente <strong>confirma o horário</strong>.
+                    </p>
                   </Field>
                   <Field>
-                    <FieldLabel>Template lembrete (nome Meta)</FieldLabel>
+                    <FieldLabel>Modelo de lembrete</FieldLabel>
                     <Input
                       className="bg-input border-border text-foreground font-mono text-sm"
                       value={notifMetaTplReminder}
                       onChange={(e) => setNotifMetaTplReminder(e.target.value)}
                       placeholder="ex.: appointment_reminder"
                     />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Nome do modelo enviado para <strong>lembrar o cliente do horário</strong> antes de chegar.
+                    </p>
                   </Field>
                   <Field>
-                    <FieldLabel>Template pós-atendimento (nome Meta)</FieldLabel>
+                    <FieldLabel>Modelo pós-atendimento</FieldLabel>
                     <Input
                       className="bg-input border-border text-foreground font-mono text-sm"
                       value={notifMetaTplPost}
                       onChange={(e) => setNotifMetaTplPost(e.target.value)}
                       placeholder="ex.: thank_you_visit"
                     />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Nome do modelo da mensagem de <strong>agradecimento</strong> enviada depois do atendimento.
+                    </p>
                   </Field>
                 </div>
               </div>
