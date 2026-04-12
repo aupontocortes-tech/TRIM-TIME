@@ -9,6 +9,7 @@ import {
   mapAppointmentRowToApi,
   parseAppointmentDate,
 } from "@/lib/appointment-prisma-helpers"
+import { withServiceDescriptionsFromDb } from "@/lib/service-queries"
 import { trySendWhatsAppAppointmentConfirmation } from "@/lib/whatsapp-appointment-events"
 
 export async function GET(request: Request) {
@@ -28,7 +29,8 @@ export async function GET(request: Request) {
       include: appointmentApiInclude,
       orderBy: { time: "asc" },
     })
-    return NextResponse.json(rows.map(mapAppointmentRowToApi) as Appointment[])
+    const list = rows.map(mapAppointmentRowToApi) as Appointment[]
+    return NextResponse.json(await withServiceDescriptionsFromDb(list))
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Não autorizado" },

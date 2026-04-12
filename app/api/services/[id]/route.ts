@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 import { requireBarbershopId } from "@/lib/tenant"
 import { prisma } from "@/lib/prisma"
+import { prismaServicePatchWithOptionalDescription } from "@/lib/service-mutations"
+import { fetchServiceByIdRaw, serviceDbRowToApi } from "@/lib/service-queries"
 import type { Service } from "@/lib/db/types"
 
 export async function PATCH(
@@ -10,26 +12,37 @@ export async function PATCH(
   try {
     const barbershopId = await requireBarbershopId()
     const { id } = await params
-    const body = await _request.json() as Partial<Pick<Service, "name" | "price" | "duration" | "active">>
+    const body = await _request.json() as Partial<
+      Pick<Service, "name" | "description" | "price" | "duration" | "active">
+    >
     const existing = await prisma.service.findFirst({
       where: { id, barbershopId },
       select: { id: true },
     })
     if (!existing) return NextResponse.json({ error: "Serviço não encontrado" }, { status: 404 })
 
-    const data = await prisma.service.update({
-      where: { id },
-      data: {
-        ...(body.name !== undefined && { name: body.name.trim() }),
-        ...(body.price !== undefined && { price: Number(body.price) }),
-        ...(body.duration !== undefined && { duration: Math.max(1, Number(body.duration) || 30) }),
-        ...(body.active !== undefined && { active: Boolean(body.active) }),
-      },
+    await prismaServicePatchWithOptionalDescription({
+      id,
+      barbershopId,
+      ...(body.name !== undefined && { name: body.name }),
+      ...(body.description !== undefined && { description: body.description }),
+      ...(body.price !== undefined && { price: body.price }),
+      ...(body.duration !== undefined && { duration: body.duration }),
+      ...(body.active !== undefined && { active: body.active }),
     })
+    const row = await fetchServiceByIdRaw(id)
+    if (row?.barbershop_id === barbershopId) {
+      return NextResponse.json(serviceDbRowToApi(row) as Service)
+    }
+    const data = await prisma.service.findFirst({ where: { id, barbershopId } })
+    if (!data) {
+      return NextResponse.json({ error: "Serviço não encontrado" }, { status: 404 })
+    }
     return NextResponse.json({
       id: data.id,
       barbershop_id: data.barbershopId,
       name: data.name,
+      description: (data as { description?: string | null }).description ?? "",
       price: Number(data.price),
       duration: data.duration,
       active: data.active,

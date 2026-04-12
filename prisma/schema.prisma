@@ -287,6 +287,8 @@ model Service {
   barbershopId String   @map("barbershop_id") @db.Uuid
   barbershop   Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
   name         String
+  /** Texto exibido ao cliente na página de agendamento (opcional). */
+  description  String   @default("") @db.Text
   price        Decimal  @default(0) @db.Decimal(10, 2)
   duration     Int      @default(30)
   active       Boolean  @default(true)

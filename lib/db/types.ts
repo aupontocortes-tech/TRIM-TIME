@@ -136,6 +136,8 @@ export interface Service {
   id: string
   barbershop_id: string
   name: string
+  /** Descrição opcional visível ao cliente no agendamento. */
+  description: string
   price: number
   duration: number
   active: boolean

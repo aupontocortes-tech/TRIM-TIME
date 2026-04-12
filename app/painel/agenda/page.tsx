@@ -32,6 +32,8 @@ type AgendaItem = {
   telefone: string
   clienteFoto: string | null
   servico: string
+  /** Texto do cadastro do serviço (o que o cliente também vê). */
+  servicoDescricao?: string
   duracao: number
   valor: number
   status: Appointment["status"]
@@ -58,7 +60,16 @@ function formatarData(data: Date) {
   return `${diasSemana[data.getDay()]}, ${data.getDate()}/${data.getMonth() + 1}`
 }
 
+function labelServicoNoSelect(s: Service): string {
+  const d = (s.description ?? "").trim()
+  if (!d) return s.name
+  const max = 72
+  const short = d.length > max ? `${d.slice(0, max - 1)}…` : d
+  return `${s.name} — ${short}`
+}
+
 function mapAgendaItem(appointment: Appointment): AgendaItem {
+  const desc = (appointment.service?.description ?? "").trim()
   return {
     id: appointment.id,
     hora: typeof appointment.time === "string" ? appointment.time.slice(0, 5) : String(appointment.time),
@@ -66,6 +77,7 @@ function mapAgendaItem(appointment: Appointment): AgendaItem {
     telefone: appointment.client?.phone ?? "",
     clienteFoto: appointment.client?.photo_url ?? null,
     servico: appointment.service?.name ?? "Serviço",
+    servicoDescricao: desc || undefined,
     duracao: appointment.service?.duration ?? 0,
     valor: Number(appointment.total_price ?? appointment.service?.price ?? 0),
     status: appointment.status,
@@ -420,6 +432,11 @@ export default function AgendaPage() {
                       </span>
                     </div>
                     <p className="text-sm text-muted-foreground">{agendamento.servico}</p>
+                    {agendamento.servicoDescricao ? (
+                      <p className="text-xs text-muted-foreground/85 mt-0.5 line-clamp-2 whitespace-pre-wrap">
+                        {agendamento.servicoDescricao}
+                      </p>
+                    ) : null}
                   </div>
 
                   <div className="flex items-center gap-3">
@@ -523,11 +540,16 @@ export default function AgendaPage() {
                   <p className="text-xs text-muted-foreground mb-1">Duração</p>
                   <p className="font-medium text-foreground">{agendamentoSelecionado.duracao} minutos</p>
                 </div>
-                <div>
+                <div className="col-span-2">
                   <p className="text-xs text-muted-foreground mb-1">Serviço</p>
                   <p className="font-medium text-foreground">{agendamentoSelecionado.servico}</p>
+                  {agendamentoSelecionado.servicoDescricao ? (
+                    <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap">
+                      {agendamentoSelecionado.servicoDescricao}
+                    </p>
+                  ) : null}
                 </div>
-                <div>
+                <div className="col-span-2">
                   <p className="text-xs text-muted-foreground mb-1">Profissional</p>
                   <p className="font-medium text-foreground">{agendamentoSelecionado.profissional}</p>
                 </div>
@@ -685,7 +707,7 @@ export default function AgendaPage() {
                 <option value="">Selecione</option>
                 {services.filter((service) => service.active).map((service) => (
                   <option key={service.id} value={service.id}>
-                    {service.name}
+                    {labelServicoNoSelect(service)}
                   </option>
                 ))}
               </select>

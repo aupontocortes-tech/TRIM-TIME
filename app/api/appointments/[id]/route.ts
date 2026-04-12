@@ -10,6 +10,7 @@ import {
   mapAppointmentRowToApi,
   parseAppointmentDate,
 } from "@/lib/appointment-prisma-helpers"
+import { withServiceDescriptionsFromDb } from "@/lib/service-queries"
 import { normalizeAppointmentTime } from "@/lib/scheduling"
 import { trySendWhatsAppAppointmentPostService } from "@/lib/whatsapp-appointment-events"
 
@@ -116,15 +117,16 @@ export async function PATCH(
       where: { id, barbershopId },
       include: appointmentApiInclude,
     })
-    const data = mapAppointmentRowToApi(updated)
+    const data = mapAppointmentRowToApi(updated) as Appointment
+    const [enriched] = await withServiceDescriptionsFromDb([data])
 
     if (body.status === "canceled") {
-      await notifyFirstWaitingList(barbershopId, data)
+      await notifyFirstWaitingList(barbershopId, enriched)
     }
     if (body.status === "completed" && beforeApi.status !== "completed") {
       void trySendWhatsAppAppointmentPostService(barbershopId, id)
     }
-    return NextResponse.json(data as Appointment)
+    return NextResponse.json(enriched as Appointment)
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Erro ao atualizar" },

@@ -52,12 +52,12 @@ const barbeariaData = {
   avaliacao: 4.9,
   totalAvaliacoes: 127,
   servicos: [
-    { id: 1, nome: "Corte Masculino", preco: 45, duracao: 30 },
-    { id: 2, nome: "Barba", preco: 35, duracao: 20 },
-    { id: 3, nome: "Corte + Barba", preco: 70, duracao: 45 },
-    { id: 4, nome: "Sobrancelha", preco: 15, duracao: 10 },
-    { id: 5, nome: "Pigmentação", preco: 80, duracao: 40 },
-    { id: 6, nome: "Hidratação", preco: 50, duracao: 30 },
+    { id: 1, nome: "Corte Masculino", descricao: "", preco: 45, duracao: 30 },
+    { id: 2, nome: "Barba", descricao: "", preco: 35, duracao: 20 },
+    { id: 3, nome: "Corte + Barba", descricao: "", preco: 70, duracao: 45 },
+    { id: 4, nome: "Sobrancelha", descricao: "", preco: 15, duracao: 10 },
+    { id: 5, nome: "Pigmentação", descricao: "", preco: 80, duracao: 40 },
+    { id: 6, nome: "Hidratação", descricao: "", preco: 50, duracao: 30 },
   ],
   profissionais: [
     { id: 1, nome: "Carlos Silva", foto: "/placeholder.svg", especialidade: "Cortes Modernos" },
@@ -139,7 +139,7 @@ type PublicShopPayload = {
   cep: string | null
   opening_hours?: BarbershopSettings["opening_hours"] | null
   units: PublicUnit[]
-  services: { id: string; name: string; price: number; duration: number }[]
+  services: { id: string; name: string; description?: string; price: number; duration: number }[]
   barbers: { id: string; name: string; phone: string | null; photo_url?: string | null }[]
 }
 
@@ -495,10 +495,15 @@ export default function BarbeariaPage() {
         ? publicMeta.services.map((service) => ({
             id: service.id,
             nome: service.name,
+            descricao: (service.description ?? "").trim(),
             preco: service.price,
             duracao: service.duration,
           }))
-        : barbeariaData.servicos.map((service) => ({ ...service, id: String(service.id) })),
+        : barbeariaData.servicos.map((service) => ({
+            ...service,
+            id: String(service.id),
+            descricao: service.descricao ?? "",
+          })),
     profissionais:
       publicMeta?.barbers?.length
         ? publicMeta.barbers.map((barber) => ({
@@ -1270,9 +1275,14 @@ export default function BarbeariaPage() {
                           <Check className="w-3 h-3 text-primary-foreground" />
                         )}
                       </div>
-                      <div>
+                      <div className="min-w-0 text-left">
                         <p className="font-medium text-foreground">{servico.nome}</p>
                         <p className="text-sm text-muted-foreground">{servico.duracao} min</p>
+                        {servico.descricao?.trim() ? (
+                          <p className="text-sm text-muted-foreground/90 mt-1 whitespace-pre-wrap">
+                            {servico.descricao.trim()}
+                          </p>
+                        ) : null}
                       </div>
                     </div>
                     <span className="text-primary font-semibold">R$ {servico.preco}</span>

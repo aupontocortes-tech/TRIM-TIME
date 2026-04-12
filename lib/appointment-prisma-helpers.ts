@@ -63,6 +63,7 @@ function mapService(s: NonNullable<AppointmentWithRelations["service"]>): Servic
     id: s.id,
     barbershop_id: s.barbershopId,
     name: s.name,
+    description: s.description ?? "",
     price: Number(s.price),
     duration: s.duration,
     active: s.active,

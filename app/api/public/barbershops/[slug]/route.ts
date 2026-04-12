@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { fetchServicesForBarbershopRaw, serviceDbRowToApi } from "@/lib/service-queries"
 import type { BarbershopSettings } from "@/lib/db/types"
 
 /**
@@ -37,16 +38,6 @@ export async function GET(
           },
           orderBy: { createdAt: "asc" },
         },
-        services: {
-          where: { active: true },
-          select: {
-            id: true,
-            name: true,
-            price: true,
-            duration: true,
-          },
-          orderBy: { createdAt: "asc" },
-        },
         barbers: {
           where: { active: true },
           select: {
@@ -66,6 +57,11 @@ export async function GET(
 
     const settings = (b.settings as BarbershopSettings | null) ?? null
 
+    const serviceRows = await fetchServicesForBarbershopRaw(b.id, {
+      activeOnly: true,
+      orderBy: "created_at",
+    })
+
     return NextResponse.json({
       id: b.id,
       name: b.name,
@@ -77,12 +73,16 @@ export async function GET(
       cep: settings?.cep ?? null,
       opening_hours: settings?.opening_hours ?? null,
       units: b.units,
-      services: b.services.map((service) => ({
-        id: service.id,
-        name: service.name,
-        price: Number(service.price),
-        duration: service.duration,
-      })),
+      services: serviceRows.map((r) => {
+        const s = serviceDbRowToApi(r)
+        return {
+          id: s.id,
+          name: s.name,
+          description: s.description,
+          price: s.price,
+          duration: s.duration,
+        }
+      }),
       barbers: b.barbers.map((barber) => ({
         id: barber.id,
         name: barber.name,

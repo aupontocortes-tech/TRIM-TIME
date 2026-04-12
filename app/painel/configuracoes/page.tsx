@@ -175,12 +175,14 @@ export default function ConfiguracoesPage() {
 
   const [addServOpen, setAddServOpen] = useState(false)
   const [newServNome, setNewServNome] = useState("")
+  const [newServDesc, setNewServDesc] = useState("")
   const [newServDuracao, setNewServDuracao] = useState("30")
   const [newServPreco, setNewServPreco] = useState("")
 
   const [editServOpen, setEditServOpen] = useState(false)
   const [editingServ, setEditingServ] = useState<Service | null>(null)
   const [editServNome, setEditServNome] = useState("")
+  const [editServDesc, setEditServDesc] = useState("")
   const [editServDuracao, setEditServDuracao] = useState("")
   const [editServPreco, setEditServPreco] = useState("")
   const [editServAtivo, setEditServAtivo] = useState(true)
@@ -551,6 +553,7 @@ export default function ConfiguracoesPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: newServNome.trim(),
+          description: newServDesc.trim(),
           price,
           duration: Math.max(1, Number(newServDuracao) || 30),
         }),
@@ -562,6 +565,7 @@ export default function ConfiguracoesPage() {
       }
       setAddServOpen(false)
       setNewServNome("")
+      setNewServDesc("")
       setNewServDuracao("30")
       setNewServPreco("")
       await loadServices()
@@ -575,6 +579,7 @@ export default function ConfiguracoesPage() {
   const openEditServ = (s: Service) => {
     setEditingServ(s)
     setEditServNome(s.name)
+    setEditServDesc(s.description ?? "")
     setEditServDuracao(String(s.duration))
     setEditServPreco(String(s.price))
     setEditServAtivo(s.active)
@@ -598,6 +603,7 @@ export default function ConfiguracoesPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: editServNome.trim(),
+          description: editServDesc.trim(),
           price,
           duration,
           active: editServAtivo,
@@ -1459,6 +1465,19 @@ export default function ConfiguracoesPage() {
                         placeholder="Ex: Corte"
                       />
                     </Field>
+                    <Field>
+                      <FieldLabel>Descrição (opcional)</FieldLabel>
+                      <Textarea
+                        className="bg-input border-border text-foreground min-h-[88px] resize-y"
+                        value={newServDesc}
+                        onChange={(e) => setNewServDesc(e.target.value)}
+                        placeholder="Ex: Corte degradê, acabamento na tesoura…"
+                        maxLength={2000}
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Aparece para o cliente na página de agendamento.
+                      </p>
+                    </Field>
                     <div className="grid grid-cols-2 gap-4">
                       <Field>
                         <FieldLabel>Duração (min)</FieldLabel>
@@ -1508,11 +1527,12 @@ export default function ConfiguracoesPage() {
                   {listaServicos.map((servico) => (
                     <div
                       key={servico.id}
-                      className={`flex items-center gap-4 p-4 rounded-lg border transition-colors ${
+                      className={`flex items-start gap-4 p-4 rounded-lg border transition-colors ${
                         servico.active ? "border-border bg-secondary/30" : "border-border/50 bg-secondary/10"
                       }`}
                     >
                       <Switch
+                        className="mt-1"
                         checked={servico.active}
                         disabled={servicoBusy}
                         onCheckedChange={async (on) => {
@@ -1530,16 +1550,30 @@ export default function ConfiguracoesPage() {
                           }
                         }}
                       />
-                      <div className="flex-1">
+                      <div className="flex-1 min-w-0">
                         <p
                           className={`font-medium ${servico.active ? "text-foreground" : "text-muted-foreground"}`}
                         >
                           {servico.name}
                         </p>
                         <p className="text-sm text-muted-foreground">{servico.duration} minutos</p>
+                        <p className="text-xs text-muted-foreground/80 mt-2 font-medium uppercase tracking-wide">
+                          Descrição (você e o cliente)
+                        </p>
+                        {(servico.description ?? "").trim() ? (
+                          <p className="text-sm text-foreground/90 mt-0.5 whitespace-pre-wrap">
+                            {(servico.description ?? "").trim()}
+                          </p>
+                        ) : (
+                          <p className="text-sm text-muted-foreground/70 mt-0.5 italic">
+                            Sem descrição — o cliente só vê o nome e o preço no agendamento.
+                          </p>
+                        )}
                       </div>
-                      <span className="text-lg font-semibold text-primary">R${Number(servico.price).toFixed(2)}</span>
-                      <div className="flex gap-2">
+                      <span className="text-lg font-semibold text-primary shrink-0 pt-0.5">
+                        R${Number(servico.price).toFixed(2)}
+                      </span>
+                      <div className="flex gap-2 shrink-0 pt-0.5">
                         <Button
                           type="button"
                           size="icon"
@@ -1581,6 +1615,16 @@ export default function ConfiguracoesPage() {
                       className="bg-input border-border text-foreground"
                       value={editServNome}
                       onChange={(e) => setEditServNome(e.target.value)}
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel>Descrição (opcional)</FieldLabel>
+                    <Textarea
+                      className="bg-input border-border text-foreground min-h-[88px] resize-y"
+                      value={editServDesc}
+                      onChange={(e) => setEditServDesc(e.target.value)}
+                      placeholder="Texto para o cliente ver ao escolher o serviço"
+                      maxLength={2000}
                     />
                   </Field>
                   <div className="grid grid-cols-2 gap-4">
