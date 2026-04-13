@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { fetchServicesForBarbershopRaw, serviceDbRowToApi } from "@/lib/service-queries"
+import { fetchBarberPhotoPositionsByBarbershopId } from "@/lib/barber-queries"
 import type { BarbershopSettings } from "@/lib/db/types"
 
 /**
@@ -45,6 +46,7 @@ export async function GET(
             name: true,
             phone: true,
             photoUrl: true,
+            photoPosition: true,
           },
           orderBy: { createdAt: "asc" },
         },
@@ -61,6 +63,13 @@ export async function GET(
       activeOnly: true,
       orderBy: "created_at",
     })
+
+    let photoPositions = new Map<string, number>()
+    try {
+      photoPositions = await fetchBarberPhotoPositionsByBarbershopId(b.id)
+    } catch {
+      /* fallback abaixo com photoPosition do Prisma */
+    }
 
     return NextResponse.json({
       id: b.id,
@@ -88,6 +97,7 @@ export async function GET(
         name: barber.name,
         phone: barber.phone,
         photo_url: barber.photoUrl,
+        photo_position: photoPositions.get(barber.id) ?? (barber as { photoPosition?: number }).photoPosition ?? 50,
       })),
     })
   } catch (e) {

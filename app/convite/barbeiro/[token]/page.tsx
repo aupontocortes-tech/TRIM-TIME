@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { compressImageToJpegDataUrl } from "@/lib/client-image-compress"
 import { formatCpfDisplay } from "@/lib/cpf"
-import { CheckCircle2, Loader2, Scissors } from "lucide-react"
+import { Camera, CheckCircle2, Loader2, Scissors } from "lucide-react"
 
 type Meta =
   | { loading: true }
@@ -151,8 +151,8 @@ export default function ConviteBarbeiroPage() {
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground text-center">
-              O dono da barbearia verá seus dados na lista de profissionais. Em breve você poderá aparecer na agenda
-              pública com sua foto.
+              O dono da barbearia verá seus dados e sua foto na equipe. Os clientes verão sua foto ao escolher o
+              profissional no agendamento online.
             </p>
           </CardContent>
         </Card>
@@ -195,6 +195,43 @@ export default function ConviteBarbeiroPage() {
                   autoComplete="name"
                 />
               </Field>
+
+              <div className="rounded-xl border-2 border-dashed border-primary/35 bg-primary/5 p-4 space-y-3">
+                <div className="flex items-center gap-2 text-foreground font-medium text-sm">
+                  <Camera className="w-4 h-4 text-primary shrink-0" />
+                  Foto de perfil <span className="text-destructive">*</span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Obrigatória. Será exibida para os clientes quando escolherem você no agendamento online da barbearia.
+                </p>
+                <Input
+                  id="foto"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="bg-input border-border cursor-pointer"
+                  onChange={(e) => void onPickPhoto(e.target.files?.[0] ?? null)}
+                />
+                {photoDataUrl ? (
+                  <div className="flex flex-col items-center pt-1">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={photoDataUrl}
+                      alt=""
+                      className="w-32 h-32 rounded-full object-cover border-2 border-primary/40 shadow-md"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="mt-2 text-muted-foreground"
+                      onClick={() => setPhotoDataUrl(null)}
+                    >
+                      Trocar foto
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
+
               <Field>
                 <FieldLabel htmlFor="email">E-mail</FieldLabel>
                 <Input
@@ -230,22 +267,6 @@ export default function ConviteBarbeiroPage() {
                   autoComplete="off"
                   maxLength={14}
                 />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="foto">Foto de perfil</FieldLabel>
-                <Input
-                  id="foto"
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  className="bg-input border-border cursor-pointer"
-                  onChange={(e) => void onPickPhoto(e.target.files?.[0] ?? null)}
-                />
-                {photoDataUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={photoDataUrl} alt="" className="mt-3 w-28 h-28 rounded-full object-cover border border-border" />
-                ) : (
-                  <p className="text-xs text-muted-foreground mt-2">Obrigatório — será exibida na equipe e no agendamento.</p>
-                )}
               </Field>
             </FieldGroup>
             <Button

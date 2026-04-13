@@ -3,9 +3,10 @@ import { requireBarbershopId } from "@/lib/tenant"
 import type { Barber } from "@/lib/db/types"
 import { canUseBarberCommission, getUpgradeMessage } from "@/lib/plans"
 import { prisma } from "@/lib/prisma"
+import { prismaBarberUpdateWithPhotoPositionFallback } from "@/lib/barber-mutations"
+import { fetchBarberPhotoPositionById } from "@/lib/barber-queries"
 import { resolveEffectivePlanForActiveSession } from "@/lib/barbershop-effective-plan-server"
 import { assertValidProfilePhotoDataUrl } from "@/lib/photo-data-url"
-import { cpfDigits } from "@/lib/cpf"
 
 export async function PATCH(
   _request: Request,
@@ -15,7 +16,7 @@ export async function PATCH(
     const barbershopId = await requireBarbershopId()
     const { id } = await params
     const body = await _request.json() as Partial<
-      Pick<Barber, "name" | "phone" | "email" | "cpf" | "photo_url" | "commission" | "active">
+      Pick<Barber, "name" | "phone" | "email" | "cpf" | "photo_url" | "photo_position" | "commission" | "active">
     >
     const barbershop = await prisma.barbershop.findUnique({
       where: { id: barbershopId },
@@ -29,6 +30,7 @@ export async function PATCH(
       email?: string | null
       cpf?: string | null
       photoUrl?: string | null
+      photoPosition?: number
       active?: boolean
       commission?: number
     } = {}
@@ -37,18 +39,26 @@ export async function PATCH(
       if (!n) return NextResponse.json({ error: "Nome não pode ser vazio." }, { status: 400 })
       update.name = n
     }
-    if (body.phone !== undefined) update.phone = body.phone?.trim() || null
+    if (body.phone !== undefined) {
+      const p = body.phone?.trim() || null
+      if (!p) {
+        return NextResponse.json({ error: "Telefone é obrigatório" }, { status: 400 })
+      }
+      update.phone = p
+    }
     if (body.email !== undefined) {
-      const e = String(body.email).trim().toLowerCase()
-      update.email = e || null
+      if (body.email === null) update.email = null
+      else {
+        const e = String(body.email).trim().toLowerCase()
+        update.email = e || null
+      }
     }
     if (body.cpf !== undefined) {
-      const raw = String(body.cpf).trim()
-      if (!raw) update.cpf = null
-      else {
-        const d = cpfDigits(raw)
-        if (!d) return NextResponse.json({ error: "CPF inválido (use 11 dígitos)." }, { status: 400 })
-        update.cpf = d
+      if (body.cpf === null) {
+        update.cpf = null
+      } else {
+        const digitsOnly = String(body.cpf).replace(/\D/g, "")
+        update.cpf = digitsOnly.length >= 11 ? digitsOnly.slice(0, 11) : null
       }
     }
     if (body.photo_url !== undefined) {
@@ -62,6 +72,9 @@ export async function PATCH(
       }
     }
     if (body.active !== undefined) update.active = Boolean(body.active)
+    if (body.photo_position !== undefined) {
+      update.photoPosition = Math.min(100, Math.max(0, Math.round(Number(body.photo_position ?? 50))))
+    }
 
     if (body.commission !== undefined) {
       const allowed = canUseBarberCommission(plan, barbershop?.role ?? null, barbershop?.isTest ?? false)
@@ -88,10 +101,18 @@ export async function PATCH(
     })
     if (!existing) return NextResponse.json({ error: "Barbeiro não encontrado" }, { status: 404 })
 
-    const data = await prisma.barber.update({
-      where: { id },
-      data: update,
-    })
+    const data = await prismaBarberUpdateWithPhotoPositionFallback(id, update)
+    let photoPositionFromDb: number | null = null
+    try {
+      photoPositionFromDb = await fetchBarberPhotoPositionById(id)
+    } catch {
+      /* leitura SQL opcional; resposta usa body ou Prisma */
+    }
+    const photoPositionResponse =
+      photoPositionFromDb ??
+      (body.photo_position !== undefined
+        ? Math.min(100, Math.max(0, Math.round(Number(body.photo_position))))
+        : (data as { photoPosition?: number }).photoPosition ?? 50)
     return NextResponse.json({
       id: data.id,
       barbershop_id: data.barbershopId,
@@ -100,6 +121,7 @@ export async function PATCH(
       email: data.email,
       cpf: data.cpf,
       photo_url: data.photoUrl,
+      photo_position: photoPositionResponse,
       commission: Number(data.commission),
       active: data.active,
       role: data.role,

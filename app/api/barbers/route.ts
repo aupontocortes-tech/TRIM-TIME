@@ -3,9 +3,10 @@ import { requireBarbershopId } from "@/lib/tenant"
 import { canAddBarber, canUseBarberCommission, getBarberLimitMessage, getUpgradeMessage } from "@/lib/plans"
 import { resolveEffectivePlanForActiveSession } from "@/lib/barbershop-effective-plan-server"
 import { prisma } from "@/lib/prisma"
+import { prismaBarberCreateWithPhotoPositionFallback } from "@/lib/barber-mutations"
+import { fetchBarberPhotoPositionsByBarbershopId } from "@/lib/barber-queries"
 import type { Barber } from "@/lib/db/types"
 import { assertValidProfilePhotoDataUrl } from "@/lib/photo-data-url"
-import { cpfDigits } from "@/lib/cpf"
 
 export async function GET() {
   try {
@@ -14,6 +15,12 @@ export async function GET() {
       where: { barbershopId },
       orderBy: { name: "asc" },
     })
+    let positions = new Map<string, number>()
+    try {
+      positions = await fetchBarberPhotoPositionsByBarbershopId(barbershopId)
+    } catch {
+      /* coluna/tabela inacessível via SQL: usa só o Prisma */
+    }
     return NextResponse.json(
       data.map((b) => ({
         id: b.id,
@@ -23,6 +30,7 @@ export async function GET() {
         email: b.email,
         cpf: b.cpf,
         photo_url: b.photoUrl,
+        photo_position: positions.get(b.id) ?? (b as { photoPosition?: number }).photoPosition ?? 50,
         commission: Number(b.commission),
         active: b.active,
         role: b.role,
@@ -68,10 +76,15 @@ export async function POST(request: Request) {
       email?: string
       cpf?: string
       photo_url?: string | null
+      photo_position?: number
       commission?: number
     }
     if (!body.name?.trim()) {
       return NextResponse.json({ error: "Nome é obrigatório" }, { status: 400 })
+    }
+    const phoneTrim = String(body.phone ?? "").trim()
+    if (!phoneTrim) {
+      return NextResponse.json({ error: "Telefone é obrigatório" }, { status: 400 })
     }
 
     let photoUrl: string | null = null
@@ -83,14 +96,8 @@ export async function POST(request: Request) {
         { status: 400 }
       )
     }
-    const cpfRaw = String(body.cpf ?? "").trim()
-    let cpfNorm: string | null = null
-    if (cpfRaw) {
-      cpfNorm = cpfDigits(cpfRaw)
-      if (!cpfNorm) {
-        return NextResponse.json({ error: "CPF inválido (use 11 dígitos)." }, { status: 400 })
-      }
-    }
+    const cpfDigitsOnly = String(body.cpf ?? "").replace(/\D/g, "")
+    const cpfNorm: string | null = cpfDigitsOnly.length >= 11 ? cpfDigitsOnly.slice(0, 11) : null
     const emailTrim = body.email?.trim().toLowerCase() || null
 
     const commissionAllowed = canUseBarberCommission(
@@ -115,17 +122,17 @@ export async function POST(request: Request) {
       commission = c
     }
 
-    const data = await prisma.barber.create({
-      data: {
-        barbershopId,
-        name: body.name.trim(),
-        phone: body.phone?.trim() ?? null,
-        email: emailTrim,
-        cpf: cpfNorm,
-        photoUrl,
-        commission,
-        active: true,
-      },
+    const photoPosition = Math.min(100, Math.max(0, Math.round(Number(body.photo_position ?? 50))))
+    const data = await prismaBarberCreateWithPhotoPositionFallback({
+      barbershopId,
+      name: body.name.trim(),
+      phone: phoneTrim,
+      email: emailTrim,
+      cpf: cpfNorm,
+      photoUrl,
+      photoPosition,
+      commission,
+      active: true,
     })
     return NextResponse.json({
       id: data.id,
@@ -135,6 +142,7 @@ export async function POST(request: Request) {
       email: data.email,
       cpf: data.cpf,
       photo_url: data.photoUrl,
+      photo_position: data.photoPosition ?? 50,
       commission: Number(data.commission),
       active: data.active,
       role: data.role,

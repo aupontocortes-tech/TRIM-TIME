@@ -111,6 +111,7 @@ export interface Barber {
   email?: string | null
   cpf?: string | null
   photo_url?: string | null
+  photo_position?: number
   commission: number
   active: boolean
   role?: BarberRole

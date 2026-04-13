@@ -140,7 +140,7 @@ type PublicShopPayload = {
   opening_hours?: BarbershopSettings["opening_hours"] | null
   units: PublicUnit[]
   services: { id: string; name: string; description?: string; price: number; duration: number }[]
-  barbers: { id: string; name: string; phone: string | null; photo_url?: string | null }[]
+  barbers: { id: string; name: string; phone: string | null; photo_url?: string | null; photo_position?: number }[]
 }
 
 export default function BarbeariaPage() {
@@ -510,6 +510,7 @@ export default function BarbeariaPage() {
             id: barber.id,
             nome: barber.name,
             foto: barber.photo_url || "/placeholder.svg",
+            fotoPosition: barber.photo_position ?? 50,
             especialidade: barber.phone ? `Contato: ${barber.phone}` : "Profissional",
           }))
         : barbeariaData.profissionais.map((barber) => ({ ...barber, id: String(barber.id) })),
@@ -1310,7 +1311,7 @@ export default function BarbeariaPage() {
                 >
                   <CardContent className="p-4 flex items-center gap-4">
                     <Avatar className="w-14 h-14 border-2 border-primary/20">
-                      <AvatarImage src={profissional.foto} />
+                      <AvatarImage src={profissional.foto} style={{ objectPosition: `center ${'fotoPosition' in profissional ? profissional.fotoPosition : 50}%` }} />
                       <AvatarFallback className="bg-primary/10 text-primary">
                         {profissional.nome.split(' ').map(n => n[0]).join('')}
                       </AvatarFallback>

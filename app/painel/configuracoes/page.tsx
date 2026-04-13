@@ -27,6 +27,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Switch } from "@/components/ui/switch"
 import { FieldGroup, Field, FieldLabel } from "@/components/ui/field"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Store,
@@ -49,6 +50,7 @@ import {
   Bell,
   ExternalLink,
   Plug,
+  Camera,
 } from "lucide-react"
 import {
   Dialog,
@@ -134,6 +136,14 @@ const WA_SECTION_REMINDER_OPTIONS = [
   { minutes: 1440, label: "1 dia antes" },
 ] as const
 
+const CONFIG_TABS_LIST_CLASS =
+  "bg-secondary/50 border border-border w-full max-w-none grid grid-cols-2 min-[480px]:grid-cols-4 lg:grid-cols-8 gap-1.5 p-2 rounded-xl h-auto shadow-sm"
+
+const CONFIG_TAB_TRIGGER_CLASS =
+  "data-[state=active]:bg-primary data-[state=active]:text-primary-foreground w-full min-h-[52px] flex flex-col sm:flex-row items-center justify-center gap-1.5 sm:gap-2 px-2 py-2.5 text-sm sm:text-base font-semibold leading-tight text-center [&_svg]:!size-5 sm:[&_svg]:!size-6"
+
+const CONFIG_TAB_LABEL_CLASS = "max-w-[9rem] sm:max-w-none"
+
 export default function ConfiguracoesPage() {
   const {
     plan,
@@ -195,6 +205,7 @@ export default function ConfiguracoesPage() {
   const [addOpen, setAddOpen] = useState(false)
   const [newName, setNewName] = useState("")
   const [newPhone, setNewPhone] = useState("")
+  const [newPhotoDraft, setNewPhotoDraft] = useState<string | null>(null)
   const [newCommission, setNewCommission] = useState("50")
   const [editOpen, setEditOpen] = useState(false)
   const [editing, setEditing] = useState<Barber | null>(null)
@@ -203,6 +214,7 @@ export default function ConfiguracoesPage() {
   const [editEmail, setEditEmail] = useState("")
   const [editCpf, setEditCpf] = useState("")
   const [editPhotoDraft, setEditPhotoDraft] = useState<string | null>(null)
+  const [editPhotoPosition, setEditPhotoPosition] = useState(50)
   const [editCommission, setEditCommission] = useState("50")
   const [editActive, setEditActive] = useState(true)
   const [inviteUrl, setInviteUrl] = useState<string | null>(null)
@@ -881,6 +893,7 @@ export default function ConfiguracoesPage() {
     setEditEmail(b.email ?? "")
     setEditCpf(formatCpfDisplay(b.cpf ?? ""))
     setEditPhotoDraft(b.photo_url ?? null)
+    setEditPhotoPosition(b.photo_position ?? 50)
     setEditCommission(String(Number(b.commission) || 0))
     setEditActive(b.active)
     setEditOpen(true)
@@ -917,13 +930,17 @@ export default function ConfiguracoesPage() {
   }
 
   const handleAddBarber = async () => {
-    if (!newName.trim()) return
+    if (!newName.trim() || !newPhone.trim()) {
+      setEquipeError("Preencha o nome e o telefone do profissional.")
+      return
+    }
     setEquipeBusy(true)
     setEquipeError(null)
     try {
-      const body: { name: string; phone?: string; commission?: number } = {
+      const body: { name: string; phone: string; photo_url?: string | null; commission?: number } = {
         name: newName.trim(),
-        phone: newPhone.trim() || undefined,
+        phone: newPhone.trim(),
+        ...(newPhotoDraft ? { photo_url: newPhotoDraft } : {}),
       }
       if (commissionFeature) {
         const c = Math.min(100, Math.max(0, Number(newCommission)))
@@ -949,6 +966,7 @@ export default function ConfiguracoesPage() {
       setAddOpen(false)
       setNewName("")
       setNewPhone("")
+      setNewPhotoDraft(null)
       setNewCommission("50")
       await loadBarbers()
     } catch {
@@ -959,18 +977,22 @@ export default function ConfiguracoesPage() {
   }
 
   const handleSaveEdit = async () => {
-    if (!editing || !editName.trim()) return
+    if (!editing || !editName.trim() || !editPhone.trim()) {
+      if (editing) setEquipeError("Preencha o nome e o telefone do profissional.")
+      return
+    }
     setEquipeBusy(true)
     setEquipeError(null)
     try {
       const patch: Partial<
-        Pick<Barber, "name" | "phone" | "email" | "cpf" | "photo_url" | "active" | "commission">
+        Pick<Barber, "name" | "phone" | "email" | "cpf" | "photo_url" | "photo_position" | "active" | "commission">
       > = {
         name: editName.trim(),
         phone: editPhone.trim() || null,
         email: editEmail.trim() || null,
         cpf: editCpf.trim() || null,
         photo_url: editPhotoDraft,
+        photo_position: editPhotoPosition,
         active: editActive,
       }
       if (commissionFeature) {
@@ -1249,38 +1271,38 @@ export default function ConfiguracoesPage() {
       </Card>
 
       <Tabs defaultValue="barbearia" className="space-y-6">
-        <TabsList className="bg-secondary/50 border border-border flex flex-wrap h-auto gap-1 p-1">
-          <TabsTrigger value="barbearia" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-            <Store className="w-4 h-4 mr-2" />
-            Barbearia
+        <TabsList className={CONFIG_TABS_LIST_CLASS}>
+          <TabsTrigger value="barbearia" className={CONFIG_TAB_TRIGGER_CLASS}>
+            <Store className="shrink-0" />
+            <span className={CONFIG_TAB_LABEL_CLASS}>Barbearia</span>
           </TabsTrigger>
-          <TabsTrigger value="horarios" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-            <Clock className="w-4 h-4 mr-2" />
-            Horários
+          <TabsTrigger value="horarios" className={CONFIG_TAB_TRIGGER_CLASS}>
+            <Clock className="shrink-0" />
+            <span className={CONFIG_TAB_LABEL_CLASS}>Horários</span>
           </TabsTrigger>
-          <TabsTrigger value="servicos" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-            <Scissors className="w-4 h-4 mr-2" />
-            Serviços
+          <TabsTrigger value="servicos" className={CONFIG_TAB_TRIGGER_CLASS}>
+            <Scissors className="shrink-0" />
+            <span className={CONFIG_TAB_LABEL_CLASS}>Serviços</span>
           </TabsTrigger>
-          <TabsTrigger value="equipe" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-            <Users className="w-4 h-4 mr-2" />
-            Equipe
+          <TabsTrigger value="equipe" className={CONFIG_TAB_TRIGGER_CLASS}>
+            <Users className="shrink-0" />
+            <span className={CONFIG_TAB_LABEL_CLASS}>Equipe</span>
           </TabsTrigger>
-          <TabsTrigger value="plano" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-            <Shield className="w-4 h-4 mr-2" />
-            Plano &amp; conta
+          <TabsTrigger value="plano" className={CONFIG_TAB_TRIGGER_CLASS}>
+            <Shield className="shrink-0" />
+            <span className={CONFIG_TAB_LABEL_CLASS}>Plano &amp; conta</span>
           </TabsTrigger>
-          <TabsTrigger value="unidades" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-            <Building2 className="w-4 h-4 mr-2" />
-            Unidades
+          <TabsTrigger value="unidades" className={CONFIG_TAB_TRIGGER_CLASS}>
+            <Building2 className="shrink-0" />
+            <span className={CONFIG_TAB_LABEL_CLASS}>Unidades</span>
           </TabsTrigger>
-          <TabsTrigger value="notificacoes" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-            <Bell className="w-4 h-4 mr-2" />
-            Notificações
+          <TabsTrigger value="notificacoes" className={CONFIG_TAB_TRIGGER_CLASS}>
+            <Bell className="shrink-0" />
+            <span className={CONFIG_TAB_LABEL_CLASS}>Notificações</span>
           </TabsTrigger>
-          <TabsTrigger value="integracao" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-            <Plug className="w-4 h-4 mr-2" />
-            Integração
+          <TabsTrigger value="integracao" className={CONFIG_TAB_TRIGGER_CLASS}>
+            <Plug className="shrink-0" />
+            <span className={CONFIG_TAB_LABEL_CLASS}>Integração</span>
           </TabsTrigger>
         </TabsList>
 
@@ -1685,20 +1707,95 @@ export default function ConfiguracoesPage() {
                   </p>
                 )}
               </div>
-              <Dialog open={addOpen} onOpenChange={setAddOpen}>
+              <Dialog
+                open={addOpen}
+                onOpenChange={(open) => {
+                  setAddOpen(open)
+                  if (!open) {
+                    setNewPhotoDraft(null)
+                    setNewName("")
+                    setNewPhone("")
+                    setNewCommission("50")
+                    setEquipeError(null)
+                  }
+                }}
+              >
                 <DialogTrigger asChild>
                   <Button className="bg-primary text-primary-foreground hover:bg-primary/90 shrink-0">
                     <Plus className="w-4 h-4 mr-2" />
                     Novo profissional
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="bg-card border-border">
+                <DialogContent className="bg-card border-border max-h-[90vh] overflow-y-auto sm:max-w-md">
                   <DialogHeader>
                     <DialogTitle className="text-foreground">Adicionar profissional</DialogTitle>
+                    <DialogDescription className="text-muted-foreground text-sm">
+                      Use o botão abaixo para a <span className="text-foreground font-medium">foto do barbeiro</span> que
+                      o cliente verá no agendamento.
+                    </DialogDescription>
                   </DialogHeader>
                   <FieldGroup>
+                    <div className="rounded-xl border-2 border-dashed border-primary/45 bg-primary/5 p-4 space-y-3">
+                      <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                        <Camera className="w-5 h-5 text-primary shrink-0" />
+                        Foto do profissional
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Imagem de quem vai atender — aparece para o cliente ao escolher o profissional. Opcional neste
+                        formulário.
+                      </p>
+                      <input
+                        id="config-equipe-novo-barber-photo"
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        className="sr-only"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0]
+                          if (!f) return
+                          void compressImageToJpegDataUrl(f, 640, 0.8)
+                            .then((url) => {
+                              if (url.length > 400_000) {
+                                setEquipeError("Imagem grande demais. Tente outra foto.")
+                                return
+                              }
+                              setEquipeError(null)
+                              setNewPhotoDraft(url)
+                            })
+                            .catch(() => setEquipeError("Não foi possível ler a imagem"))
+                          e.target.value = ""
+                        }}
+                      />
+                      <Button type="button" variant="secondary" className="w-full border-primary/40" asChild>
+                        <label
+                          htmlFor="config-equipe-novo-barber-photo"
+                          className="cursor-pointer flex items-center justify-center gap-2"
+                        >
+                          <Camera className="w-4 h-4" />
+                          Escolher foto do profissional
+                        </label>
+                      </Button>
+                      {newPhotoDraft ? (
+                        <div className="flex flex-col items-center pt-1">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={newPhotoDraft}
+                            alt=""
+                            className="w-28 h-28 rounded-full object-cover border-2 border-primary/30"
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="mt-2 text-muted-foreground"
+                            onClick={() => setNewPhotoDraft(null)}
+                          >
+                            Remover foto
+                          </Button>
+                        </div>
+                      ) : null}
+                    </div>
                     <Field>
-                      <FieldLabel>Nome</FieldLabel>
+                      <FieldLabel>Nome do profissional</FieldLabel>
                       <Input
                         className="bg-input border-border text-foreground"
                         placeholder="Nome do barbeiro"
@@ -1707,7 +1804,7 @@ export default function ConfiguracoesPage() {
                       />
                     </Field>
                     <Field>
-                      <FieldLabel>Telefone (opcional)</FieldLabel>
+                      <FieldLabel>Telefone</FieldLabel>
                       <Input
                         className="bg-input border-border text-foreground"
                         placeholder="(11) 99999-9999"
@@ -1733,7 +1830,7 @@ export default function ConfiguracoesPage() {
                     )}
                     <Button
                       className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
-                      disabled={equipeBusy || !newName.trim()}
+                      disabled={equipeBusy || !newName.trim() || !newPhone.trim()}
                       onClick={() => void handleAddBarber()}
                     >
                       {equipeBusy ? "Salvando…" : "Adicionar"}
@@ -1749,8 +1846,9 @@ export default function ConfiguracoesPage() {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-foreground">Convidar profissional por link</p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      Gere um link único e envie por WhatsApp. O profissional preenche nome, e-mail, telefone, CPF e foto —
-                      válido por 7 dias ou até ser usado.
+                      Gere um link único e envie por WhatsApp. O profissional preenche nome, e-mail, telefone, CPF e{" "}
+                      <strong className="text-foreground">foto de perfil</strong> (obrigatória no link) — a mesma foto
+                      aparece para o cliente no agendamento. Válido por 7 dias ou até ser usado.
                     </p>
                     {inviteError ? (
                       <p className="text-xs text-destructive mt-2">{inviteError}</p>
@@ -1821,16 +1919,17 @@ export default function ConfiguracoesPage() {
                         disabled={equipeBusy}
                         onCheckedChange={() => void toggleBarberActive(prof)}
                       />
-                      <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
-                        <span className="font-semibold text-primary text-sm">
+                      <Avatar className="w-11 h-11 shrink-0 border border-border">
+                        <AvatarImage src={prof.photo_url ?? undefined} alt="" className="object-cover" style={{ objectPosition: `center ${prof.photo_position ?? 50}%` }} />
+                        <AvatarFallback className="bg-primary/20 text-primary text-sm font-semibold">
                           {prof.name
                             .split(" ")
                             .map((n) => n[0])
                             .join("")
                             .slice(0, 2)
                             .toUpperCase()}
-                        </span>
-                      </div>
+                        </AvatarFallback>
+                      </Avatar>
                       <div className="flex-1 min-w-[140px]">
                         <p className={`font-medium ${prof.active ? "text-foreground" : "text-muted-foreground"}`}>
                           {prof.name}
@@ -1882,9 +1981,13 @@ export default function ConfiguracoesPage() {
               if (!open) setEditing(null)
             }}
           >
-            <DialogContent className="bg-card border-border">
+            <DialogContent className="bg-card border-border max-h-[90vh] overflow-y-auto sm:max-w-md">
               <DialogHeader>
                 <DialogTitle className="text-foreground">Editar profissional</DialogTitle>
+                <DialogDescription className="text-muted-foreground text-sm">
+                  Foto abaixo é do <span className="text-foreground font-medium">barbeiro</span> — o cliente vê no
+                  agendamento.
+                </DialogDescription>
               </DialogHeader>
               {editing && (
                 <FieldGroup>
@@ -1897,64 +2000,105 @@ export default function ConfiguracoesPage() {
                     />
                   </Field>
                   <Field>
+                    <FieldLabel>Foto do profissional</FieldLabel>
+                    <input
+                      id="config-equipe-edit-barber-photo"
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      className="sr-only"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0]
+                        if (!f) return
+                        void compressImageToJpegDataUrl(f, 640, 0.8)
+                          .then((url) => {
+                            if (url.length > 400_000) {
+                              setEquipeError("Imagem grande demais. Tente outra foto.")
+                              return
+                            }
+                            setEquipeError(null)
+                            setEditPhotoDraft(url)
+                          })
+                          .catch(() => setEquipeError("Não foi possível ler a imagem"))
+                        e.target.value = ""
+                      }}
+                    />
+                    <div className="flex flex-col items-center gap-3 py-2">
+                      {editPhotoDraft ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={editPhotoDraft}
+                          alt=""
+                          className="w-24 h-24 rounded-full object-cover border-2 border-primary/40 shadow"
+                          style={{ objectPosition: `center ${editPhotoPosition}%` }}
+                        />
+                      ) : (
+                        <div className="w-24 h-24 rounded-full bg-secondary flex items-center justify-center border-2 border-dashed border-border">
+                          <Camera className="w-8 h-8 text-muted-foreground" />
+                        </div>
+                      )}
+                      {editPhotoDraft ? (
+                        <div className="w-full space-y-1">
+                          <p className="text-xs text-muted-foreground text-center">Ajustar posição</p>
+                          <input
+                            type="range"
+                            min={0}
+                            max={100}
+                            value={editPhotoPosition}
+                            onChange={(e) => setEditPhotoPosition(Number(e.target.value))}
+                            className="w-full accent-primary cursor-pointer"
+                          />
+                          <div className="flex justify-between text-xs text-muted-foreground">
+                            <span>Topo</span>
+                            <span>Base</span>
+                          </div>
+                        </div>
+                      ) : null}
+                      <label
+                        htmlFor="config-equipe-edit-barber-photo"
+                        className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+                      >
+                        <Camera className="w-4 h-4" />
+                        {editPhotoDraft ? "Trocar foto" : "Escolher foto"}
+                      </label>
+                      {editPhotoDraft ? (
+                        <button
+                          type="button"
+                          onClick={() => { setEditPhotoDraft(null); setEditPhotoPosition(50) }}
+                          className="text-xs text-muted-foreground hover:text-destructive transition-colors"
+                        >
+                          Remover foto
+                        </button>
+                      ) : null}
+                    </div>
+                  </Field>
+                  <Field>
                     <FieldLabel>Telefone</FieldLabel>
                     <Input
                       className="bg-input border-border text-foreground"
+                      placeholder="(11) 99999-9999"
                       value={editPhone}
                       onChange={(e) => setEditPhone(e.target.value)}
                     />
                   </Field>
                   <Field>
-                    <FieldLabel>E-mail</FieldLabel>
+                    <FieldLabel>E-mail (opcional)</FieldLabel>
                     <Input
                       type="email"
                       className="bg-input border-border text-foreground"
+                      placeholder="Deixe em branco se não houver"
                       value={editEmail}
                       onChange={(e) => setEditEmail(e.target.value)}
                     />
                   </Field>
                   <Field>
-                    <FieldLabel>CPF</FieldLabel>
+                    <FieldLabel>CPF (opcional)</FieldLabel>
                     <Input
                       className="bg-input border-border text-foreground"
+                      placeholder="Deixe em branco se não houver"
                       value={editCpf}
                       onChange={(e) => setEditCpf(formatCpfDisplay(e.target.value))}
                       maxLength={14}
                     />
-                  </Field>
-                  <Field>
-                    <FieldLabel>Foto</FieldLabel>
-                    <Input
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp"
-                      className="bg-input border-border text-foreground cursor-pointer"
-                      onChange={(e) => {
-                        const f = e.target.files?.[0]
-                        if (!f) return
-                        void compressImageToJpegDataUrl(f, 640, 0.8)
-                          .then((url) => setEditPhotoDraft(url))
-                          .catch(() => setEquipeError("Não foi possível ler a imagem"))
-                      }}
-                    />
-                    {editPhotoDraft ? (
-                      <>
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={editPhotoDraft}
-                          alt=""
-                          className="mt-2 w-20 h-20 rounded-full object-cover border border-border"
-                        />
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="mt-1 h-auto py-1 px-0 text-muted-foreground"
-                          onClick={() => setEditPhotoDraft(null)}
-                        >
-                          Remover foto
-                        </Button>
-                      </>
-                    ) : null}
                   </Field>
                   {commissionFeature && (
                     <Field>
@@ -1978,7 +2122,7 @@ export default function ConfiguracoesPage() {
                   </div>
                   <Button
                     className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
-                    disabled={equipeBusy || !editName.trim()}
+                    disabled={equipeBusy || !editName.trim() || !editPhone.trim()}
                     onClick={() => void handleSaveEdit()}
                   >
                     {equipeBusy ? "Salvando…" : "Salvar alterações"}
