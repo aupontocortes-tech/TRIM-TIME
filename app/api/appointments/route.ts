@@ -3,6 +3,7 @@ import { requireBarbershopId } from "@/lib/tenant"
 import { hasBarberSlotConflict, normalizeAppointmentTime } from "@/lib/scheduling"
 import { resolveSelectedUnitId } from "@/lib/unit-context"
 import type { Appointment } from "@/lib/db/types"
+import type { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import {
   appointmentApiInclude,
@@ -17,17 +18,32 @@ export async function GET(request: Request) {
     const barbershopId = await requireBarbershopId()
     const { searchParams } = new URL(request.url)
     const date = searchParams.get("date") // YYYY-MM-DD
+    const from = searchParams.get("from")
+    const to = searchParams.get("to")
     const barberId = searchParams.get("barber_id")
     const selectedUnitId = await resolveSelectedUnitId(barbershopId)
+
+    const dateFilter: Prisma.DateTimeFilter | undefined = (() => {
+      if (date) return { equals: parseAppointmentDate(date) }
+      if (from || to) {
+        const f: Prisma.DateTimeFilter = {}
+        if (from) f.gte = parseAppointmentDate(from)
+        if (to) f.lte = parseAppointmentDate(to)
+        return Object.keys(f).length ? f : undefined
+      }
+      return undefined
+    })()
+
     const rows = await prisma.appointment.findMany({
       where: {
         barbershopId,
-        ...(selectedUnitId ? { unitId: selectedUnitId } : {}),
-        ...(date ? { date: parseAppointmentDate(date) } : {}),
+        // Unidade selecionada no painel + legados sem unidade (ex.: link público antes de padronizar unit_id).
+        ...(selectedUnitId ? { OR: [{ unitId: selectedUnitId }, { unitId: null }] } : {}),
+        ...(dateFilter ? { date: dateFilter } : {}),
         ...(barberId ? { barberId } : {}),
       },
       include: appointmentApiInclude,
-      orderBy: { time: "asc" },
+      orderBy: [{ date: "asc" }, { time: "asc" }],
     })
     const list = rows.map(mapAppointmentRowToApi) as Appointment[]
     return NextResponse.json(await withServiceDescriptionsFromDb(list))

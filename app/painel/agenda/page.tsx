@@ -24,6 +24,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import type { Appointment, Barber, Client, Service } from "@/lib/db/types"
+import { useUnits } from "@/hooks/use-units"
 
 type AgendaItem = {
   id: string
@@ -48,6 +49,15 @@ function toYMD(date: Date) {
   const m = String(date.getMonth() + 1).padStart(2, "0")
   const d = String(date.getDate()).padStart(2, "0")
   return `${y}-${m}-${d}`
+}
+
+function monthRangeYMD(ref: Date): { from: string; to: string } {
+  const y = ref.getFullYear()
+  const mo = ref.getMonth()
+  const last = new Date(y, mo + 1, 0).getDate()
+  const from = `${y}-${String(mo + 1).padStart(2, "0")}-01`
+  const to = `${y}-${String(mo + 1).padStart(2, "0")}-${String(last).padStart(2, "0")}`
+  return { from, to }
 }
 
 function formatarData(data: Date) {
@@ -87,6 +97,8 @@ function mapAgendaItem(appointment: Appointment): AgendaItem {
 }
 
 export default function AgendaPage() {
+  const { units, selectedUnitId, changeUnit, loading: unitsLoading } = useUnits()
+  const [visao, setVisao] = useState<"dia" | "mes">("dia")
   const [dataSelecionada, setDataSelecionada] = useState(new Date())
   const [filtroProf, setFiltroProf] = useState("Todos")
   const [agendamentos, setAgendamentos] = useState<AgendaItem[]>([])
@@ -137,7 +149,14 @@ export default function AgendaPage() {
     setLoading(true)
     setError("")
     try {
-      const params = new URLSearchParams({ date: toYMD(dataSelecionada) })
+      const params = new URLSearchParams()
+      if (visao === "dia") {
+        params.set("date", toYMD(dataSelecionada))
+      } else {
+        const { from, to } = monthRangeYMD(dataSelecionada)
+        params.set("from", from)
+        params.set("to", to)
+      }
       const barber = barbers.find((b) => b.name === filtroProf)
       if (barber) params.set("barber_id", barber.id)
       const res = await fetch(`/api/appointments?${params.toString()}`, {
@@ -150,7 +169,14 @@ export default function AgendaPage() {
         setAgendamentos([])
         return
       }
-      setAgendamentos((Array.isArray(data) ? data : []).map(mapAgendaItem))
+      const list = (Array.isArray(data) ? data : []).map(mapAgendaItem)
+      list.sort((a, b) => {
+        const da = a.raw.date ?? ""
+        const db = b.raw.date ?? ""
+        if (da !== db) return da.localeCompare(db)
+        return a.hora.localeCompare(b.hora)
+      })
+      setAgendamentos(list)
     } catch {
       setError("Erro ao carregar a agenda.")
       setAgendamentos([])
@@ -165,7 +191,7 @@ export default function AgendaPage() {
 
   useEffect(() => {
     void carregarAgendamentos()
-  }, [dataSelecionada, filtroProf, barbers])
+  }, [dataSelecionada, filtroProf, barbers, visao])
 
   const mudarDia = (dias: number) => {
     const novaData = new Date(dataSelecionada)
@@ -173,9 +199,27 @@ export default function AgendaPage() {
     setDataSelecionada(novaData)
   }
 
+  const mudarMes = (delta: number) => {
+    const novaData = new Date(dataSelecionada.getFullYear(), dataSelecionada.getMonth() + delta, 1)
+    setDataSelecionada(novaData)
+  }
+
   const agendamentosFiltrados = filtroProf === "Todos"
     ? agendamentos
     : agendamentos.filter((a) => a.profissional === filtroProf)
+
+  const agendamentosPorDia = useMemo(() => {
+    const map = new Map<string, AgendaItem[]>()
+    for (const a of agendamentosFiltrados) {
+      const key = a.raw.date ?? toYMD(dataSelecionada)
+      if (!map.has(key)) map.set(key, [])
+      map.get(key)!.push(a)
+    }
+    return [...map.entries()].sort(([da], [db]) => da.localeCompare(db))
+  }, [agendamentosFiltrados, dataSelecionada])
+
+  const nomeUnidadeAtiva =
+    selectedUnitId && units.length ? units.find((u) => u.id === selectedUnitId)?.name ?? null : null
 
   const totalFaturamento = agendamentosFiltrados.reduce((acc, a) => acc + a.valor, 0)
   const totalConfirmados = agendamentosFiltrados.filter((a) => a.status === "confirmed").length
@@ -308,29 +352,79 @@ export default function AgendaPage() {
         </div>
       ) : null}
 
+      {!unitsLoading && selectedUnitId && nomeUnidadeAtiva ? (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <span>
+            Filtro de unidade ativo: <strong className="text-foreground">{nomeUnidadeAtiva}</strong>. Só aparecem
+            agendamentos desta unidade ou sem unidade. Para ver tudo, use &quot;Todas unidades&quot; no topo do painel.
+          </span>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="border-amber-600/40 text-foreground shrink-0"
+            onClick={() => void changeUnit(null)}
+          >
+            Ver todas as unidades
+          </Button>
+        </div>
+      ) : null}
+
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          size="sm"
+          variant={visao === "dia" ? "default" : "outline"}
+          className={visao === "dia" ? "bg-primary text-primary-foreground" : "border-border"}
+          onClick={() => setVisao("dia")}
+        >
+          Dia
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant={visao === "mes" ? "default" : "outline"}
+          className={visao === "mes" ? "bg-primary text-primary-foreground" : "border-border"}
+          onClick={() => setVisao("mes")}
+        >
+          Mês
+        </Button>
+      </div>
+
       <Card className="bg-card border-border">
         <CardContent className="p-4">
           <div className="flex items-center justify-between">
             <Button
               variant="outline"
               size="icon"
-              onClick={() => mudarDia(-1)}
+              onClick={() => (visao === "dia" ? mudarDia(-1) : mudarMes(-1))}
               className="border-border text-foreground hover:bg-secondary"
             >
               <ChevronLeft className="w-4 h-4" />
             </Button>
 
             <div className="text-center">
-              <p className="text-lg font-semibold text-foreground">{formatarData(dataSelecionada)}</p>
-              <p className="text-sm text-muted-foreground">
-                {dataSelecionada.toLocaleDateString("pt-BR", { day: "numeric", month: "long", year: "numeric" })}
-              </p>
+              {visao === "dia" ? (
+                <>
+                  <p className="text-lg font-semibold text-foreground">{formatarData(dataSelecionada)}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {dataSelecionada.toLocaleDateString("pt-BR", { day: "numeric", month: "long", year: "numeric" })}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-lg font-semibold text-foreground">
+                    {dataSelecionada.toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}
+                  </p>
+                  <p className="text-sm text-muted-foreground">Todos os dias deste mês</p>
+                </>
+              )}
             </div>
 
             <Button
               variant="outline"
               size="icon"
-              onClick={() => mudarDia(1)}
+              onClick={() => (visao === "dia" ? mudarDia(1) : mudarMes(1))}
               className="border-border text-foreground hover:bg-secondary"
             >
               <ChevronRight className="w-4 h-4" />
@@ -399,7 +493,76 @@ export default function AgendaPage() {
               </div>
             ) : agendamentosFiltrados.length === 0 ? (
               <div className="text-center py-8">
-                <p className="text-muted-foreground">Nenhum agendamento para este dia</p>
+                <p className="text-muted-foreground">
+                  {visao === "dia" ? "Nenhum agendamento para este dia" : "Nenhum agendamento neste mês"}
+                </p>
+              </div>
+            ) : visao === "mes" ? (
+              <div className="space-y-6">
+                {agendamentosPorDia.map(([diaYmd, lista]) => (
+                  <div key={diaYmd}>
+                    <p className="text-sm font-semibold text-primary mb-2">
+                      {new Date(`${diaYmd}T12:00:00`).toLocaleDateString("pt-BR", {
+                        weekday: "long",
+                        day: "numeric",
+                        month: "long",
+                      })}
+                    </p>
+                    <div className="space-y-3">
+                      {lista.map((agendamento) => (
+                        <div
+                          key={agendamento.id}
+                          onClick={() => setAgendamentoSelecionado(agendamento)}
+                          className="flex items-center gap-4 p-4 rounded-lg bg-secondary/30 border border-border/50 cursor-pointer hover:border-primary/50 transition-colors"
+                        >
+                          <Avatar className="w-11 h-11 shrink-0 border border-border">
+                            <AvatarImage src={agendamento.clienteFoto ?? undefined} alt="" />
+                            <AvatarFallback className="bg-primary/15 text-primary text-sm font-medium">
+                              {agendamento.cliente
+                                .split(" ")
+                                .map((n) => n[0])
+                                .join("")
+                                .slice(0, 2)
+                                .toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="text-center min-w-[60px]">
+                            <p className="text-lg font-bold text-primary">{agendamento.hora}</p>
+                            <p className="text-xs text-muted-foreground">{agendamento.duracao}min</p>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <p className="font-medium text-foreground truncate">{agendamento.cliente}</p>
+                              <span className="text-xs text-muted-foreground px-2 py-0.5 bg-secondary rounded">
+                                {agendamento.profissional}
+                              </span>
+                            </div>
+                            <p className="text-sm text-muted-foreground">{agendamento.servico}</p>
+                          </div>
+                          <span
+                            className={`px-2 py-1 rounded-full text-xs font-medium shrink-0 ${
+                              agendamento.status === "confirmed"
+                                ? "bg-green-500/10 text-green-500"
+                                : agendamento.status === "completed"
+                                  ? "bg-blue-500/10 text-blue-500"
+                                  : agendamento.status === "canceled"
+                                    ? "bg-destructive/10 text-destructive"
+                                    : "bg-yellow-500/10 text-yellow-500"
+                            }`}
+                          >
+                            {agendamento.status === "confirmed"
+                              ? "Confirmado"
+                              : agendamento.status === "completed"
+                                ? "Concluído"
+                                : agendamento.status === "canceled"
+                                  ? "Cancelado"
+                                  : "Pendente"}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </div>
             ) : (
               agendamentosFiltrados.map((agendamento) => (
