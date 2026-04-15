@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { cookies } from "next/headers"
 import { createServiceRoleClient } from "@/lib/supabase/server"
 import { BARBERSHOP_UNIT_COOKIE, requireBarbershopId } from "@/lib/tenant"
-import { fetchBarbershopPlanContext } from "@/lib/barbershop-plan-server"
+import { resolveEffectivePlanForActiveSession } from "@/lib/barbershop-effective-plan-server"
 import { hasFeature } from "@/lib/plans"
 import type { BarbershopUnit } from "@/lib/db/types"
 
@@ -43,8 +43,8 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const barbershopId = await requireBarbershopId()
-    const { plan, barbershopRole } = await fetchBarbershopPlanContext(barbershopId)
-    if (barbershopRole !== "super_admin" && (!plan || !hasFeature(plan, "multi_units"))) {
+    const effectivePlan = await resolveEffectivePlanForActiveSession(barbershopId)
+    if (!effectivePlan || !hasFeature(effectivePlan, "multi_units")) {
       return NextResponse.json(
         { error: "Multiunidade disponível apenas no plano Premium." },
         { status: 403 }

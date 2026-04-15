@@ -26,7 +26,7 @@ export function getEffectivePlan(subscription: Subscription | null): Subscriptio
 
 /** Plano efetivo para limites e `hasFeature`: super_admin, conta teste, env, trial/assinatura. */
 export function getEffectivePlanForBarbershop(
-  barbershop: { role?: string; is_test?: boolean; name?: string | null } | null,
+  barbershop: { role?: string; is_test?: boolean; name?: string | null; email?: string | null } | null,
   subscription: Subscription | null
 ): SubscriptionPlan | null {
   const normalizedName = (barbershop?.name ?? "")
@@ -35,6 +35,7 @@ export function getEffectivePlanForBarbershop(
     .toLowerCase()
     .trim()
   const normalizedNameCompact = normalizedName.replace(/[^a-z0-9]+/g, " ").trim()
+  const normalizedEmail = (barbershop?.email ?? "").trim().toLowerCase()
 
   // Contas internas com acesso total (aceita variações de pontuação/plural/acento).
   const namedFullAccessPatterns = [
@@ -44,10 +45,15 @@ export function getEffectivePlanForBarbershop(
   const isNamedFullAccess = namedFullAccessPatterns.some((re) =>
     re.test(normalizedNameCompact)
   )
+  const fullAccessEmails = new Set([
+    "bsbthiagolins@gmail.com",
+  ])
+  const isFullAccessEmail = fullAccessEmails.has(normalizedEmail)
 
   if (isUnlockAllPlanFeaturesEnv()) return "premium"
   if (barbershop?.role === "super_admin") return "premium"
   if (barbershop?.is_test === true) return "premium"
+  if (isFullAccessEmail) return "premium"
   if (isNamedFullAccess) return "premium"
   return getEffectivePlan(subscription)
 }
