@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { verifyPassword } from "@/lib/auth/password"
 import { getActiveBarbershopBySlug, getClientPasswordHash, toPublicClientSession } from "@/lib/public-booking"
 import { publicClientCookieName, signPublicClientSession } from "@/lib/public-client-session"
+import { clientPhoneDigits, findClientByPhoneDigits } from "@/lib/client-by-phone"
 
 export async function POST(
   request: Request,
@@ -26,14 +27,9 @@ export async function POST(
       return NextResponse.json({ error: "E-mail/telefone e senha são obrigatórios" }, { status: 400 })
     }
 
-    const candidate = await prisma.client.findFirst({
-      where: {
-        barbershopId: shop.id,
-        OR: [
-          { email: emailOuTelefone.toLowerCase() },
-          { phone: emailOuTelefone },
-        ],
-      },
+    const emailLower = emailOuTelefone.toLowerCase()
+    let candidate = await prisma.client.findFirst({
+      where: { barbershopId: shop.id, email: emailLower },
       select: {
         id: true,
         name: true,
@@ -44,6 +40,23 @@ export async function POST(
         cpf: true,
       },
     })
+    if (!candidate) {
+      candidate = await prisma.client.findFirst({
+        where: { barbershopId: shop.id, phone: emailOuTelefone },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          notes: true,
+          photoUrl: true,
+          cpf: true,
+        },
+      })
+    }
+    if (!candidate && clientPhoneDigits(emailOuTelefone).length >= 10) {
+      candidate = await findClientByPhoneDigits(shop.id, emailOuTelefone)
+    }
     if (!candidate) {
       return NextResponse.json({ error: "Email/telefone ou senha incorretos" }, { status: 401 })
     }

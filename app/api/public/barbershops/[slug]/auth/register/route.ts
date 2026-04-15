@@ -5,6 +5,7 @@ import { hashPassword } from "@/lib/auth/password"
 import { buildClientNotes, parseClientNotes } from "@/lib/client-auth-notes"
 import { getActiveBarbershopBySlug, toPublicClientSession } from "@/lib/public-booking"
 import { publicClientCookieName, signPublicClientSession } from "@/lib/public-client-session"
+import { findClientByPhoneDigits } from "@/lib/client-by-phone"
 
 export async function POST(
   request: Request,
@@ -36,16 +37,13 @@ export async function POST(
     }
 
     const normalizedPhone = telefone.replace(/\D/g, "")
-    const existing = await prisma.client.findFirst({
-      where: {
-        barbershopId: shop.id,
-        OR: [
-          { email: email || undefined },
-          ...(normalizedPhone ? [{ phone: telefone }] : []),
-        ],
-      },
+    let existing = await prisma.client.findFirst({
+      where: { barbershopId: shop.id, email },
       select: { id: true, name: true, email: true, phone: true, notes: true, photoUrl: true, cpf: true },
     })
+    if (!existing && normalizedPhone.length >= 10) {
+      existing = await findClientByPhoneDigits(shop.id, telefone)
+    }
 
     let client
     if (existing) {

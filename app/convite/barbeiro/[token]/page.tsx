@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { compressImageToJpegDataUrl } from "@/lib/client-image-compress"
+import { MAX_PROFILE_PHOTO_DATA_URL_CHARS } from "@/lib/photo-data-url"
 import { formatCpfDisplay } from "@/lib/cpf"
 import { Camera, CheckCircle2, Loader2, Scissors } from "lucide-react"
 
@@ -72,8 +73,8 @@ export default function ConviteBarbeiroPage() {
     }
     setFormError(null)
     try {
-      const dataUrl = await compressImageToJpegDataUrl(f, 640, 0.8)
-      if (dataUrl.length > 400_000) {
+      const dataUrl = await compressImageToJpegDataUrl(f)
+      if (dataUrl.length > MAX_PROFILE_PHOTO_DATA_URL_CHARS) {
         setFormError("Imagem ainda grande demais. Tente outra foto.")
         return
       }

@@ -1,4 +1,7 @@
-const MAX_LEN = 450_000
+/** Limite de caracteres do data URL (fotos ~1024px em JPEG ~0,92). */
+export const MAX_PROFILE_PHOTO_DATA_URL_CHARS = 650_000
+
+const MAX_LEN = MAX_PROFILE_PHOTO_DATA_URL_CHARS
 
 const ALLOWED_PREFIX = /^data:image\/(jpeg|jpg|png|webp);base64,/i
 

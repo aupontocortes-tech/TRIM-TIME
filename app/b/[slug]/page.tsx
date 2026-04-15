@@ -39,6 +39,7 @@ import { formatCpfDisplay, cpfDigits } from "@/lib/cpf"
 import { openingHoursFromSettings } from "@/lib/barbershop-settings-ui"
 import type { BarbershopSettings } from "@/lib/db/types"
 import { compressImageToJpegDataUrl } from "@/lib/client-image-compress"
+import { MAX_PROFILE_PHOTO_DATA_URL_CHARS } from "@/lib/photo-data-url"
 import { urlBase64ToUint8Array } from "@/lib/push-client-utils"
 import { AppInstallPrompt } from "@/components/app-install-prompt"
 import { TrimPlayGame } from "@/components/trim-play/TrimPlayGame"
@@ -1278,8 +1279,9 @@ export default function BarbeariaPage() {
                 <img
                   src={fotoClienteHeader}
                   alt=""
-                  className="w-full h-full object-cover"
+                  className="h-full w-full object-cover object-center"
                   style={{ objectPosition: `center ${dadosCliente.fotoPosicao}%` }}
+                  decoding="async"
                 />
               ) : (
                 <img src={barbearia.logo} alt="Logo Trim Time" className="w-[5.25rem] h-[5.25rem] object-contain bg-background" />
@@ -1746,8 +1748,9 @@ export default function BarbeariaPage() {
                   <img
                     src={dadosCliente.foto}
                     alt=""
-                    className="mt-2 w-16 h-16 rounded-full object-cover border border-border"
+                    className="mt-2 h-16 w-16 rounded-full border border-border object-cover object-center"
                     style={{ objectPosition: `center ${dadosCliente.fotoPosicao}%` }}
+                    decoding="async"
                   />
                 ) : (
                   <p className="text-xs text-muted-foreground mt-1">
@@ -1827,9 +1830,9 @@ export default function BarbeariaPage() {
               const f = e.target.files?.[0]
               e.target.value = ""
               if (!f) return
-              void compressImageToJpegDataUrl(f, 640, 0.8)
+              void compressImageToJpegDataUrl(f)
                 .then((url) => {
-                  if (url.length > 400_000) {
+                  if (url.length > MAX_PROFILE_PHOTO_DATA_URL_CHARS) {
                     setFotoModalErr("Imagem grande demais. Tente outra.")
                     return
                   }
@@ -1845,8 +1848,9 @@ export default function BarbeariaPage() {
               <img
                 src={fotoEditDraft}
                 alt=""
-                className="w-24 h-24 rounded-full object-cover border-2 border-primary/40 shadow"
+                className="h-24 w-24 rounded-full border-2 border-primary/40 object-cover object-center shadow"
                 style={{ objectPosition: `center ${fotoEditPos}%` }}
+                decoding="async"
               />
             ) : (
               <div className="flex h-24 w-24 items-center justify-center rounded-full border-2 border-dashed border-border bg-secondary">

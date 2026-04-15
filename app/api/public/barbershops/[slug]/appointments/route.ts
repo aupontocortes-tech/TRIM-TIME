@@ -7,6 +7,7 @@ import { assertValidProfilePhotoDataUrl } from "@/lib/photo-data-url"
 import { cpfDigits } from "@/lib/cpf"
 import { trySendWhatsAppAppointmentConfirmation } from "@/lib/whatsapp-appointment-events"
 import { parseAppointmentDate, utcDayRangeForYmd } from "@/lib/appointment-prisma-helpers"
+import { findClientByPhoneDigits } from "@/lib/client-by-phone"
 
 function normalizeTime(time: string) {
   const raw = String(time ?? "").trim()
@@ -19,38 +20,6 @@ function addMinutes(time: string, minutes: number) {
   const outH = Math.floor(total / 60)
   const outM = total % 60
   return `${String(outH).padStart(2, "0")}:${String(outM).padStart(2, "0")}`
-}
-
-/** Mesmos dígitos = mesmo telefone (reconhecimento do cliente no link público). */
-function phoneDigitsOnly(phone: string | null | undefined): string {
-  return String(phone ?? "").replace(/\D/g, "")
-}
-
-async function findClientByPhoneDigits(barbershopId: string, phoneRaw: string) {
-  const digits = phoneDigitsOnly(phoneRaw)
-  if (digits.length < 10) return null
-  const clients = await prisma.client.findMany({
-    where: { barbershopId },
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      phone: true,
-      photoUrl: true,
-      cpf: true,
-      notes: true,
-    },
-  })
-  return (
-    clients.find((c) => {
-      const p = phoneDigitsOnly(c.phone)
-      if (!p) return false
-      if (p === digits) return true
-      const a = p.length >= 11 ? p.slice(-11) : p
-      const b = digits.length >= 11 ? digits.slice(-11) : digits
-      return a.length >= 10 && b.length >= 10 && a === b
-    }) ?? null
-  )
 }
 
 export async function GET(
@@ -225,10 +194,12 @@ export async function POST(
       cpfUpdate = d
     }
 
+    /** Só altera foto quando vier string (incl. "" para limpar). `null` no JSON não apaga — evita apagar foto por engano. */
     let photoUpdate: string | null | undefined = undefined
-    if (clientPayload.photo_url !== undefined) {
+    const rawPhoto = clientPayload.photo_url
+    if (rawPhoto !== undefined && rawPhoto !== null) {
       try {
-        photoUpdate = assertValidProfilePhotoDataUrl(clientPayload.photo_url)
+        photoUpdate = assertValidProfilePhotoDataUrl(rawPhoto)
       } catch (e) {
         return NextResponse.json(
           { error: e instanceof Error ? e.message : "Foto inválida" },

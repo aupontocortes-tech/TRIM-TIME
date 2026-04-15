@@ -21,6 +21,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import type { Appointment, Client } from "@/lib/db/types"
 
 type ClienteEnriquecido = {
@@ -28,6 +29,7 @@ type ClienteEnriquecido = {
   nome: string
   telefone: string
   email: string
+  fotoUrl: string | null
   totalVisitas: number
   ultimaVisita: string
   totalGasto: number
@@ -95,6 +97,7 @@ export default function ClientesPage() {
           nome: client.name,
           telefone: client.phone ?? "—",
           email: client.email ?? "—",
+          fotoUrl: client.photo_url ?? null,
           totalVisitas: history.length,
           ultimaVisita: history[0]?.data ?? "",
           totalGasto: history.reduce((sum, item) => sum + item.valor, 0),
@@ -315,11 +318,17 @@ export default function ClientesPage() {
                   onClick={() => setClienteSelecionado(cliente)}
                   className="flex items-center gap-4 p-4 rounded-lg bg-secondary/30 border border-border/50 cursor-pointer hover:border-primary/50 transition-colors"
                 >
-                  <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
-                    <span className="text-lg font-semibold text-primary">
-                      {cliente.nome.split(" ").map((n) => n[0]).join("").slice(0, 2)}
-                    </span>
-                  </div>
+                  <Avatar className="h-12 w-12 shrink-0 border border-border">
+                    <AvatarImage src={cliente.fotoUrl ?? undefined} alt="" />
+                    <AvatarFallback className="bg-primary/20 text-lg font-semibold text-primary">
+                      {cliente.nome
+                        .split(" ")
+                        .map((n) => n[0])
+                        .join("")
+                        .slice(0, 2)
+                        .toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
 
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-foreground truncate">{cliente.nome}</p>
@@ -355,11 +364,17 @@ export default function ClientesPage() {
           {clienteSelecionado && (
             <div className="space-y-6">
               <div className="flex items-center gap-4">
-                <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center">
-                  <span className="text-2xl font-semibold text-primary">
-                    {clienteSelecionado.nome.split(" ").map((n) => n[0]).join("").slice(0, 2)}
-                  </span>
-                </div>
+                <Avatar className="h-16 w-16 border-2 border-primary/25">
+                  <AvatarImage src={clienteSelecionado.fotoUrl ?? undefined} alt="" />
+                  <AvatarFallback className="bg-primary/20 text-2xl font-semibold text-primary">
+                    {clienteSelecionado.nome
+                      .split(" ")
+                      .map((n) => n[0])
+                      .join("")
+                      .slice(0, 2)
+                      .toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
                 <div>
                   <p className="text-xl font-semibold text-foreground">{clienteSelecionado.nome}</p>
                   {clienteSelecionado.telefone !== "—" ? (

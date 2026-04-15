@@ -5,6 +5,7 @@ import type { Client } from "@/lib/db/types"
 import { prisma } from "@/lib/prisma"
 import { assertValidProfilePhotoDataUrl } from "@/lib/photo-data-url"
 import { cpfDigits } from "@/lib/cpf"
+import { findClientByPhoneDigits } from "@/lib/client-by-phone"
 
 function mapClient(c: {
   id: string
@@ -100,11 +101,25 @@ export async function POST(request: Request) {
       }
     }
 
+    const phoneTrim = body.phone?.trim() ?? ""
+    if (phoneTrim) {
+      const dup = await findClientByPhoneDigits(barbershopId, phoneTrim)
+      if (dup) {
+        return NextResponse.json(
+          {
+            error:
+              "Já existe um cliente com este telefone. Busque na lista ou edite o cadastro existente.",
+          },
+          { status: 409 }
+        )
+      }
+    }
+
     const data = await prisma.client.create({
       data: {
         barbershopId,
         name: body.name.trim(),
-        phone: body.phone?.trim() ?? null,
+        phone: phoneTrim || null,
         email: body.email?.trim().toLowerCase() ?? null,
         notes: body.notes?.trim() ?? null,
         cpf: cpfNorm,

@@ -21,6 +21,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { formatCpfDisplay } from "@/lib/cpf"
 import { compressImageToJpegDataUrl } from "@/lib/client-image-compress"
+import { MAX_PROFILE_PHOTO_DATA_URL_CHARS } from "@/lib/photo-data-url"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -1752,9 +1753,9 @@ export default function ConfiguracoesPage() {
                         onChange={(e) => {
                           const f = e.target.files?.[0]
                           if (!f) return
-                          void compressImageToJpegDataUrl(f, 640, 0.8)
+                          void compressImageToJpegDataUrl(f)
                             .then((url) => {
-                              if (url.length > 400_000) {
+                              if (url.length > MAX_PROFILE_PHOTO_DATA_URL_CHARS) {
                                 setEquipeError("Imagem grande demais. Tente outra foto.")
                                 return
                               }
@@ -2009,9 +2010,9 @@ export default function ConfiguracoesPage() {
                       onChange={(e) => {
                         const f = e.target.files?.[0]
                         if (!f) return
-                        void compressImageToJpegDataUrl(f, 640, 0.8)
+                        void compressImageToJpegDataUrl(f)
                           .then((url) => {
-                            if (url.length > 400_000) {
+                            if (url.length > MAX_PROFILE_PHOTO_DATA_URL_CHARS) {
                               setEquipeError("Imagem grande demais. Tente outra foto.")
                               return
                             }
