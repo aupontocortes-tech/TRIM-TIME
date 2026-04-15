@@ -4,7 +4,7 @@
  */
 import { AppointmentStatus } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
-import { parseAppointmentDate } from "@/lib/appointment-prisma-helpers"
+import { utcDayRangeForYmd } from "@/lib/appointment-prisma-helpers"
 
 /** Status que ocupam o slot (não cancelado / não concluído como “livre” para o mesmo horário). */
 export const SLOT_BLOCKING_STATUSES = ["pending", "confirmed"] as const satisfies readonly AppointmentStatus[]
@@ -24,11 +24,12 @@ export async function hasBarberSlotConflict(args: {
   excludeAppointmentId?: string
 }): Promise<boolean> {
   const want = normalizeAppointmentTime(args.time)
+  const { gte, lt } = utcDayRangeForYmd(args.date)
   const rows = await prisma.appointment.findMany({
     where: {
       barbershopId: args.barbershopId,
       barberId: args.barberId,
-      date: parseAppointmentDate(args.date),
+      date: { gte, lt },
       status: { in: [...SLOT_BLOCKING_STATUSES] },
       ...(args.excludeAppointmentId ? { id: { not: args.excludeAppointmentId } } : {}),
     },

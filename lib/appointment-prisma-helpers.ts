@@ -21,6 +21,18 @@ export function parseAppointmentDate(ymd: string): Date {
   return new Date(Date.UTC(y, m - 1, d))
 }
 
+/**
+ * Intervalo [início, fim) em UTC para um dia civil YYYY-MM-DD.
+ * Use no Prisma em colunas `@db.Date`: `where: { date: { gte, lt } }` — evita falha de `equals`
+ * com alguns drivers/ fusos ao comparar DateTime com DATE.
+ */
+export function utcDayRangeForYmd(ymd: string): { gte: Date; lt: Date } {
+  const gte = parseAppointmentDate(ymd)
+  const [y, m, d] = ymd.split("-").map(Number)
+  const lt = new Date(Date.UTC(y, m - 1, d + 1))
+  return { gte, lt }
+}
+
 function formatAppointmentDate(d: Date): string {
   const y = d.getUTCFullYear()
   const m = String(d.getUTCMonth() + 1).padStart(2, "0")

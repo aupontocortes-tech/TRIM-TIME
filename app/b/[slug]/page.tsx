@@ -7,10 +7,10 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { 
-  Scissors, 
-  Clock, 
-  MapPin, 
+import {
+  Scissors,
+  Clock,
+  MapPin,
   Star,
   ChevronLeft,
   ChevronRight,
@@ -22,6 +22,7 @@ import {
   Phone,
   Building2,
   Bell,
+  Camera,
 } from "lucide-react"
 import {
   clearConfirmedBooking,
@@ -29,6 +30,12 @@ import {
   saveConfirmedBooking,
   type PersistedClientBookingV1,
 } from "@/lib/cliente-booking-persist"
+import {
+  clearSavedClientProfile,
+  loadSavedClientProfile,
+  saveSavedClientProfile,
+} from "@/lib/cliente-booking-saved-profile"
+import { formatCpfDisplay, cpfDigits } from "@/lib/cpf"
 import { openingHoursFromSettings } from "@/lib/barbershop-settings-ui"
 import type { BarbershopSettings } from "@/lib/db/types"
 import { compressImageToJpegDataUrl } from "@/lib/client-image-compress"
@@ -36,6 +43,13 @@ import { urlBase64ToUint8Array } from "@/lib/push-client-utils"
 import { AppInstallPrompt } from "@/components/app-install-prompt"
 import { TrimPlayGame } from "@/components/trim-play/TrimPlayGame"
 import { TrimPlaySplash } from "@/components/trim-play/TrimPlaySplash"
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 
 // Dados mockados da barbearia (viriam do banco de dados pelo slug)
 const barbeariaData = {
@@ -110,12 +124,21 @@ const gerarDias = () => {
 const diasSemana = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
 const meses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
+/** Data local YYYY-MM-DD (evita trocar o dia com toISOString em UTC). */
+function toYMDLocal(d: Date) {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, "0")
+  const day = String(d.getDate()).padStart(2, "0")
+  return `${y}-${m}-${day}`
+}
+
 type ClienteAgendamento = {
   id: string
   nome: string
   email: string
   telefone: string
   photo_url?: string | null
+  cpf?: string | null
 }
 
 type PublicUnit = {
@@ -157,7 +180,19 @@ export default function BarbeariaPage() {
   const [profissionalSelecionado, setProfissionalSelecionado] = useState<string | null>(null)
   const [dataSelecionada, setDataSelecionada] = useState<Date | null>(null)
   const [horarioSelecionado, setHorarioSelecionado] = useState<string | null>(null)
-  const [dadosCliente, setDadosCliente] = useState({ nome: "", telefone: "", email: "", foto: "" })
+  const [dadosCliente, setDadosCliente] = useState({
+    nome: "",
+    telefone: "",
+    email: "",
+    cpf: "",
+    foto: "",
+    fotoPosicao: 50,
+  })
+  const [dadosSalvosMsg, setDadosSalvosMsg] = useState<string | null>(null)
+  const [fotoConfigOpen, setFotoConfigOpen] = useState(false)
+  const [fotoEditDraft, setFotoEditDraft] = useState("")
+  const [fotoEditPos, setFotoEditPos] = useState(50)
+  const [fotoModalErr, setFotoModalErr] = useState<string | null>(null)
   const [agendamentoConfirmado, setAgendamentoConfirmado] = useState(false)
   const [bookingSummary, setBookingSummary] = useState<PersistedClientBookingV1 | null>(null)
   const [bookingLoading, setBookingLoading] = useState(false)
@@ -235,7 +270,9 @@ export default function BarbeariaPage() {
             nome: c.nome,
             telefone: c.telefone,
             email: c.email,
+            cpf: c.cpf ? formatCpfDisplay(c.cpf) : "",
             foto: c.photo_url ?? "",
+            fotoPosicao: 50,
           })
           return
         }
@@ -257,22 +294,70 @@ export default function BarbeariaPage() {
     }
   }, [slug])
 
-  /** Reabrir o link: mostra resumo do último agendamento confirmado deste cliente */
+  /** Convidado: preenche com dados salvos neste aparelho (nome, telefone, e-mail, CPF, foto). */
+  useEffect(() => {
+    if (authPhase !== "logado" || clienteLogado) return
+    const saved = loadSavedClientProfile(slug)
+    if (!saved) return
+    setDadosCliente((prev) => ({
+      ...prev,
+      nome: prev.nome || saved.nome || "",
+      telefone: prev.telefone || saved.telefone || "",
+      email: prev.email || saved.email || "",
+      cpf: prev.cpf || (saved.cpf ? formatCpfDisplay(saved.cpf) : "") || "",
+      ...(saved.foto && !prev.foto
+        ? { foto: saved.foto, fotoPosicao: saved.fotoPosicao ?? 50 }
+        : {}),
+    }))
+  }, [authPhase, clienteLogado, slug])
+
+  /** Reabrir o link: restaura resumo; tela cheia ou modo navegação conforme uiFocus salvo */
   useEffect(() => {
     if (authPhase !== "logado") return
-    const c = clienteLogado
-    if (!c) return
     const p = loadConfirmedBooking(slug)
-    if (!p || p.clienteId !== c.id) return
+    if (!p) {
+      setBookingSummary(null)
+      return
+    }
+
+    const convidadoOk =
+      !clienteLogado && typeof p.clienteId === "string" && p.clienteId.startsWith("guest_")
+    const logadoOk = clienteLogado != null && p.clienteId === clienteLogado.id
+    if (!convidadoOk && !logadoOk) {
+      setBookingSummary(null)
+      setAgendamentoConfirmado(false)
+      return
+    }
+
     setBookingSummary(p)
-    setAgendamentoConfirmado(true)
-    setTrimPlayStage("intro")
-    setDadosCliente({
-      nome: p.nomeExibicao || c.nome,
-      telefone: c.telefone,
-      email: c.email,
-      foto: c.photo_url ?? "",
-    })
+    const focus = p.uiFocus ?? "confirmation"
+    if (focus === "browsing") {
+      setAgendamentoConfirmado(false)
+      setTrimPlayStage("intro")
+      setEtapa(1)
+    } else {
+      setAgendamentoConfirmado(true)
+      setTrimPlayStage("intro")
+    }
+
+    if (clienteLogado) {
+      setDadosCliente({
+        nome: p.nomeExibicao || clienteLogado.nome,
+        telefone: clienteLogado.telefone,
+        email: clienteLogado.email,
+        cpf: clienteLogado.cpf ? formatCpfDisplay(clienteLogado.cpf) : "",
+        foto: clienteLogado.photo_url ?? "",
+        fotoPosicao: 50,
+      })
+    } else {
+      setDadosCliente((prev) => ({
+        ...prev,
+        nome: p.nomeExibicao || prev.nome,
+        telefone: prev.telefone,
+        email: prev.email,
+        foto: prev.foto,
+      }))
+    }
   }, [authPhase, clienteLogado, slug])
 
   useEffect(() => {
@@ -317,6 +402,9 @@ export default function BarbeariaPage() {
     return `(${numbers.slice(0, 2)}) ${numbers.slice(2, 7)}-${numbers.slice(7, 11)}`
   }
 
+  const formatCpfInput = (value: string) =>
+    formatCpfDisplay(value.replace(/\D/g, "").slice(0, 11))
+
   const handleCadastro = async (e: React.FormEvent) => {
     e.preventDefault()
     setErroCadastro("")
@@ -353,7 +441,9 @@ export default function BarbeariaPage() {
         nome: data.client.nome,
         telefone: data.client.telefone,
         email: data.client.email,
+        cpf: data.client.cpf ? formatCpfDisplay(data.client.cpf) : "",
         foto: data.client.photo_url ?? "",
+        fotoPosicao: 50,
       })
       setAuthPhase("logado")
     } catch {
@@ -387,7 +477,9 @@ export default function BarbeariaPage() {
         nome: data.client.nome,
         telefone: data.client.telefone,
         email: data.client.email,
+        cpf: data.client.cpf ? formatCpfDisplay(data.client.cpf) : "",
         foto: data.client.photo_url ?? "",
+        fotoPosicao: 50,
       })
       setAuthPhase("logado")
     } catch {
@@ -413,8 +505,11 @@ export default function BarbeariaPage() {
     setProfissionalSelecionado(null)
     setDataSelecionada(null)
     setHorarioSelecionado(null)
-    setDadosCliente({ nome: "", telefone: "", email: "", foto: "" })
+    setDadosCliente({ nome: "", telefone: "", email: "", cpf: "", foto: "", fotoPosicao: 50 })
     setPushReminderMsg(null)
+    setBookingSummary(null)
+    setAgendamentoConfirmado(false)
+    setTrimPlayStage("intro")
   }
 
   const ativarLembretesPush = async () => {
@@ -473,7 +568,9 @@ export default function BarbeariaPage() {
       nome: prev.nome || "",
       telefone: prev.telefone || "",
       email: prev.email || "",
+      cpf: prev.cpf || "",
       foto: prev.foto || "",
+      fotoPosicao: prev.fotoPosicao ?? 50,
     }))
     setEtapa(1)
     setServicosSelecionados([])
@@ -540,6 +637,8 @@ export default function BarbeariaPage() {
   const selectedUnit =
     publicMeta?.units?.find((u) => u.id === selectedUnitId) ?? null
   const displayNome = publicMeta?.name ?? barbeariaData.nome
+  const fotoClienteHeader =
+    clienteLogado?.photo_url?.trim() || dadosCliente.foto?.trim() || ""
   const displayPhone =
     selectedUnit?.phone ?? publicMeta?.phone ?? null
   const displayAddress =
@@ -620,7 +719,7 @@ export default function BarbeariaPage() {
       setOccupiedTimes([])
       return
     }
-    const date = dataSelecionada.toISOString().slice(0, 10)
+    const date = toYMDLocal(dataSelecionada)
     let cancelled = false
     fetch(
       `/api/public/barbershops/${encodeURIComponent(slug)}/appointments?date=${encodeURIComponent(date)}&barber_id=${encodeURIComponent(profissionalSelecionado)}`,
@@ -675,6 +774,11 @@ export default function BarbeariaPage() {
       setErroAgendamento("Não foi possível carregar a barbearia. Atualize a página e tente novamente.")
       return
     }
+    const cpfNorm = cpfDigits(dadosCliente.cpf)
+    if (dadosCliente.cpf.trim() && !cpfNorm) {
+      setErroAgendamento("CPF inválido: use 11 dígitos ou deixe em branco.")
+      return
+    }
     const prof = barbearia.profissionais.find((p) => p.id === profissionalSelecionado)
     if (!prof) return
     setBookingLoading(true)
@@ -687,13 +791,14 @@ export default function BarbeariaPage() {
         body: JSON.stringify({
           barber_id: profissionalSelecionado,
           service_ids: servicosSelecionados,
-          date: dataSelecionada.toISOString().slice(0, 10),
+          date: toYMDLocal(dataSelecionada),
           time: horarioSelecionado,
           unit_id: selectedUnitId,
           client: {
             nome: dadosCliente.nome,
             telefone: dadosCliente.telefone,
             email: dadosCliente.email,
+            cpf: cpfNorm ?? undefined,
             photo_url: dadosCliente.foto.trim() ? dadosCliente.foto : undefined,
           },
         }),
@@ -715,7 +820,7 @@ export default function BarbeariaPage() {
         confirmedAt: new Date().toISOString(),
         unitId: selectedUnitId,
         unitName: selectedUnit?.name ?? null,
-        dataIso: dataSelecionada.toISOString(),
+        dataIso: `${toYMDLocal(dataSelecionada)}T12:00:00`,
         horario: horarioSelecionado,
         profissionalId: profissionalSelecionado,
         profissionalNome: prof.nome,
@@ -728,6 +833,7 @@ export default function BarbeariaPage() {
         nomeExibicao: dadosCliente.nome.trim() || data.client?.nome || clienteLogado?.nome || "Cliente",
         totalPreco,
         totalDuracao,
+        uiFocus: "confirmation",
       }
       saveConfirmedBooking(slug, summary)
       setBookingSummary(summary)
@@ -737,18 +843,6 @@ export default function BarbeariaPage() {
     } finally {
       setBookingLoading(false)
     }
-  }
-
-  const iniciarNovoAgendamento = () => {
-    clearConfirmedBooking(slug)
-    setBookingSummary(null)
-    setAgendamentoConfirmado(false)
-    setTrimPlayStage("intro")
-    setEtapa(1)
-    setServicosSelecionados([])
-    setProfissionalSelecionado(null)
-    setDataSelecionada(null)
-    setHorarioSelecionado(null)
   }
 
   const remarcarAgendamento = () => {
@@ -761,6 +855,28 @@ export default function BarbeariaPage() {
     setEtapa(3)
     setDataSelecionada(null)
     setHorarioSelecionado(null)
+  }
+
+  /** Volta ao início do agendamento mantendo o resumo salvo (reabre app / link e vê o card + pode jogar de novo). */
+  const concluirParaInicio = () => {
+    const base = bookingSummary ?? loadConfirmedBooking(slug)
+    if (base) {
+      const next: PersistedClientBookingV1 = { ...base, uiFocus: "browsing" }
+      saveConfirmedBooking(slug, next)
+      setBookingSummary(next)
+    }
+    setAgendamentoConfirmado(false)
+    setTrimPlayStage("intro")
+    setEtapa(1)
+    setServicosSelecionados([])
+    setProfissionalSelecionado(null)
+    setDataSelecionada(null)
+    setHorarioSelecionado(null)
+  }
+
+  const verConfirmacaoEJogo = (irDiretoProJogo: boolean) => {
+    setAgendamentoConfirmado(true)
+    setTrimPlayStage(irDiretoProJogo ? "splash" : "intro")
   }
 
   const barbershopId = publicMeta?.id ?? ""
@@ -1091,6 +1207,13 @@ export default function BarbeariaPage() {
               >
                 Remarcar agendamento
               </Button>
+              <Button
+                variant="outline"
+                onClick={concluirParaInicio}
+                className="w-full border-[#FFD700]/40 text-[#FFD700] hover:bg-[#FFD700]/10"
+              >
+                Concluir
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -1150,7 +1273,17 @@ export default function BarbeariaPage() {
         <div className="max-w-2xl mx-auto px-4 -mt-12">
           <div className="flex items-end gap-4 mb-4">
             <div className="w-24 h-24 rounded-xl bg-background border-4 border-background overflow-hidden flex items-center justify-center shrink-0 ring-1 ring-border/40">
-              <img src={barbearia.logo} alt="Logo Trim Time" className="w-[5.25rem] h-[5.25rem] object-contain bg-background" />
+              {authPhase === "logado" && fotoClienteHeader ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={fotoClienteHeader}
+                  alt=""
+                  className="w-full h-full object-cover"
+                  style={{ objectPosition: `center ${dadosCliente.fotoPosicao}%` }}
+                />
+              ) : (
+                <img src={barbearia.logo} alt="Logo Trim Time" className="w-[5.25rem] h-[5.25rem] object-contain bg-background" />
+              )}
             </div>
             <div className="pb-2">
               <h1 className="text-2xl font-bold text-foreground">{displayNome}</h1>
@@ -1212,6 +1345,46 @@ export default function BarbeariaPage() {
                   </option>
                 ))}
               </select>
+            </CardContent>
+          </Card>
+        </div>
+      ) : null}
+
+      {authPhase === "logado" && bookingSummary && !agendamentoConfirmado ? (
+        <div className="max-w-2xl mx-auto px-4 mb-6">
+          <Card className="border-primary/25 bg-card/90">
+            <CardContent className="p-4 space-y-3">
+              <div className="flex items-center gap-2 text-foreground font-medium text-sm">
+                <Calendar className="w-4 h-4 text-primary shrink-0" />
+                Seu agendamento confirmado
+              </div>
+              <p className="text-sm text-foreground font-medium">
+                {(() => {
+                  const d = new Date(bookingSummary.dataIso)
+                  return `${diasSemana[d.getDay()]}, ${d.getDate()} de ${meses[d.getMonth()]} às ${bookingSummary.horario}`
+                })()}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {bookingSummary.servicos.map((s) => s.nome).join(", ")} · {bookingSummary.profissionalNome}
+                {bookingSummary.unitName ? ` · ${bookingSummary.unitName}` : ""}
+              </p>
+              <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                <Button
+                  type="button"
+                  className="w-full sm:flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
+                  onClick={() => verConfirmacaoEJogo(false)}
+                >
+                  Ver confirmação
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full sm:flex-1 border-border text-foreground hover:bg-secondary"
+                  onClick={() => verConfirmacaoEJogo(true)}
+                >
+                  Jogar Trim Play
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -1476,7 +1649,7 @@ export default function BarbeariaPage() {
                 />
               </div>
               <div>
-                <Label htmlFor="email" className="text-foreground">E-mail</Label>
+                <Label htmlFor="email" className="text-foreground">E-mail (opcional)</Label>
                 <Input
                   id="email"
                   type="email"
@@ -1487,7 +1660,7 @@ export default function BarbeariaPage() {
                 />
               </div>
               <div>
-                <Label htmlFor="telefone" className="text-foreground">WhatsApp</Label>
+                <Label htmlFor="telefone" className="text-foreground">Telefone (obrigatório)</Label>
                 <Input
                   id="telefone"
                   placeholder="(00) 00000-0000"
@@ -1497,28 +1670,84 @@ export default function BarbeariaPage() {
                 />
               </div>
               <div>
-                <Label htmlFor="foto-cliente" className="text-foreground">Sua foto (opcional)</Label>
+                <Label htmlFor="cpf-cliente" className="text-foreground">CPF (opcional)</Label>
                 <Input
-                  id="foto-cliente"
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  className="mt-1 bg-card border-border cursor-pointer"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0]
-                    if (!f) return
-                    void compressImageToJpegDataUrl(f, 640, 0.8)
-                      .then((url) =>
-                        setDadosCliente((prev) => ({ ...prev, foto: url.length > 400_000 ? "" : url }))
-                      )
-                      .catch(() => setErroAgendamento("Não foi possível ler a imagem."))
-                  }}
+                  id="cpf-cliente"
+                  placeholder="000.000.000-00"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  value={dadosCliente.cpf}
+                  onChange={(e) =>
+                    setDadosCliente((prev) => ({ ...prev, cpf: formatCpfInput(e.target.value) }))
+                  }
+                  className="mt-1 bg-card border-border focus:border-primary"
                 />
+              </div>
+              <div className="rounded-lg border border-border bg-card/50 p-3 space-y-2">
+                <p className="text-xs text-muted-foreground leading-snug">
+                  Salve nome, telefone, e-mail e CPF neste aparelho para não digitar de novo no próximo
+                  agendamento. A senha da conta não é guardada aqui (por segurança).
+                </p>
+                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="border border-border"
+                    onClick={() => {
+                      saveSavedClientProfile(slug, {
+                        nome: dadosCliente.nome,
+                        telefone: dadosCliente.telefone,
+                        email: dadosCliente.email,
+                        cpf: dadosCliente.cpf.replace(/\D/g, "").slice(0, 11),
+                        foto: dadosCliente.foto || undefined,
+                        fotoPosicao: dadosCliente.fotoPosicao,
+                      })
+                      setDadosSalvosMsg("Dados salvos neste aparelho.")
+                      window.setTimeout(() => setDadosSalvosMsg(null), 4000)
+                    }}
+                  >
+                    Salvar meus dados neste aparelho
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="text-muted-foreground hover:text-destructive"
+                    onClick={() => {
+                      clearSavedClientProfile(slug)
+                      setDadosSalvosMsg("Dados salvos neste aparelho foram apagados.")
+                      window.setTimeout(() => setDadosSalvosMsg(null), 4000)
+                    }}
+                  >
+                    Esquecer dados salvos
+                  </Button>
+                </div>
+                {dadosSalvosMsg ? (
+                  <p className="text-xs text-primary font-medium">{dadosSalvosMsg}</p>
+                ) : null}
+              </div>
+              <div>
+                <p className="text-sm font-medium leading-none text-foreground">Sua foto (opcional)</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="mt-2 w-full border-border text-foreground hover:bg-secondary sm:w-auto"
+                  onClick={() => {
+                    setFotoModalErr(null)
+                    setFotoEditDraft(dadosCliente.foto)
+                    setFotoEditPos(dadosCliente.fotoPosicao)
+                    setFotoConfigOpen(true)
+                  }}
+                >
+                  <Camera className="w-4 h-4 mr-2" />
+                  {dadosCliente.foto ? "Ajustar foto" : "Adicionar foto"}
+                </Button>
                 {dadosCliente.foto ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={dadosCliente.foto}
                     alt=""
                     className="mt-2 w-16 h-16 rounded-full object-cover border border-border"
+                    style={{ objectPosition: `center ${dadosCliente.fotoPosicao}%` }}
                   />
                 ) : (
                   <p className="text-xs text-muted-foreground mt-1">
@@ -1574,6 +1803,114 @@ export default function BarbeariaPage() {
           </div>
         </div>
       </div>
+
+      <Dialog
+        open={fotoConfigOpen}
+        onOpenChange={(open) => {
+          setFotoConfigOpen(open)
+          if (!open) setFotoModalErr(null)
+        }}
+      >
+        <DialogContent className="bg-card border-border text-foreground sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Sua foto no perfil</DialogTitle>
+          </DialogHeader>
+          {fotoModalErr ? (
+            <p className="text-sm text-destructive">{fotoModalErr}</p>
+          ) : null}
+          <input
+            id="foto-cliente-modal-file"
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            className="sr-only"
+            onChange={(e) => {
+              const f = e.target.files?.[0]
+              e.target.value = ""
+              if (!f) return
+              void compressImageToJpegDataUrl(f, 640, 0.8)
+                .then((url) => {
+                  if (url.length > 400_000) {
+                    setFotoModalErr("Imagem grande demais. Tente outra.")
+                    return
+                  }
+                  setFotoModalErr(null)
+                  setFotoEditDraft(url)
+                })
+                .catch(() => setFotoModalErr("Não foi possível ler a imagem."))
+            }}
+          />
+          <div className="flex flex-col items-center gap-3 py-2">
+            {fotoEditDraft ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={fotoEditDraft}
+                alt=""
+                className="w-24 h-24 rounded-full object-cover border-2 border-primary/40 shadow"
+                style={{ objectPosition: `center ${fotoEditPos}%` }}
+              />
+            ) : (
+              <div className="flex h-24 w-24 items-center justify-center rounded-full border-2 border-dashed border-border bg-secondary">
+                <Camera className="h-8 w-8 text-muted-foreground" />
+              </div>
+            )}
+            {fotoEditDraft ? (
+              <div className="w-full space-y-1">
+                <p className="text-center text-xs text-muted-foreground">Ajustar posição</p>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={fotoEditPos}
+                  onChange={(e) => setFotoEditPos(Number(e.target.value))}
+                  className="w-full cursor-pointer accent-primary"
+                />
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>Topo</span>
+                  <span>Base</span>
+                </div>
+              </div>
+            ) : null}
+            <label
+              htmlFor="foto-cliente-modal-file"
+              className="inline-flex cursor-pointer items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+            >
+              <Camera className="h-4 w-4" />
+              {fotoEditDraft ? "Trocar foto" : "Escolher foto"}
+            </label>
+            {fotoEditDraft ? (
+              <button
+                type="button"
+                className="text-xs text-muted-foreground transition-colors hover:text-destructive"
+                onClick={() => {
+                  setFotoEditDraft("")
+                  setFotoEditPos(50)
+                }}
+              >
+                Remover foto
+              </button>
+            ) : null}
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setFotoConfigOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
+              onClick={() => {
+                setDadosCliente((prev) => ({
+                  ...prev,
+                  foto: fotoEditDraft,
+                  fotoPosicao: fotoEditPos,
+                }))
+                setFotoConfigOpen(false)
+              }}
+            >
+              Aplicar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

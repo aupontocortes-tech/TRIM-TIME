@@ -46,7 +46,7 @@ export async function aggregateCommissionsForRange(
     .gte("date", startDate)
     .lte("date", endDate)
     .in("status", [...COMMISSION_APPOINTMENT_STATUSES])
-  if (unitId) appointmentsQuery = appointmentsQuery.eq("unit_id", unitId)
+  if (unitId) appointmentsQuery = appointmentsQuery.or(`unit_id.eq.${unitId},unit_id.is.null`)
 
   const [{ data: appointments }, { data: barbers }] = await Promise.all([
     appointmentsQuery,

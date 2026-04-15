@@ -183,11 +183,11 @@ export function AppInstallPrompt({
 
   const title =
     variant === "clientBooking"
-      ? "Instale o app no celular"
+      ? "Atalho só para agendar"
       : "Baixe o Trim Time"
   const subtitle =
     variant === "clientBooking"
-      ? "Abra o link da barbearia no navegador (Chrome ou Safari). Adicione à tela inicial e agende como em um aplicativo normal — ícone na home e tela cheia."
+      ? "Este link é só para clientes marcarem horário — é separado do app do barbeiro. Abra no Chrome ou Safari, adicione à tela inicial e use como um app de agendamento (ícone na home, tela cheia)."
       : "Instale como aplicativo no Android, iPhone ou computador — atalho na tela inicial e uso em tela cheia."
 
   const modal = (
@@ -237,7 +237,8 @@ export function AppInstallPrompt({
             {variant === "clientBooking" ? (
               <div className="mt-4 rounded-lg border border-primary/25 bg-primary/5 p-3 space-y-3">
                 <p className="text-xs font-medium text-foreground">
-                  No celular: use os botões abaixo — links normais em WhatsApp às vezes não abrem a loja.
+                  Guarde o link da barbearia: ao colar no navegador você instala só a página de agendamento, não o
+                  painel do profissional. No celular, use os botões abaixo se precisar abrir na loja.
                 </p>
                 <div className="flex flex-col gap-2">
                   {playStoreUrl ? (

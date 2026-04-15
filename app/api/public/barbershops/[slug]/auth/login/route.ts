@@ -41,6 +41,7 @@ export async function POST(
         phone: true,
         notes: true,
         photoUrl: true,
+        cpf: true,
       },
     })
     if (!candidate) {

@@ -26,7 +26,10 @@ export async function GET() {
 
     const cookieStore = await cookies()
     const selectedUnitId = cookieStore.get(BARBERSHOP_UNIT_COOKIE)?.value ?? null
-    const selectedValid = (data ?? []).some((u) => u.id === selectedUnitId)
+    const selectedValid = selectedUnitId != null && (data ?? []).some((u) => u.id === selectedUnitId)
+    if (selectedUnitId != null && !selectedValid) {
+      cookieStore.delete(BARBERSHOP_UNIT_COOKIE)
+    }
 
     return NextResponse.json({
       units: (data ?? []) as BarbershopUnit[],

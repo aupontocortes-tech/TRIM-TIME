@@ -191,7 +191,7 @@ export default function AgendaPage() {
 
   useEffect(() => {
     void carregarAgendamentos()
-  }, [dataSelecionada, filtroProf, barbers, visao])
+  }, [dataSelecionada, filtroProf, barbers, visao, selectedUnitId, unitsLoading])
 
   const mudarDia = (dias: number) => {
     const novaData = new Date(dataSelecionada)

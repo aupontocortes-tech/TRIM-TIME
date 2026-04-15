@@ -9,6 +9,7 @@ import {
   appointmentApiInclude,
   mapAppointmentRowToApi,
   parseAppointmentDate,
+  utcDayRangeForYmd,
 } from "@/lib/appointment-prisma-helpers"
 import { withServiceDescriptionsFromDb } from "@/lib/service-queries"
 import { trySendWhatsAppAppointmentConfirmation } from "@/lib/whatsapp-appointment-events"
@@ -85,11 +86,12 @@ export async function POST(request: Request) {
       }
     }
     const apptDate = parseAppointmentDate(body.date)
+    const dayRange = utcDayRangeForYmd(body.date)
     const existing = await prisma.appointment.findFirst({
       where: {
         barbershopId,
         clientId: body.client_id,
-        date: apptDate,
+        date: { gte: dayRange.gte, lt: dayRange.lt },
         status: { not: "canceled" },
       },
       select: { id: true },

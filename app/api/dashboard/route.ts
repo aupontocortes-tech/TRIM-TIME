@@ -43,10 +43,11 @@ export async function GET() {
       .in("status", ["completed", "confirmed"])
 
     if (selectedUnitId) {
-      appointmentsTodayQuery = appointmentsTodayQuery.eq("unit_id", selectedUnitId)
-      revenueTodayQuery = revenueTodayQuery.eq("unit_id", selectedUnitId)
-      revenueMonthQuery = revenueMonthQuery.eq("unit_id", selectedUnitId)
-      topBarberQuery = topBarberQuery.eq("unit_id", selectedUnitId)
+      const unitScope = `unit_id.eq.${selectedUnitId},unit_id.is.null`
+      appointmentsTodayQuery = appointmentsTodayQuery.or(unitScope)
+      revenueTodayQuery = revenueTodayQuery.or(unitScope)
+      revenueMonthQuery = revenueMonthQuery.or(unitScope)
+      topBarberQuery = topBarberQuery.or(unitScope)
     }
 
     const [appointmentsTodayRes, revenueTodayRes, revenueMonthRes, topBarberRes, newClientsRes] = await Promise.all([

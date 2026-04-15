@@ -6,6 +6,7 @@ import { publicClientCookieName, verifyPublicClientSession } from "@/lib/public-
 import { assertValidProfilePhotoDataUrl } from "@/lib/photo-data-url"
 import { cpfDigits } from "@/lib/cpf"
 import { trySendWhatsAppAppointmentConfirmation } from "@/lib/whatsapp-appointment-events"
+import { parseAppointmentDate, utcDayRangeForYmd } from "@/lib/appointment-prisma-helpers"
 
 function normalizeTime(time: string) {
   const raw = String(time ?? "").trim()
@@ -18,6 +19,38 @@ function addMinutes(time: string, minutes: number) {
   const outH = Math.floor(total / 60)
   const outM = total % 60
   return `${String(outH).padStart(2, "0")}:${String(outM).padStart(2, "0")}`
+}
+
+/** Mesmos dígitos = mesmo telefone (reconhecimento do cliente no link público). */
+function phoneDigitsOnly(phone: string | null | undefined): string {
+  return String(phone ?? "").replace(/\D/g, "")
+}
+
+async function findClientByPhoneDigits(barbershopId: string, phoneRaw: string) {
+  const digits = phoneDigitsOnly(phoneRaw)
+  if (digits.length < 10) return null
+  const clients = await prisma.client.findMany({
+    where: { barbershopId },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      phone: true,
+      photoUrl: true,
+      cpf: true,
+      notes: true,
+    },
+  })
+  return (
+    clients.find((c) => {
+      const p = phoneDigitsOnly(c.phone)
+      if (!p) return false
+      if (p === digits) return true
+      const a = p.length >= 11 ? p.slice(-11) : p
+      const b = digits.length >= 11 ? digits.slice(-11) : digits
+      return a.length >= 10 && b.length >= 10 && a === b
+    }) ?? null
+  )
 }
 
 export async function GET(
@@ -38,11 +71,18 @@ export async function GET(
       return NextResponse.json({ error: "Barbearia não encontrada" }, { status: 404 })
     }
 
+    let dayBounds: { gte: Date; lt: Date }
+    try {
+      dayBounds = utcDayRangeForYmd(date)
+    } catch {
+      return NextResponse.json({ occupied_times: [] })
+    }
+
     const appointments = await prisma.appointment.findMany({
       where: {
         barbershopId: shop.id,
         barberId,
-        date: new Date(`${date}T00:00:00`),
+        date: { gte: dayBounds.gte, lt: dayBounds.lt },
         status: { in: ["pending", "confirmed"] },
       },
       select: { time: true },
@@ -104,7 +144,35 @@ export async function POST(
       return NextResponse.json({ error: "Dados do agendamento incompletos" }, { status: 400 })
     }
 
-    const [barber, services, unit] = await Promise.all([
+    let apptDate: Date
+    let apptDayBounds: { gte: Date; lt: Date }
+    try {
+      apptDate = parseAppointmentDate(date)
+      apptDayBounds = utcDayRangeForYmd(date)
+    } catch {
+      return NextResponse.json({ error: "Data inválida" }, { status: 400 })
+    }
+
+    const activeUnits = await prisma.barbershopUnit.findMany({
+      where: { barbershopId: shop.id, active: true },
+      select: { id: true },
+      orderBy: { createdAt: "asc" },
+    })
+
+    let effectiveUnitId: string | null = unitId
+    if (effectiveUnitId) {
+      if (!activeUnits.some((u) => u.id === effectiveUnitId)) {
+        return NextResponse.json({ error: "Unidade inválida" }, { status: 400 })
+      }
+    } else if (activeUnits.length === 1) {
+      effectiveUnitId = activeUnits[0].id
+    } else if (activeUnits.length > 1) {
+      return NextResponse.json({ error: "Selecione a unidade para agendar." }, { status: 400 })
+    } else {
+      effectiveUnitId = null
+    }
+
+    const [barber, services] = await Promise.all([
       prisma.barber.findFirst({
         where: { id: barberId, barbershopId: shop.id, active: true },
         select: { id: true },
@@ -113,12 +181,6 @@ export async function POST(
         where: { id: { in: serviceIds }, barbershopId: shop.id, active: true },
         select: { id: true, duration: true, price: true },
       }),
-      unitId
-        ? prisma.barbershopUnit.findFirst({
-            where: { id: unitId, barbershopId: shop.id, active: true },
-            select: { id: true },
-          })
-        : Promise.resolve(null),
     ])
 
     if (!barber) {
@@ -126,9 +188,6 @@ export async function POST(
     }
     if (services.length !== serviceIds.length) {
       return NextResponse.json({ error: "Um ou mais serviços não estão disponíveis" }, { status: 400 })
-    }
-    if (unitId && !unit) {
-      return NextResponse.json({ error: "Unidade inválida" }, { status: 400 })
     }
 
     const orderedServices = serviceIds
@@ -182,26 +241,36 @@ export async function POST(
       if (!nome || !telefone) {
         return NextResponse.json({ error: "Informe nome e telefone para continuar" }, { status: 400 })
       }
-      client = await prisma.client.create({
-        data: {
-          barbershopId: shop.id,
-          name: nome,
-          phone: telefone || null,
-          email: email || null,
-          cpf: cpfUpdate ?? null,
-          photoUrl: photoUpdate ?? null,
-        },
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          phone: true,
-          photoUrl: true,
-          cpf: true,
-          notes: true,
-        },
-      })
-    } else if (nome || telefone || email || cpfUpdate !== undefined || photoUpdate !== undefined) {
+      const byPhone = await findClientByPhoneDigits(shop.id, telefone)
+      if (byPhone) {
+        client = byPhone
+      } else {
+        client = await prisma.client.create({
+          data: {
+            barbershopId: shop.id,
+            name: nome,
+            phone: telefone || null,
+            email: email || null,
+            cpf: cpfUpdate ?? null,
+            photoUrl: photoUpdate ?? null,
+          },
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+            photoUrl: true,
+            cpf: true,
+            notes: true,
+          },
+        })
+      }
+    }
+
+    if (
+      client &&
+      (nome || telefone || email || cpfUpdate !== undefined || photoUpdate !== undefined)
+    ) {
       client = await prisma.client.update({
         where: { id: client.id },
         data: {
@@ -223,6 +292,29 @@ export async function POST(
       })
     }
 
+    if (!client) {
+      return NextResponse.json({ error: "Não foi possível identificar o cliente" }, { status: 400 })
+    }
+
+    const existingSameDay = await prisma.appointment.findFirst({
+      where: {
+        barbershopId: shop.id,
+        clientId: client.id,
+        date: { gte: apptDayBounds.gte, lt: apptDayBounds.lt },
+        status: { not: "canceled" },
+      },
+      select: { id: true },
+    })
+    if (existingSameDay) {
+      return NextResponse.json(
+        {
+          error:
+            "Você já possui um agendamento neste dia. Escolha outra data ou entre em contato com a barbearia.",
+        },
+        { status: 409 }
+      )
+    }
+
     const times = orderedServices.map((service, index) => {
       const minutesBefore = orderedServices.slice(0, index).reduce((sum, item) => sum + item.duration, 0)
       return { service, time: addMinutes(time, minutesBefore) }
@@ -232,7 +324,7 @@ export async function POST(
       where: {
         barbershopId: shop.id,
         barberId,
-        date: new Date(`${date}T00:00:00`),
+        date: { gte: apptDayBounds.gte, lt: apptDayBounds.lt },
         status: { in: ["pending", "confirmed"] },
         time: { in: times.map((item) => item.time) },
       },
@@ -253,8 +345,8 @@ export async function POST(
             clientId: client.id,
             barberId,
             serviceId: item.service.id,
-            unitId,
-            date: new Date(`${date}T00:00:00`),
+            unitId: effectiveUnitId,
+            date: apptDate,
             time: item.time,
             status: "pending",
             totalPrice: item.service.price,

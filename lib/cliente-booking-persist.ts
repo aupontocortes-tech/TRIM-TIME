@@ -17,6 +17,11 @@ export type PersistedClientBookingV1 = {
   nomeExibicao: string
   totalPreco: number
   totalDuracao: number
+  /**
+   * confirmation = tela cheia de confirmação (padrão ao concluir agendamento ou dados antigos sem campo).
+   * browsing = cliente voltou ao fluxo (etapa 1); resumo fica no card e pode reabrir confirmação / Trim Play.
+   */
+  uiFocus?: "confirmation" | "browsing"
 }
 
 function key(slug: string) {

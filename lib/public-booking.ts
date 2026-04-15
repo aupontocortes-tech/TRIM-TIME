@@ -7,6 +7,7 @@ export type PublicClientSession = {
   email: string
   telefone: string
   photo_url?: string | null
+  cpf?: string | null
 }
 
 export async function getActiveBarbershopBySlug(slug: string) {
@@ -28,6 +29,7 @@ export function toPublicClientSession(client: {
   phone: string | null
   notes?: string | null
   photoUrl?: string | null
+  cpf?: string | null
 }): PublicClientSession {
   return {
     id: client.id,
@@ -35,6 +37,7 @@ export function toPublicClientSession(client: {
     email: client.email ?? "",
     telefone: client.phone ?? "",
     photo_url: client.photoUrl ?? null,
+    cpf: client.cpf ?? null,
   }
 }
 
