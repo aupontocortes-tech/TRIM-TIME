@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import Link from "next/link"
 import { useBarbershop } from "@/hooks/use-barbershop"
 import { useUnits } from "@/hooks/use-units"
+import { PainelUnitsProvider } from "@/contexts/painel-units-context"
 import { usePathname, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { 
@@ -48,15 +49,11 @@ const menuItems: { href: string; label: string; icon: typeof LayoutDashboard; ro
   { href: "/painel/suporte", label: "Suporte", icon: MessageCircle },
 ]
 
-export default function PainelLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+function PainelLayoutInner({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const { barbershop, loading: barbershopLoading } = useBarbershop()
+  const { barbershop } = useBarbershop()
   const { units, selectedUnitId, changeUnit, loading: unitsLoading } = useUnits()
   const [impersonating, setImpersonating] = useState(false)
   /** Role para menu: hoje sempre da barbearia; quando houver login de barbeiro, usar barber.role (user = só agenda/clientes). */
@@ -69,13 +66,6 @@ export default function PainelLayout({
       .then((data) => setImpersonating(data.impersonating === true))
       .catch(() => setImpersonating(false))
   }, [])
-
-  useEffect(() => {
-    if (barbershopLoading) return
-    if (!barbershop) {
-      router.replace("/login")
-    }
-  }, [barbershopLoading, barbershop, router])
 
   const handleVoltarAdmin = () => {
     fetch("/api/admin/impersonate", {
@@ -94,21 +84,11 @@ export default function PainelLayout({
       ? units.find((u) => u.id === selectedUnitId)?.name ?? "Unidade"
       : "Todas unidades"
 
-  if (barbershopLoading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center text-muted-foreground">
-        Carregando painel…
-      </div>
-    )
-  }
-
-  if (!barbershop) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center text-muted-foreground">
-        Redirecionando para o login…
-      </div>
-    )
-  }
+  /** Nome em destaque acima do seletor: unidade ativa ou nome da rede quando “Todas unidades”. */
+  const sidebarBrandName =
+    selectedUnitId && units.length > 0
+      ? units.find((u) => u.id === selectedUnitId)?.name ?? barbershop?.name ?? "Trim Time"
+      : barbershop?.name ?? "Trim Time"
 
   return (
     <div className="min-h-screen bg-background">
@@ -147,7 +127,7 @@ export default function PainelLayout({
 
           <div className="px-4 py-4 border-b border-border">
             <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Sua barbearia</p>
-            <p className="font-semibold text-foreground truncate">{barbershop?.name ?? "Trim Time"}</p>
+            <p className="font-semibold text-foreground truncate">{sidebarBrandName}</p>
             <div className="mt-3">
               <p className="text-[11px] text-muted-foreground mb-1">Unidade ativa</p>
               <select
@@ -157,7 +137,6 @@ export default function PainelLayout({
                 onChange={async (e) => {
                   const next = e.target.value === "__all__" ? null : e.target.value
                   await changeUnit(next)
-                  window.location.reload()
                 }}
               >
                 <option value="__all__">Todas unidades</option>
@@ -277,7 +256,6 @@ export default function PainelLayout({
                   onChange={async (e) => {
                     const next = e.target.value === "__all__" ? null : e.target.value
                     await changeUnit(next)
-                  window.location.reload()
                   }}
                 >
                   <option value="__all__">Todas unidades</option>
@@ -307,5 +285,39 @@ export default function PainelLayout({
         </main>
       </div>
     </div>
+  )
+}
+
+export default function PainelLayout({ children }: { children: React.ReactNode }) {
+  const { barbershop, loading: barbershopLoading } = useBarbershop()
+  const router = useRouter()
+
+  useEffect(() => {
+    if (barbershopLoading) return
+    if (!barbershop) {
+      router.replace("/login")
+    }
+  }, [barbershopLoading, barbershop, router])
+
+  if (barbershopLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center text-muted-foreground">
+        Carregando painel…
+      </div>
+    )
+  }
+
+  if (!barbershop) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center text-muted-foreground">
+        Redirecionando para o login…
+      </div>
+    )
+  }
+
+  return (
+    <PainelUnitsProvider>
+      <PainelLayoutInner>{children}</PainelLayoutInner>
+    </PainelUnitsProvider>
   )
 }

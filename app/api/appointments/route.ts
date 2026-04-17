@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { requireBarbershopId } from "@/lib/tenant"
 import { hasBarberSlotConflict, normalizeAppointmentTime } from "@/lib/scheduling"
-import { resolveSelectedUnitId } from "@/lib/unit-context"
+import { prismaAppointmentUnitFilter, resolveSelectedUnitId } from "@/lib/unit-context"
 import type { Appointment } from "@/lib/db/types"
 import type { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
@@ -38,8 +38,7 @@ export async function GET(request: Request) {
     const rows = await prisma.appointment.findMany({
       where: {
         barbershopId,
-        // Unidade selecionada no painel + legados sem unidade (ex.: link público antes de padronizar unit_id).
-        ...(selectedUnitId ? { OR: [{ unitId: selectedUnitId }, { unitId: null }] } : {}),
+        ...prismaAppointmentUnitFilter(selectedUnitId),
         ...(dateFilter ? { date: dateFilter } : {}),
         ...(barberId ? { barberId } : {}),
       },

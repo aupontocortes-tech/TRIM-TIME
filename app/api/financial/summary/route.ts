@@ -2,16 +2,11 @@ import { NextResponse } from "next/server"
 import type { AppointmentStatus, Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { requireBarbershopId } from "@/lib/tenant"
-import { resolveSelectedUnitId } from "@/lib/unit-context"
+import { prismaAppointmentUnitFilter, resolveSelectedUnitId } from "@/lib/unit-context"
 import { parseAppointmentDate } from "@/lib/appointment-prisma-helpers"
 import { COMMISSION_APPOINTMENT_STATUSES } from "@/lib/commissions"
 
 const SALE_STATUSES: AppointmentStatus[] = [...COMMISSION_APPOINTMENT_STATUSES]
-
-function unitFilter(selectedUnitId: string | null): Prisma.AppointmentWhereInput {
-  if (!selectedUnitId) return {}
-  return { OR: [{ unitId: selectedUnitId }, { unitId: null }] }
-}
 
 function ymdUTC(d: Date): string {
   const y = d.getUTCFullYear()
@@ -48,7 +43,7 @@ export async function GET(request: Request) {
 
     const rangeWhere: Prisma.AppointmentWhereInput = {
       barbershopId,
-      ...unitFilter(selectedUnitId),
+      ...prismaAppointmentUnitFilter(selectedUnitId),
       date: {
         gte: parseAppointmentDate(from),
         lte: parseAppointmentDate(to),
@@ -71,7 +66,7 @@ export async function GET(request: Request) {
 
     const prevSaleWhere: Prisma.AppointmentWhereInput = {
       barbershopId,
-      ...unitFilter(selectedUnitId),
+      ...prismaAppointmentUnitFilter(selectedUnitId),
       status: { in: SALE_STATUSES },
       date: {
         gte: prevFrom,
@@ -82,7 +77,7 @@ export async function GET(request: Request) {
     const sixMonthStart = new Date(Date.UTC(toD.getUTCFullYear(), toD.getUTCMonth() - 5, 1))
     const monthlyRangeWhere: Prisma.AppointmentWhereInput = {
       barbershopId,
-      ...unitFilter(selectedUnitId),
+      ...prismaAppointmentUnitFilter(selectedUnitId),
       status: { in: SALE_STATUSES },
       date: {
         gte: sixMonthStart,
@@ -95,7 +90,7 @@ export async function GET(request: Request) {
       const t = parseAppointmentDate(today)
       todayWhere = {
         barbershopId,
-        ...unitFilter(selectedUnitId),
+        ...prismaAppointmentUnitFilter(selectedUnitId),
         status: { in: SALE_STATUSES },
         date: t,
       }
