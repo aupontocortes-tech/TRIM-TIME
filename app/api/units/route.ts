@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { cookies } from "next/headers"
 import { createServiceRoleClient } from "@/lib/supabase/server"
+import { prisma } from "@/lib/prisma"
 import { BARBERSHOP_UNIT_COOKIE, requireBarbershopId } from "@/lib/tenant"
 import { resolveEffectivePlanForActiveSession } from "@/lib/barbershop-effective-plan-server"
 import { hasFeature } from "@/lib/plans"
@@ -66,12 +67,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Nome da unidade é obrigatório" }, { status: 400 })
     }
 
-    const supabase = createServiceRoleClient()
-    const { data, error } = await supabase
-      .from("barbershop_units")
-      .insert({
-        id: crypto.randomUUID(),
-        barbershop_id: barbershopId,
+    /** Prisma aplica `created_at` / `updated_at`; insert direto no Supabase omitia timestamps e quebrava NOT NULL no Postgres. */
+    const row = await prisma.barbershopUnit.create({
+      data: {
+        barbershopId,
         name,
         phone: optStr(body.phone),
         address: optStr(body.address),
@@ -79,12 +78,23 @@ export async function POST(request: Request) {
         state: optStr(body.state),
         cep: optStr(body.cep),
         active: true,
-      })
-      .select("*")
-      .single()
+      },
+    })
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json(data as BarbershopUnit)
+    const payload: BarbershopUnit = {
+      id: row.id,
+      barbershop_id: row.barbershopId,
+      name: row.name,
+      phone: row.phone,
+      address: row.address,
+      city: row.city,
+      state: row.state,
+      cep: row.cep,
+      active: row.active,
+      created_at: row.createdAt.toISOString(),
+      updated_at: row.updatedAt.toISOString(),
+    }
+    return NextResponse.json(payload)
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Erro ao criar unidade" },
