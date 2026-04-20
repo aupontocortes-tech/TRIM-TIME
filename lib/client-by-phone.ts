@@ -5,6 +5,11 @@ export function clientPhoneDigits(phone: string | null | undefined): string {
   return String(phone ?? "").replace(/\D/g, "")
 }
 
+/** Compara nome na entrada do cliente (login simples) com o cadastro. */
+export function normalizeClienteNomeParaComparar(nome: string): string {
+  return nome.trim().toLowerCase().replace(/\s+/g, " ")
+}
+
 /**
  * Mesmo critério do link público: igualdade por dígitos ou pelos últimos 11 (DDD+número BR).
  */

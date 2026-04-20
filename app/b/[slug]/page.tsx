@@ -203,19 +203,14 @@ export default function BarbeariaPage() {
   const [pushReminderMsg, setPushReminderMsg] = useState<string | null>(null)
   const [pushReminderBusy, setPushReminderBusy] = useState(false)
 
-  // Cadastro
-  const [formCadastro, setFormCadastro] = useState({
-    nome: "",
-    email: "",
-    telefone: "",
-    senha: "",
-    confirmarSenha: "",
-  })
-  const [showSenhaCadastro, setShowSenhaCadastro] = useState(false)
+  // Cadastro (nome + telefone; fluxo simples)
+  const [formCadastro, setFormCadastro] = useState({ nome: "", telefone: "" })
   const [erroCadastro, setErroCadastro] = useState("")
 
-  // Login
-  const [formLogin, setFormLogin] = useState({ emailOuTelefone: "", senha: "" })
+  // Login simples: telefone + nome. Legado: e-mail/telefone + senha
+  const [formLogin, setFormLogin] = useState({ telefone: "", nome: "" })
+  const [loginLegacy, setLoginLegacy] = useState(false)
+  const [formLoginLegacy, setFormLoginLegacy] = useState({ emailOuTelefone: "", senha: "" })
   const [showSenhaLogin, setShowSenhaLogin] = useState(false)
   const [erroLogin, setErroLogin] = useState("")
 
@@ -410,13 +405,9 @@ export default function BarbeariaPage() {
     e.preventDefault()
     setErroCadastro("")
     setAuthLoading(true)
-    if (formCadastro.senha !== formCadastro.confirmarSenha) {
-      setErroCadastro("As senhas não coincidem")
-      setAuthLoading(false)
-      return
-    }
-    if (formCadastro.senha.length < 6) {
-      setErroCadastro("A senha deve ter pelo menos 6 caracteres")
+    const digits = formCadastro.telefone.replace(/\D/g, "")
+    if (digits.length < 10) {
+      setErroCadastro("Informe um telefone válido com DDD")
       setAuthLoading(false)
       return
     }
@@ -426,10 +417,8 @@ export default function BarbeariaPage() {
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
-          nome: formCadastro.nome,
-          email: formCadastro.email,
+          nome: formCadastro.nome.trim(),
           telefone: formCadastro.telefone,
-          senha: formCadastro.senha,
         }),
       })
       const data = (await res.json().catch(() => ({}))) as { error?: string; client?: ClienteAgendamento }
@@ -459,14 +448,25 @@ export default function BarbeariaPage() {
     setErroLogin("")
     setAuthLoading(true)
     try {
+      const body = loginLegacy
+        ? {
+            emailOuTelefone: formLoginLegacy.emailOuTelefone.trim(),
+            senha: formLoginLegacy.senha,
+          }
+        : {
+            telefone: formLogin.telefone.trim(),
+            nome: formLogin.nome.trim(),
+          }
+      if (!loginLegacy && formLogin.telefone.replace(/\D/g, "").length < 10) {
+        setErroLogin("Informe um telefone válido com DDD")
+        setAuthLoading(false)
+        return
+      }
       const res = await fetch(`/api/public/barbershops/${encodeURIComponent(slug)}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({
-          emailOuTelefone: formLogin.emailOuTelefone,
-          senha: formLogin.senha,
-        }),
+        body: JSON.stringify(body),
       })
       const data = (await res.json().catch(() => ({}))) as { error?: string; client?: ClienteAgendamento }
       if (!res.ok || !data.client) {
@@ -722,8 +722,12 @@ export default function BarbeariaPage() {
     }
     const date = toYMDLocal(dataSelecionada)
     let cancelled = false
+    const unitQ =
+      selectedUnitId != null && selectedUnitId !== ""
+        ? `&unit_id=${encodeURIComponent(selectedUnitId)}`
+        : ""
     fetch(
-      `/api/public/barbershops/${encodeURIComponent(slug)}/appointments?date=${encodeURIComponent(date)}&barber_id=${encodeURIComponent(profissionalSelecionado)}`,
+      `/api/public/barbershops/${encodeURIComponent(slug)}/appointments?date=${encodeURIComponent(date)}&barber_id=${encodeURIComponent(profissionalSelecionado)}${unitQ}`,
       { cache: "no-store" }
     )
       .then((r) => (r.ok ? r.json() : { occupied_times: [] }))
@@ -736,7 +740,7 @@ export default function BarbeariaPage() {
     return () => {
       cancelled = true
     }
-  }, [dataSelecionada, profissionalSelecionado, slug])
+  }, [dataSelecionada, profissionalSelecionado, slug, selectedUnitId, publicMeta])
 
   useEffect(() => {
     if (horarioSelecionado && occupiedTimes.includes(horarioSelecionado)) {
@@ -904,7 +908,7 @@ export default function BarbeariaPage() {
               </div>
               <h1 className="text-xl font-bold text-foreground text-center mb-1">Cadastre-se (opcional)</h1>
               <p className="text-sm text-muted-foreground text-center mb-6">
-                {displayNome} — preencha para agendar
+                {displayNome} — só nome e WhatsApp para continuar
               </p>
               <form onSubmit={handleCadastro} className="space-y-4">
                 {erroCadastro && (
@@ -923,54 +927,14 @@ export default function BarbeariaPage() {
                   />
                 </div>
                 <div>
-                  <Label className="text-foreground">E-mail</Label>
-                  <Input
-                    type="email"
-                    value={formCadastro.email}
-                    onChange={(e) => setFormCadastro((p) => ({ ...p, email: e.target.value }))}
-                    placeholder="seu@email.com"
-                    className="mt-1 bg-card border-border"
-                    required
-                  />
-                </div>
-                <div>
-                  <Label className="text-foreground">Telefone</Label>
+                  <Label className="text-foreground">Telefone (WhatsApp)</Label>
                   <Input
                     value={formCadastro.telefone}
                     onChange={(e) => setFormCadastro((p) => ({ ...p, telefone: formatPhone(e.target.value) }))}
                     placeholder="(00) 00000-0000"
                     className="mt-1 bg-card border-border"
-                  />
-                </div>
-                <div>
-                  <Label className="text-foreground">Senha</Label>
-                  <div className="relative">
-                    <Input
-                      type={showSenhaCadastro ? "text" : "password"}
-                      value={formCadastro.senha}
-                      onChange={(e) => setFormCadastro((p) => ({ ...p, senha: e.target.value }))}
-                      placeholder="Mínimo 6 caracteres"
-                      className="mt-1 bg-card border-border pr-10"
-                      minLength={6}
-                      required
-                    />
-                    <button
-                      type="button"
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-                      onClick={() => setShowSenhaCadastro(!showSenhaCadastro)}
-                    >
-                      {showSenhaCadastro ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                </div>
-                <div>
-                  <Label className="text-foreground">Confirmar senha</Label>
-                  <Input
-                    type={showSenhaCadastro ? "text" : "password"}
-                    value={formCadastro.confirmarSenha}
-                    onChange={(e) => setFormCadastro((p) => ({ ...p, confirmarSenha: e.target.value }))}
-                    placeholder="Repita a senha"
-                    className="mt-1 bg-card border-border"
+                    inputMode="tel"
+                    autoComplete="tel"
                     required
                   />
                 </div>
@@ -1023,7 +987,9 @@ export default function BarbeariaPage() {
               </div>
               <h1 className="text-xl font-bold text-foreground text-center mb-1">Entrar</h1>
               <p className="text-sm text-muted-foreground text-center mb-6">
-                Use seu e-mail ou telefone e senha
+                {loginLegacy
+                  ? "Conta criada antes com e-mail e senha"
+                  : "Mesmo telefone e nome do cadastro"}
               </p>
               <form onSubmit={handleLogin} className="space-y-4">
                 {erroLogin && (
@@ -1031,36 +997,68 @@ export default function BarbeariaPage() {
                     {erroLogin}
                   </div>
                 )}
-                <div>
-                  <Label className="text-foreground">E-mail ou telefone</Label>
-                  <Input
-                    value={formLogin.emailOuTelefone}
-                    onChange={(e) => setFormLogin((p) => ({ ...p, emailOuTelefone: e.target.value }))}
-                    placeholder="seu@email.com ou (11) 99999-9999"
-                    className="mt-1 bg-card border-border"
-                    required
-                  />
-                </div>
-                <div>
-                  <Label className="text-foreground">Senha</Label>
-                  <div className="relative">
-                    <Input
-                      type={showSenhaLogin ? "text" : "password"}
-                      value={formLogin.senha}
-                      onChange={(e) => setFormLogin((p) => ({ ...p, senha: e.target.value }))}
-                      placeholder="Sua senha"
-                      className="mt-1 bg-card border-border pr-10"
-                      required
-                    />
-                    <button
-                      type="button"
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-                      onClick={() => setShowSenhaLogin(!showSenhaLogin)}
-                    >
-                      {showSenhaLogin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                </div>
+                {!loginLegacy ? (
+                  <>
+                    <div>
+                      <Label className="text-foreground">Telefone</Label>
+                      <Input
+                        value={formLogin.telefone}
+                        onChange={(e) => setFormLogin((p) => ({ ...p, telefone: formatPhone(e.target.value) }))}
+                        placeholder="(00) 00000-0000"
+                        className="mt-1 bg-card border-border"
+                        inputMode="tel"
+                        autoComplete="tel"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-foreground">Nome completo</Label>
+                      <Input
+                        value={formLogin.nome}
+                        onChange={(e) => setFormLogin((p) => ({ ...p, nome: e.target.value }))}
+                        placeholder="Igual ao cadastro"
+                        className="mt-1 bg-card border-border"
+                        autoComplete="name"
+                        required
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <Label className="text-foreground">E-mail ou telefone</Label>
+                      <Input
+                        value={formLoginLegacy.emailOuTelefone}
+                        onChange={(e) =>
+                          setFormLoginLegacy((p) => ({ ...p, emailOuTelefone: e.target.value }))
+                        }
+                        placeholder="seu@email.com ou (11) 99999-9999"
+                        className="mt-1 bg-card border-border"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-foreground">Senha</Label>
+                      <div className="relative">
+                        <Input
+                          type={showSenhaLogin ? "text" : "password"}
+                          value={formLoginLegacy.senha}
+                          onChange={(e) => setFormLoginLegacy((p) => ({ ...p, senha: e.target.value }))}
+                          placeholder="Sua senha"
+                          className="mt-1 bg-card border-border pr-10"
+                          required
+                        />
+                        <button
+                          type="button"
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                          onClick={() => setShowSenhaLogin(!showSenhaLogin)}
+                        >
+                          {showSenhaLogin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
                 <Button
                   type="submit"
                   disabled={authLoading}
@@ -1069,6 +1067,16 @@ export default function BarbeariaPage() {
                   {authLoading ? "Entrando..." : "Entrar"}
                 </Button>
               </form>
+              <button
+                type="button"
+                className="w-full text-center text-xs text-muted-foreground hover:text-foreground mt-2 underline-offset-2 hover:underline"
+                onClick={() => {
+                  setErroLogin("")
+                  setLoginLegacy((v) => !v)
+                }}
+              >
+                {loginLegacy ? "Voltar para telefone e nome" : "Conta antiga com senha?"}
+              </button>
               <p className="text-center text-sm text-muted-foreground mt-4">
                 Não tem conta?{" "}
                 <button

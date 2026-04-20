@@ -31,6 +31,7 @@ export async function GET(
     const url = new URL(request.url)
     const date = url.searchParams.get("date")?.trim()
     const barberId = url.searchParams.get("barber_id")?.trim()
+    const unitIdParam = url.searchParams.get("unit_id")?.trim() || null
     if (!date || !barberId) {
       return NextResponse.json({ occupied_times: [] })
     }
@@ -38,6 +39,15 @@ export async function GET(
     const shop = await getActiveBarbershopBySlug(slug)
     if (!shop || shop.suspendedAt) {
       return NextResponse.json({ error: "Barbearia não encontrada" }, { status: 404 })
+    }
+
+    let unitId: string | null = null
+    if (unitIdParam) {
+      const unit = await prisma.barbershopUnit.findFirst({
+        where: { id: unitIdParam, barbershopId: shop.id, active: true },
+        select: { id: true },
+      })
+      unitId = unit?.id ?? null
     }
 
     let dayBounds: { gte: Date; lt: Date }
@@ -51,6 +61,7 @@ export async function GET(
       where: {
         barbershopId: shop.id,
         barberId,
+        ...(unitId ? { unitId } : {}),
         date: { gte: dayBounds.gte, lt: dayBounds.lt },
         status: { in: ["pending", "confirmed"] },
       },

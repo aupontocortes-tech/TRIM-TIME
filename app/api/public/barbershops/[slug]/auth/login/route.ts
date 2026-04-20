@@ -2,9 +2,17 @@ import { NextResponse } from "next/server"
 import { cookies } from "next/headers"
 import { prisma } from "@/lib/prisma"
 import { verifyPassword } from "@/lib/auth/password"
-import { getActiveBarbershopBySlug, getClientPasswordHash, toPublicClientSession } from "@/lib/public-booking"
+import {
+  getActiveBarbershopBySlug,
+  getClientPasswordHash,
+  toPublicClientSession,
+} from "@/lib/public-booking"
 import { publicClientCookieName, signPublicClientSession } from "@/lib/public-client-session"
-import { clientPhoneDigits, findClientByPhoneDigits } from "@/lib/client-by-phone"
+import {
+  clientPhoneDigits,
+  findClientByPhoneDigits,
+  normalizeClienteNomeParaComparar,
+} from "@/lib/client-by-phone"
 
 export async function POST(
   request: Request,
@@ -18,13 +26,64 @@ export async function POST(
     }
 
     const body = (await request.json().catch(() => ({}))) as {
+      telefone?: string
+      nome?: string
       emailOuTelefone?: string
       senha?: string
     }
+    const telefoneRaw = String(body.telefone ?? "").trim()
+    const nomeRaw = String(body.nome ?? "").trim()
     const emailOuTelefone = String(body.emailOuTelefone ?? "").trim()
     const senha = String(body.senha ?? "")
+
+    /** Login simples: telefone + nome (sem senha no corpo). */
+    const loginSimples = telefoneRaw.length > 0 && nomeRaw.length > 0 && !senha
+
+    if (loginSimples) {
+      if (clientPhoneDigits(telefoneRaw).length < 10) {
+        return NextResponse.json({ error: "Informe um telefone válido com DDD" }, { status: 400 })
+      }
+      const candidate = await findClientByPhoneDigits(shop.id, telefoneRaw)
+      if (!candidate) {
+        return NextResponse.json({ error: "Telefone ou nome não encontrados" }, { status: 401 })
+      }
+      const hash = getClientPasswordHash(candidate.notes)
+      if (hash) {
+        return NextResponse.json(
+          {
+            error:
+              "Esta conta usa senha. Abra «Conta antiga com senha» e entre com e-mail ou telefone e senha.",
+          },
+          { status: 401 }
+        )
+      }
+      if (
+        normalizeClienteNomeParaComparar(candidate.name) !== normalizeClienteNomeParaComparar(nomeRaw)
+      ) {
+        return NextResponse.json({ error: "Nome não confere com o cadastro deste telefone" }, { status: 401 })
+      }
+
+      const cookieStore = await cookies()
+      cookieStore.set(
+        publicClientCookieName(slug),
+        signPublicClientSession({ clientId: candidate.id, slug }),
+        {
+          path: "/",
+          maxAge: 60 * 60 * 24 * 30,
+          httpOnly: true,
+          sameSite: "lax",
+          secure: process.env.NODE_ENV === "production",
+        }
+      )
+      return NextResponse.json({ ok: true, client: toPublicClientSession(candidate) })
+    }
+
+    /** Legado: e-mail ou telefone + senha */
     if (!emailOuTelefone || !senha) {
-      return NextResponse.json({ error: "E-mail/telefone e senha são obrigatórios" }, { status: 400 })
+      return NextResponse.json(
+        { error: "Informe telefone e nome, ou use e-mail/telefone e senha (conta antiga)." },
+        { status: 400 }
+      )
     }
 
     const emailLower = emailOuTelefone.toLowerCase()
@@ -62,7 +121,7 @@ export async function POST(
     }
 
     const hash = getClientPasswordHash(candidate.notes)
-    if (!verifyPassword(senha, hash)) {
+    if (!hash || !verifyPassword(senha, hash)) {
       return NextResponse.json({ error: "Email/telefone ou senha incorretos" }, { status: 401 })
     }
 

@@ -16,17 +16,20 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { useBarbershop } from "@/hooks/use-barbershop"
+import { useUnits } from "@/hooks/use-units"
 import type { DashboardStats } from "@/lib/db/types"
 import type { Appointment } from "@/lib/db/types"
 
 export default function PainelDashboard() {
   const { barbershop, loading: barbershopLoading } = useBarbershop()
+  const { selectedUnitId, loading: unitsLoading } = useUnits()
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [agendamentosHoje, setAgendamentosHoje] = useState<Appointment[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (barbershopLoading) return
+    if (barbershopLoading || unitsLoading) return
+    setLoading(true)
     const today = new Date().toISOString().slice(0, 10)
     Promise.all([
       fetch("/api/dashboard", { credentials: "include" }).then((r) => (r.ok ? r.json() : null)),
@@ -35,7 +38,7 @@ export default function PainelDashboard() {
       setStats(dashboardData)
       setAgendamentosHoje(Array.isArray(appointments) ? appointments : [])
     }).finally(() => setLoading(false))
-  }, [barbershopLoading])
+  }, [barbershopLoading, unitsLoading, selectedUnitId])
 
   const isLoading = barbershopLoading || loading
   const nomeBarbearia = barbershop?.name ?? "Barbearia"

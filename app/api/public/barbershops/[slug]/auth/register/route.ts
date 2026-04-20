@@ -3,9 +3,9 @@ import { cookies } from "next/headers"
 import { prisma } from "@/lib/prisma"
 import { hashPassword } from "@/lib/auth/password"
 import { buildClientNotes, parseClientNotes } from "@/lib/client-auth-notes"
-import { getActiveBarbershopBySlug, toPublicClientSession } from "@/lib/public-booking"
+import { getActiveBarbershopBySlug, getClientPasswordHash, toPublicClientSession } from "@/lib/public-booking"
 import { publicClientCookieName, signPublicClientSession } from "@/lib/public-client-session"
-import { findClientByPhoneDigits } from "@/lib/client-by-phone"
+import { clientPhoneDigits, findClientByPhoneDigits } from "@/lib/client-by-phone"
 
 export async function POST(
   request: Request,
@@ -25,41 +25,92 @@ export async function POST(
       senha?: string
     }
     const nome = String(body.nome ?? "").trim()
-    const email = String(body.email ?? "").trim().toLowerCase()
     const telefone = String(body.telefone ?? "").trim()
+    const email = String(body.email ?? "").trim().toLowerCase()
     const senha = String(body.senha ?? "")
 
-    if (!nome || !email || !senha) {
-      return NextResponse.json({ error: "Nome, e-mail e senha são obrigatórios" }, { status: 400 })
-    }
-    if (senha.length < 6) {
-      return NextResponse.json({ error: "A senha deve ter pelo menos 6 caracteres" }, { status: 400 })
+    /** Fluxo principal: só nome + telefone. Senha/e-mail opcionais para contas antigas. */
+    const modoCompleto = Boolean(senha) || Boolean(email)
+
+    if (!nome || !telefone) {
+      return NextResponse.json({ error: "Nome e telefone são obrigatórios" }, { status: 400 })
     }
 
-    const normalizedPhone = telefone.replace(/\D/g, "")
-    let existing = await prisma.client.findFirst({
-      where: { barbershopId: shop.id, email },
-      select: { id: true, name: true, email: true, phone: true, notes: true, photoUrl: true, cpf: true },
-    })
-    if (!existing && normalizedPhone.length >= 10) {
+    const digits = clientPhoneDigits(telefone)
+    if (digits.length < 10) {
+      return NextResponse.json({ error: "Informe um telefone válido com DDD" }, { status: 400 })
+    }
+
+    if (modoCompleto) {
+      if (!email || !senha) {
+        return NextResponse.json(
+          { error: "Para cadastro com senha, informe também e-mail e senha (mín. 6 caracteres)." },
+          { status: 400 }
+        )
+      }
+      if (senha.length < 6) {
+        return NextResponse.json({ error: "A senha deve ter pelo menos 6 caracteres" }, { status: 400 })
+      }
+    }
+
+    let existing = email
+      ? await prisma.client.findFirst({
+          where: { barbershopId: shop.id, email },
+          select: { id: true, name: true, email: true, phone: true, notes: true, photoUrl: true, cpf: true },
+        })
+      : null
+    if (!existing) {
       existing = await findClientByPhoneDigits(shop.id, telefone)
     }
 
     let client
     if (existing) {
-      const auth = parseClientNotes(existing.notes).auth
-      if (auth.passwordHash) {
-        return NextResponse.json({ error: "Já existe uma conta com este e-mail/telefone" }, { status: 409 })
+      if (modoCompleto) {
+        const auth = parseClientNotes(existing.notes).auth
+        if (auth.passwordHash) {
+          return NextResponse.json({ error: "Já existe uma conta com este e-mail/telefone" }, { status: 409 })
+        }
+        client = await prisma.client.update({
+          where: { id: existing.id },
+          data: {
+            name: nome,
+            email,
+            phone: telefone || null,
+            notes: buildClientNotes(parseClientNotes(existing.notes).visibleNotes, {
+              passwordHash: hashPassword(senha),
+            }),
+          },
+          select: { id: true, name: true, email: true, phone: true, photoUrl: true, cpf: true },
+        })
+      } else {
+        if (getClientPasswordHash(existing.notes)) {
+          return NextResponse.json(
+            {
+              error:
+                "Este telefone já tem conta com senha. Use «Entrar» e, se precisar, «Conta antiga com senha».",
+            },
+            { status: 409 }
+          )
+        }
+        const prev = parseClientNotes(existing.notes)
+        client = await prisma.client.update({
+          where: { id: existing.id },
+          data: {
+            name: nome,
+            phone: telefone || null,
+            notes: buildClientNotes(prev.visibleNotes, {}),
+          },
+          select: { id: true, name: true, email: true, phone: true, photoUrl: true, cpf: true },
+        })
       }
-      client = await prisma.client.update({
-        where: { id: existing.id },
+    } else if (modoCompleto) {
+      client = await prisma.client.create({
         data: {
+          barbershopId: shop.id,
           name: nome,
           email,
           phone: telefone || null,
-          notes: buildClientNotes(parseClientNotes(existing.notes).visibleNotes, {
-            passwordHash: hashPassword(senha),
-          }),
+          notes: buildClientNotes(null, { passwordHash: hashPassword(senha) }),
         },
         select: { id: true, name: true, email: true, phone: true, photoUrl: true, cpf: true },
       })
@@ -68,9 +119,9 @@ export async function POST(
         data: {
           barbershopId: shop.id,
           name: nome,
-          email,
+          email: null,
           phone: telefone || null,
-          notes: buildClientNotes(null, { passwordHash: hashPassword(senha) }),
+          notes: null,
         },
         select: { id: true, name: true, email: true, phone: true, photoUrl: true, cpf: true },
       })

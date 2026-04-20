@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import { useUnits } from "@/hooks/use-units"
 import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -95,6 +96,7 @@ type FinancialSummary = {
 }
 
 export default function FinanceiroPage() {
+  const { selectedUnitId, loading: unitsLoading } = useUnits()
   const [periodoSelecionado, setPeriodoSelecionado] = useState("Este Mês")
   const [commissionSummary, setCommissionSummary] = useState<CommissionsSummaryResponse | null>(null)
   const [commissionLoading, setCommissionLoading] = useState(true)
@@ -145,8 +147,9 @@ export default function FinanceiroPage() {
   }, [])
 
   useEffect(() => {
+    if (unitsLoading) return
     void loadPeriod(periodoSelecionado)
-  }, [periodoSelecionado, loadPeriod])
+  }, [periodoSelecionado, loadPeriod, selectedUnitId, unitsLoading])
 
   const prev = financial?.revenue_previous ?? 0
   const rev = financial?.revenue ?? 0

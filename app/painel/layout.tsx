@@ -266,9 +266,17 @@ function PainelLayoutInner({ children }: { children: React.ReactNode }) {
                   ))}
                 </select>
               </div>
-              <Button variant="ghost" size="icon" className="relative">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="relative opacity-60 cursor-not-allowed"
+                type="button"
+                disabled
+                title="Notificações em breve"
+                aria-label="Notificações (em breve)"
+              >
                 <Bell className="w-5 h-5 text-muted-foreground" />
-                <span className="absolute top-1 right-1 w-2 h-2 bg-primary rounded-full" />
+                <span className="absolute top-1 right-1 w-2 h-2 bg-muted-foreground/40 rounded-full" />
               </Button>
               <span className="md:hidden text-xs text-muted-foreground">{selectedUnitLabel}</span>
               <Link href={barbershop?.slug ? `/b/${barbershop.slug}` : "/b/trim-time"} target="_blank" rel="noopener noreferrer">

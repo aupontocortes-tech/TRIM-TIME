@@ -14,7 +14,7 @@ import { BrandLogo } from "@/components/brand-logo"
 /** Dados salvos só neste aparelho (localStorage). Não use em computadores compartilhados. */
 const SAVED_LOGIN_KEY = "trimtime_saved_login_v1"
 
-type SavedLogin = { email: string; password: string }
+type SavedLogin = { email: string }
 
 export default function LoginPage() {
   const router = useRouter()
@@ -31,9 +31,9 @@ export default function LoginPage() {
     try {
       const raw = localStorage.getItem(SAVED_LOGIN_KEY)
       if (!raw) return
-      const parsed = JSON.parse(raw) as SavedLogin
-      if (parsed?.email && typeof parsed.password === "string") {
-        setFormData({ email: parsed.email, password: parsed.password })
+      const parsed = JSON.parse(raw) as SavedLogin & { password?: string }
+      if (parsed?.email && typeof parsed.email === "string") {
+        setFormData((prev) => ({ ...prev, email: parsed.email }))
         setRememberDevice(true)
       }
     } catch {
@@ -66,7 +66,6 @@ export default function LoginPage() {
         if (rememberDevice) {
           const payload: SavedLogin = {
             email: formData.email.trim().toLowerCase(),
-            password: formData.password,
           }
           localStorage.setItem(SAVED_LOGIN_KEY, JSON.stringify(payload))
         } else {
@@ -172,13 +171,17 @@ export default function LoginPage() {
                 </Field>
               </FieldGroup>
 
-              <div className="flex justify-start pt-1">
+              <div className="flex items-center gap-2 pt-1">
                 <Checkbox
+                  id="remember-email"
                   checked={rememberDevice}
                   onCheckedChange={(v) => setRememberDevice(v === true)}
                   className="size-5 shrink-0 rounded-[4px] border-2 border-border"
-                  aria-label="Salvar e-mail e senha neste aparelho"
+                  aria-label="Lembrar e-mail neste aparelho"
                 />
+                <label htmlFor="remember-email" className="text-sm text-muted-foreground cursor-pointer">
+                  Lembrar meu e-mail neste aparelho
+                </label>
               </div>
 
               <Button 
