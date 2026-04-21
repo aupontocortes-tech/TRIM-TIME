@@ -121,19 +121,6 @@ export function AppInstallPrompt({
     return () => window.removeEventListener("beforeinstallprompt", onBip)
   }, [hideKey])
 
-  const bookingInstallHref =
-    typeof window !== "undefined"
-      ? (() => {
-          try {
-            const u = new URL(window.location.href)
-            u.searchParams.set("instalar", "1")
-            return u.toString()
-          } catch {
-            return ""
-          }
-        })()
-      : ""
-
   const copyBookingInstallLink = useCallback(() => {
     if (typeof window === "undefined") return
     try {
@@ -183,12 +170,14 @@ export function AppInstallPrompt({
 
   const title =
     variant === "clientBooking"
-      ? "Atalho só para agendar"
+      ? "Instalar agendamento"
       : "Baixe o Trim Time"
   const subtitle =
     variant === "clientBooking"
-      ? "Este link é só para clientes marcarem horário — é separado do app do barbeiro. Abra no Chrome ou Safari, adicione à tela inicial e use como um app de agendamento (ícone na home, tela cheia)."
+      ? "Cole o link no Chrome ou Safari e use o botão abaixo para fixar na tela inicial — é só para marcar horário."
       : "Instale como aplicativo no Android, iPhone ou computador — atalho na tela inicial e uso em tela cheia."
+
+  const isClientBooking = variant === "clientBooking"
 
   const modal = (
     <div className="trimtime-install-root" data-trimtime-install="">
@@ -234,51 +223,87 @@ export function AppInstallPrompt({
               </div>
             </div>
 
-            {variant === "clientBooking" ? (
-              <div className="mt-4 rounded-lg border border-primary/25 bg-primary/5 p-3 space-y-3">
-                <p className="text-xs font-medium text-foreground">
-                  Guarde o link da barbearia: ao colar no navegador você instala só a página de agendamento, não o
-                  painel do profissional. No celular, use os botões abaixo se precisar abrir na loja.
-                </p>
-                <div className="flex flex-col gap-2">
-                  {playStoreUrl ? (
-                    <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90" asChild>
-                      <a href={playStoreUrl} target="_blank" rel="noopener noreferrer">
-                        <Download className="w-4 h-4 mr-2 shrink-0" />
-                        Baixar no Google Play
-                      </a>
-                    </Button>
-                  ) : null}
-                  {appStoreUrl ? (
-                    <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90" asChild>
-                      <a href={appStoreUrl} target="_blank" rel="noopener noreferrer">
-                        <Download className="w-4 h-4 mr-2 shrink-0" />
-                        Baixar na App Store
-                      </a>
-                    </Button>
-                  ) : null}
-                  {bookingInstallHref ? (
-                    <Button variant="outline" className="w-full border-border" asChild>
-                      <a href={bookingInstallHref} target="_blank" rel="noopener noreferrer">
-                        <Smartphone className="w-4 h-4 mr-2 shrink-0" />
-                        Abrir esta página no navegador (instalar PWA)
-                      </a>
-                    </Button>
-                  ) : null}
+            {isClientBooking ? (
+              <div className="mt-4 space-y-3">
+                {canInstallPwa ? (
                   <Button
                     type="button"
-                    variant="secondary"
-                    className="w-full"
+                    size="lg"
+                    className="w-full bg-primary text-primary-foreground hover:bg-primary/90 h-12 text-base font-semibold"
+                    onClick={() => void runInstall()}
+                  >
+                    <Download className="w-5 h-5 mr-2 shrink-0" />
+                    Instalar aplicativo
+                  </Button>
+                ) : null}
+
+                {!canInstallPwa && platform === "ios" ? (
+                  <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-3 text-sm text-muted-foreground">
+                    <p className="font-medium text-foreground mb-2">No iPhone (Safari)</p>
+                    <ol className="list-decimal list-inside space-y-1.5 text-xs leading-relaxed">
+                      <li>
+                        Toque em <strong className="text-foreground">Compartilhar</strong>
+                      </li>
+                      <li>
+                        <strong className="text-foreground">Adicionar à Tela de Início</strong>
+                      </li>
+                      <li>Pronto — o ícone fica como um app</li>
+                    </ol>
+                  </div>
+                ) : null}
+
+                {!canInstallPwa && platform === "android" ? (
+                  <p className="text-sm text-muted-foreground leading-snug">
+                    No <strong className="text-foreground">Chrome</strong>: menu{" "}
+                    <strong className="text-foreground">⋮</strong> →{" "}
+                    <strong className="text-foreground">Instalar app</strong> ou{" "}
+                    <strong className="text-foreground">Adicionar à tela inicial</strong>.
+                  </p>
+                ) : null}
+
+                {!canInstallPwa && platform === "desktop" ? (
+                  <p className="text-sm text-muted-foreground leading-snug">
+                    No <strong className="text-foreground">Chrome</strong> ou{" "}
+                    <strong className="text-foreground">Edge</strong>: procure o ícone de instalar na barra de endereços
+                    ou use o menu → <strong className="text-foreground">Instalar aplicativo</strong>.
+                  </p>
+                ) : null}
+
+                <div className="flex flex-col gap-2 pt-1">
+                  {(playStoreUrl || appStoreUrl) && (
+                    <div className="flex flex-wrap gap-2 justify-center">
+                      {playStoreUrl ? (
+                        <Button variant="outline" size="sm" className="border-border" asChild>
+                          <a href={playStoreUrl} target="_blank" rel="noopener noreferrer">
+                            Google Play
+                          </a>
+                        </Button>
+                      ) : null}
+                      {appStoreUrl ? (
+                        <Button variant="outline" size="sm" className="border-border" asChild>
+                          <a href={appStoreUrl} target="_blank" rel="noopener noreferrer">
+                            App Store
+                          </a>
+                        </Button>
+                      ) : null}
+                    </div>
+                  )}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full border-border text-foreground"
                     onClick={() => void copyBookingInstallLink()}
                   >
                     <Copy className="w-4 h-4 mr-2 shrink-0" />
-                    {installLinkCopied ? "Link copiado!" : "Copiar link com instalação (?instalar=1)"}
+                    {installLinkCopied ? "Link copiado!" : "Copiar link para colar no navegador"}
                   </Button>
                 </div>
               </div>
             ) : null}
 
-            <div className="mt-4 flex flex-col sm:flex-row gap-2 flex-wrap">
+            <div
+              className={`mt-4 flex flex-col sm:flex-row gap-2 flex-wrap ${isClientBooking ? "hidden" : ""}`}
+            >
               {canInstallPwa ? (
                 <Button
                   type="button"
@@ -351,7 +376,15 @@ export function AppInstallPrompt({
               </Button>
             </div>
 
-            {platform === "ios" && showIosHelp ? (
+            {isClientBooking ? (
+              <div className="mt-4 flex justify-center border-t border-border pt-3">
+                <Button type="button" variant="ghost" className="text-muted-foreground" onClick={dismiss}>
+                  Agora não
+                </Button>
+              </div>
+            ) : null}
+
+            {!isClientBooking && platform === "ios" && showIosHelp ? (
               <ol className="mt-3 text-xs text-muted-foreground space-y-1.5 list-decimal list-inside border-t border-border pt-3">
                 <li>
                   Toque no botão{" "}
@@ -369,7 +402,7 @@ export function AppInstallPrompt({
               </ol>
             ) : null}
 
-            {platform === "desktop" && showDesktopHelp ? (
+            {!isClientBooking && platform === "desktop" && showDesktopHelp ? (
               <ul className="mt-3 text-xs text-muted-foreground space-y-1.5 border-t border-border pt-3">
                 <li>
                   <strong className="text-foreground">Chrome ou Edge:</strong>{" "}
@@ -390,7 +423,7 @@ export function AppInstallPrompt({
               </ul>
             ) : null}
 
-            {!canInstallPwa && platform === "android" ? (
+            {!isClientBooking && !canInstallPwa && platform === "android" ? (
               <p className="mt-3 text-xs text-muted-foreground border-t border-border pt-3">
                 No <strong className="text-foreground">Chrome</strong>: menu{" "}
                 <strong className="text-foreground">⋮</strong> →{" "}
@@ -402,13 +435,11 @@ export function AppInstallPrompt({
             ) : null}
 
             <p className="mt-3 text-[11px] text-muted-foreground/80 text-center">
-              {variant === "clientBooking"
-                ? "O aviso sumiu? Peça o link de novo e acrescente "
+              {isClientBooking
+                ? "Não apareceu de novo? Use o link com "
                 : "Não apareceu? Tente "}
               <span className="text-foreground/90 font-medium">?instalar=1</span>
-              {variant === "clientBooking"
-                ? " no final da URL para mostrar esta mensagem de novo."
-                : " no final do link."}
+              {isClientBooking ? " no final." : " no final do link."}
             </p>
           </CardContent>
         </Card>
