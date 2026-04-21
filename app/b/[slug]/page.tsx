@@ -36,6 +36,7 @@ import {
   saveSavedClientProfile,
 } from "@/lib/cliente-booking-saved-profile"
 import { formatCpfDisplay, cpfDigits } from "@/lib/cpf"
+import { clientPhoneDigits, clientPhonesMatch } from "@/lib/client-by-phone"
 import { openingHoursFromSettings } from "@/lib/barbershop-settings-ui"
 import type { BarbershopSettings } from "@/lib/db/types"
 import { compressImageToJpegDataUrl } from "@/lib/client-image-compress"
@@ -334,17 +335,27 @@ export default function BarbeariaPage() {
       return
     }
 
-    const convidadoOk =
-      !clienteLogado && typeof p.clienteId === "string" && p.clienteId.startsWith("guest_")
-    const logadoOk = clienteLogado != null && p.clienteId === clienteLogado.id
-    if (!convidadoOk && !logadoOk) {
+    if (clienteLogado) {
+      const idMatch = p.clienteId === clienteLogado.id
+      const phoneMatch =
+        typeof p.clientPhoneDigits === "string" &&
+        p.clientPhoneDigits.length >= 10 &&
+        clientPhonesMatch(p.clientPhoneDigits, clienteLogado.telefone)
+      if (!idMatch && !phoneMatch) {
+        setBookingSummary(null)
+        setAgendamentoConfirmado(false)
+        return
+      }
+    } else if (p.bookedWithoutLogin === false) {
+      /** Reservado a quem confirmou logado: sem sessão não exibir (evita misturar contas no mesmo aparelho). */
       setBookingSummary(null)
       setAgendamentoConfirmado(false)
       return
     }
 
     setBookingSummary(p)
-    const focus = p.uiFocus ?? "confirmation"
+    /** Sem uiFocus salvo, reabrir no fluxo principal com card (não prender na tela cheia antiga). */
+    const focus = p.uiFocus ?? "browsing"
     if (focus === "browsing") {
       setAgendamentoConfirmado(false)
       setTrimPlayStage("intro")
@@ -852,6 +863,9 @@ export default function BarbeariaPage() {
       if (data.client) {
         setClienteLogado(data.client)
       }
+      const digitsTel = clientPhoneDigits(
+        dadosCliente.telefone || data.client?.telefone || clienteLogado?.telefone || ""
+      )
       const summary: PersistedClientBookingV1 = {
         v: 1,
         clienteId: data.client?.id ?? clienteLogado?.id ?? `guest_${Date.now()}`,
@@ -871,6 +885,8 @@ export default function BarbeariaPage() {
         nomeExibicao: dadosCliente.nome.trim() || data.client?.nome || clienteLogado?.nome || "Cliente",
         totalPreco,
         totalDuracao,
+        clientPhoneDigits: digitsTel.length >= 10 ? digitsTel : null,
+        bookedWithoutLogin: !clienteLogado,
         uiFocus: "confirmation",
       }
       saveConfirmedBooking(slug, summary)

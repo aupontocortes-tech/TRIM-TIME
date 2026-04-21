@@ -17,6 +17,10 @@ export type PersistedClientBookingV1 = {
   nomeExibicao: string
   totalPreco: number
   totalDuracao: number
+  /** Telefone só dígitos no momento da confirmação — reabrir o app com sessão pode casar por telefone se o id mudar. */
+  clientPhoneDigits?: string | null
+  /** true = fluxo sem conta logada na hora da confirmação (API ainda cria cliente com UUID). */
+  bookedWithoutLogin?: boolean
   /**
    * confirmation = tela cheia de confirmação (padrão ao concluir agendamento ou dados antigos sem campo).
    * browsing = cliente voltou ao fluxo (etapa 1); resumo fica no card e pode reabrir confirmação / Trim Play.
