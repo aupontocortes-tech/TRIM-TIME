@@ -14,9 +14,11 @@ import {
   X,
 } from "lucide-react"
 
-/** v5: novo ciclo de exibição */
+/** v5: novo ciclo de exibição (landing / fluxo geral) */
 const STORAGE_HIDE_KEY = "trimtime_install_prompt_hide_v5"
 const STORAGE_HIDE_DAYS = 14
+/** Sufixo: só esconde na mesma aba até fechar o navegador — link de agendamento volta a mostrar em aba nova. */
+const SESSION_DISMISS_SUFFIX = "_session_dismiss_v1"
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>
@@ -90,21 +92,34 @@ export function AppInstallPrompt({
     if (isStandaloneMode()) return
 
     const forceShow = shouldForceFromUrl()
-    /** Só ignora “já fechei” quando a URL pede instalação — evita modal bloqueando /b/slug no celular */
-    const skipLocalStorageHide = forceShow
+    const sessionDismissKey = hideKey + SESSION_DISMISS_SUFFIX
 
-    if (!skipLocalStorageHide) {
+    if (variant === "clientBooking") {
+      /** Link público: não usar o “14 dias” do localStorage (sumia ao colar o link de novo). */
       try {
-        const raw = localStorage.getItem(hideKey)
-        if (raw) {
-          const t = parseInt(raw, 10)
-          if (!Number.isNaN(t)) {
-            const days = (Date.now() - t) / (1000 * 60 * 60 * 24)
-            if (days < STORAGE_HIDE_DAYS) return
-          }
+        if (forceShow) {
+          sessionStorage.removeItem(sessionDismissKey)
+        } else if (sessionStorage.getItem(sessionDismissKey) === "1") {
+          return
         }
       } catch {
         /* ignore */
+      }
+    } else {
+      const skipLocalStorageHide = forceShow
+      if (!skipLocalStorageHide) {
+        try {
+          const raw = localStorage.getItem(hideKey)
+          if (raw) {
+            const t = parseInt(raw, 10)
+            if (!Number.isNaN(t)) {
+              const days = (Date.now() - t) / (1000 * 60 * 60 * 24)
+              if (days < STORAGE_HIDE_DAYS) return
+            }
+          }
+        } catch {
+          /* ignore */
+        }
       }
     }
 
@@ -119,7 +134,7 @@ export function AppInstallPrompt({
     }
     window.addEventListener("beforeinstallprompt", onBip)
     return () => window.removeEventListener("beforeinstallprompt", onBip)
-  }, [hideKey])
+  }, [hideKey, variant])
 
   const copyBookingInstallLink = useCallback(() => {
     if (typeof window === "undefined") return
@@ -137,11 +152,15 @@ export function AppInstallPrompt({
   const dismiss = useCallback(() => {
     setShow(false)
     try {
-      localStorage.setItem(hideKey, String(Date.now()))
+      if (variant === "clientBooking") {
+        sessionStorage.setItem(hideKey + SESSION_DISMISS_SUFFIX, "1")
+      } else {
+        localStorage.setItem(hideKey, String(Date.now()))
+      }
     } catch {
       /* ignore */
     }
-  }, [hideKey])
+  }, [hideKey, variant])
 
   useEffect(() => {
     if (!show) return
