@@ -886,19 +886,28 @@ export default function BarbeariaPage() {
 
   const barbershopId = publicMeta?.id ?? ""
 
+  /** Sempre no mesmo “slot” do React — não desmonta ao mudar loading → logado (evita sumir o modal PWA). */
+  const clientBookingInstallPrompt = (
+    <AppInstallPrompt storageSuffix={storageSuffix} variant="clientBooking" />
+  )
+
   // —— Telas de acesso: loading, cadastro, login ——
   if (authPhase === "loading") {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <div className="text-muted-foreground">Carregando...</div>
-        <AppInstallPrompt storageSuffix={storageSuffix} variant="clientBooking" />
-      </div>
+      <>
+        {clientBookingInstallPrompt}
+        <div className="min-h-screen bg-background flex items-center justify-center p-4">
+          <div className="text-muted-foreground">Carregando...</div>
+        </div>
+      </>
     )
   }
 
   if (authPhase === "cadastro") {
     return (
-      <div className="min-h-screen bg-background">
+      <>
+        {clientBookingInstallPrompt}
+        <div className="min-h-screen bg-background">
         <div className="h-32 bg-gradient-to-r from-primary/30 to-primary/10" />
         <div className="max-w-md mx-auto px-4 -mt-8">
           <Card className="bg-card border-border">
@@ -970,14 +979,16 @@ export default function BarbeariaPage() {
             </CardContent>
           </Card>
         </div>
-        <AppInstallPrompt storageSuffix={storageSuffix} variant="clientBooking" />
       </div>
+      </>
     )
   }
 
   if (authPhase === "login") {
     return (
-      <div className="min-h-screen bg-background">
+      <>
+        {clientBookingInstallPrompt}
+        <div className="min-h-screen bg-background">
         <div className="h-32 bg-gradient-to-r from-primary/30 to-primary/10" />
         <div className="max-w-md mx-auto px-4 -mt-8">
           <Card className="bg-card border-border">
@@ -1101,8 +1112,8 @@ export default function BarbeariaPage() {
             </CardContent>
           </Card>
         </div>
-        <AppInstallPrompt storageSuffix={storageSuffix} variant="clientBooking" />
       </div>
+      </>
     )
   }
 
@@ -1131,7 +1142,9 @@ export default function BarbeariaPage() {
     const resumoData = bookingSummary ? new Date(bookingSummary.dataIso) : null
 
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center p-4 text-white">
+      <>
+        {clientBookingInstallPrompt}
+        <div className="min-h-screen bg-black flex items-center justify-center p-4 text-white">
         <Card className="max-w-md w-full bg-black border-[#FFD700]/35 shadow-none max-h-[min(100dvh-2rem,720px)] overflow-y-auto">
           <CardContent className="p-6 sm:p-8 text-left">
             <div className="text-center mb-5">
@@ -1226,15 +1239,15 @@ export default function BarbeariaPage() {
             </div>
           </CardContent>
         </Card>
-
-        <AppInstallPrompt storageSuffix={storageSuffix} variant="clientBooking" />
       </div>
+      </>
     )
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <AppInstallPrompt storageSuffix={storageSuffix} variant="clientBooking" />
+    <>
+      {clientBookingInstallPrompt}
+      <div className="min-h-screen bg-background">
       {/* Barra: Sair */}
       {clienteLogado && (
         <div className="sticky top-0 z-20 border-b border-border bg-background/90 backdrop-blur">
@@ -1924,5 +1937,6 @@ export default function BarbeariaPage() {
         </DialogContent>
       </Dialog>
     </div>
+    </>
   )
 }
