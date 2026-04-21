@@ -172,6 +172,23 @@ type PublicShopPayload = {
   barbers: { id: string; name: string; phone: string | null; photo_url?: string | null; photo_position?: number }[]
 }
 
+type CurrentPublicAppointmentPayload = {
+  appointment: null | {
+    client_id: string
+    client_name: string
+    date: string
+    time: string
+    barber_id: string
+    barber_name: string
+    unit_id: string | null
+    unit_name: string | null
+    services: { id: string; name: string; duration: number; price: number }[]
+    appointment_ids: string[]
+    total_price: number
+    total_duration: number
+  }
+}
+
 export default function BarbeariaPage() {
   const params = useParams()
   const slug = (params?.slug as string) || "trim-time"
@@ -398,6 +415,72 @@ export default function BarbeariaPage() {
       }))
     }
   }, [authPhase, clienteLogado, slug])
+
+  /**
+   * Fallback de restauração: se não houver resumo local, busca agendamento ativo no servidor.
+   * Isso evita abrir direto no fluxo 1-4 quando o cliente já tem horário.
+   */
+  useEffect(() => {
+    if (authPhase !== "logado" || bookingSummary) return
+    let cancelled = false
+
+    const savedProfile = loadSavedClientProfile(slug)
+    const phoneHint = clienteLogado?.telefone || dadosCliente.telefone || savedProfile?.telefone || ""
+    const query =
+      clientPhoneDigits(phoneHint).length >= 10 ? `?phone=${encodeURIComponent(phoneHint)}` : ""
+
+    fetch(`/api/public/barbershops/${encodeURIComponent(slug)}/appointments/current${query}`, {
+      credentials: "include",
+      cache: "no-store",
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: CurrentPublicAppointmentPayload | null) => {
+        if (cancelled) return
+        const appt = data?.appointment
+        if (!appt) return
+
+        const next: PersistedClientBookingV1 = {
+          v: 1,
+          clienteId: appt.client_id,
+          confirmedAt: new Date().toISOString(),
+          unitId: appt.unit_id,
+          unitName: appt.unit_name,
+          dataIso: `${appt.date}T12:00:00`,
+          horario: appt.time.slice(0, 5),
+          profissionalId: appt.barber_id,
+          profissionalNome: appt.barber_name,
+          servicos: appt.services.map((s) => ({
+            id: s.id,
+            nome: s.name,
+            preco: Number(s.price ?? 0),
+            duracao: Number(s.duration ?? 0),
+          })),
+          nomeExibicao: appt.client_name || clienteLogado?.nome || dadosCliente.nome || "Cliente",
+          totalPreco: Number(appt.total_price ?? 0),
+          totalDuracao: Number(appt.total_duration ?? 0),
+          clientPhoneDigits: clientPhoneDigits(phoneHint) || null,
+          bookedWithoutLogin: !clienteLogado,
+          appointmentIds: Array.isArray(appt.appointment_ids) ? appt.appointment_ids : undefined,
+          uiFocus: "browsing",
+        }
+
+        saveConfirmedBooking(slug, next)
+        setBookingSummary(next)
+        setAgendamentoConfirmado(false)
+        setTrimPlayStage("intro")
+        setEtapa(1)
+        setDadosCliente((prev) => ({
+          ...prev,
+          nome: prev.nome || next.nomeExibicao,
+          telefone: prev.telefone || phoneHint,
+        }))
+      })
+      .catch(() => {})
+
+    return () => {
+      cancelled = true
+    }
+  }, [authPhase, bookingSummary, clienteLogado, dadosCliente.nome, dadosCliente.telefone, slug])
 
   useEffect(() => {
     if (!agendamentoConfirmado) return
