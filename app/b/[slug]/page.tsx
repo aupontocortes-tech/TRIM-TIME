@@ -36,7 +36,7 @@ import {
   saveSavedClientProfile,
 } from "@/lib/cliente-booking-saved-profile"
 import { formatCpfDisplay, cpfDigits } from "@/lib/cpf"
-import { clientPhoneDigits, clientPhonesMatch } from "@/lib/client-by-phone"
+import { clientPhoneDigits, clientPhonesMatch } from "@/lib/client-phone-utils"
 import { openingHoursFromSettings } from "@/lib/barbershop-settings-ui"
 import type { BarbershopSettings } from "@/lib/db/types"
 import { compressImageToJpegDataUrl } from "@/lib/client-image-compress"
