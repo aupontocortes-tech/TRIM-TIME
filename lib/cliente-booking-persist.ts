@@ -21,6 +21,8 @@ export type PersistedClientBookingV1 = {
   clientPhoneDigits?: string | null
   /** true = fluxo sem conta logada na hora da confirmação (API ainda cria cliente com UUID). */
   bookedWithoutLogin?: boolean
+  /** IDs retornados pela API ao confirmar — usados para cancelar no servidor ao remarcar. */
+  appointmentIds?: string[]
   /**
    * confirmation = tela cheia de confirmação (padrão ao concluir agendamento ou dados antigos sem campo).
    * browsing = após "Concluir" no resumo: card de gestão sem novo wizard até remarcar.

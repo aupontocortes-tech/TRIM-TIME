@@ -2,7 +2,11 @@ import { NextResponse } from "next/server"
 import { cookies } from "next/headers"
 import { prisma } from "@/lib/prisma"
 import { getActiveBarbershopBySlug, toPublicClientSession } from "@/lib/public-booking"
-import { publicClientCookieName, verifyPublicClientSession } from "@/lib/public-client-session"
+import {
+  publicClientCookieName,
+  signPublicClientSession,
+  verifyPublicClientSession,
+} from "@/lib/public-client-session"
 import { assertValidProfilePhotoDataUrl } from "@/lib/photo-data-url"
 import { cpfDigits } from "@/lib/cpf"
 import { trySendWhatsAppAppointmentConfirmation } from "@/lib/whatsapp-appointment-events"
@@ -341,6 +345,18 @@ export async function POST(
     if (created.length > 0) {
       void trySendWhatsAppAppointmentConfirmation(shop.id, created[0].id)
     }
+
+    cookieStore.set(
+      publicClientCookieName(slug),
+      signPublicClientSession({ clientId: client.id, slug }),
+      {
+        path: "/",
+        maxAge: 60 * 60 * 24 * 30,
+        httpOnly: true,
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+      }
+    )
 
     return NextResponse.json({
       ok: true,

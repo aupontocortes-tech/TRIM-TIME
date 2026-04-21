@@ -269,13 +269,14 @@ export default function BarbeariaPage() {
         if (c) {
           setClienteLogado(c)
           setAuthPhase("logado")
+          const saved = loadSavedClientProfile(slug)
           setDadosCliente({
             nome: c.nome,
             telefone: c.telefone,
             email: c.email,
             cpf: c.cpf ? formatCpfDisplay(c.cpf) : "",
-            foto: c.photo_url ?? "",
-            fotoPosicao: 50,
+            foto: c.photo_url?.trim() || saved?.foto?.trim() || "",
+            fotoPosicao: saved?.fotoPosicao ?? 50,
           })
           return
         }
@@ -362,8 +363,8 @@ export default function BarbeariaPage() {
     }
 
     setBookingSummary(p)
-    /** Sem uiFocus salvo, reabrir na confirmação (evita cair na etapa 1 como novo agendamento). */
-    const focus = p.uiFocus ?? "confirmation"
+    /** Sem uiFocus salvo: tela principal com card (jogo / remarcar / ver confirmação), não etapa 1. */
+    const focus = p.uiFocus ?? "browsing"
     if (focus === "browsing") {
       setAgendamentoConfirmado(false)
       setTrimPlayStage("intro")
@@ -374,14 +375,19 @@ export default function BarbeariaPage() {
     }
 
     if (clienteLogado) {
-      setDadosCliente({
+      const saved = loadSavedClientProfile(slug)
+      setDadosCliente((prev) => ({
         nome: p.nomeExibicao || clienteLogado.nome,
         telefone: clienteLogado.telefone,
         email: clienteLogado.email,
         cpf: clienteLogado.cpf ? formatCpfDisplay(clienteLogado.cpf) : "",
-        foto: clienteLogado.photo_url ?? "",
-        fotoPosicao: 50,
-      })
+        foto:
+          clienteLogado.photo_url?.trim() ||
+          prev.foto?.trim() ||
+          saved?.foto?.trim() ||
+          "",
+        fotoPosicao: prev.fotoPosicao ?? saved?.fotoPosicao ?? 50,
+      }))
     } else {
       setDadosCliente((prev) => ({
         ...prev,
@@ -865,6 +871,7 @@ export default function BarbeariaPage() {
       const data = (await res.json().catch(() => ({}))) as {
         error?: string
         client?: ClienteAgendamento
+        appointment_ids?: string[]
       }
       if (!res.ok) {
         setErroAgendamento(data.error || "Não foi possível confirmar seu agendamento")
@@ -897,6 +904,7 @@ export default function BarbeariaPage() {
         totalDuracao,
         clientPhoneDigits: digitsTel.length >= 10 ? digitsTel : null,
         bookedWithoutLogin: !clienteLogado,
+        appointmentIds: Array.isArray(data.appointment_ids) ? data.appointment_ids : undefined,
         uiFocus: "confirmation",
       }
       saveConfirmedBooking(slug, summary)
@@ -910,15 +918,52 @@ export default function BarbeariaPage() {
   }
 
   const remarcarAgendamento = () => {
-    // Cancela o agendamento confirmado e volta para escolha de horários,
-    // mantendo serviços/unidade/profissional previamente escolhidos.
-    clearConfirmedBooking(slug)
-    setBookingSummary(null)
-    setAgendamentoConfirmado(false)
-    setTrimPlayStage("intro")
-    setEtapa(3)
-    setDataSelecionada(null)
-    setHorarioSelecionado(null)
+    void (async () => {
+      setErroAgendamento("")
+      const summary = bookingSummary ?? loadConfirmedBooking(slug)
+      const payload: { appointment_ids?: string[]; date?: string; telefone?: string } = {}
+      if (summary?.appointmentIds?.length) {
+        payload.appointment_ids = summary.appointmentIds
+      } else if (summary?.dataIso) {
+        payload.date = toYMDLocal(new Date(summary.dataIso))
+      }
+      const tel =
+        dadosCliente.telefone?.trim() ||
+        loadSavedClientProfile(slug)?.telefone?.trim() ||
+        ""
+      if (tel) payload.telefone = tel
+      if (payload.appointment_ids?.length || payload.date) {
+        try {
+          const res = await fetch(
+            `/api/public/barbershops/${encodeURIComponent(slug)}/appointments/cancel`,
+            {
+              method: "POST",
+              credentials: "include",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload),
+            }
+          )
+          const body = (await res.json().catch(() => ({}))) as { error?: string }
+          if (!res.ok) {
+            setErroAgendamento(
+              body.error ||
+                "Não foi possível liberar seu horário anterior. Tente de novo ou fale com a barbearia."
+            )
+            return
+          }
+        } catch {
+          setErroAgendamento("Sem conexão. Verifique a internet e tente novamente.")
+          return
+        }
+      }
+      clearConfirmedBooking(slug)
+      setBookingSummary(null)
+      setAgendamentoConfirmado(false)
+      setTrimPlayStage("intro")
+      setEtapa(3)
+      setDataSelecionada(null)
+      setHorarioSelecionado(null)
+    })()
   }
 
   /** Volta ao início do agendamento mantendo o resumo salvo (reabre app / link e vê o card + pode jogar de novo). */
@@ -1355,7 +1400,7 @@ export default function BarbeariaPage() {
         <div className="max-w-2xl mx-auto px-4 -mt-11 sm:-mt-12">
           <div className="flex items-end gap-4 mb-4">
             <div className="w-24 h-24 rounded-xl bg-background border-4 border-background overflow-hidden flex items-center justify-center shrink-0 ring-1 ring-border/40">
-              {authPhase === "logado" && fotoClienteHeader && (clienteLogado || bookingSummary) ? (
+              {authPhase === "logado" && fotoClienteHeader ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={fotoClienteHeader}
@@ -1461,7 +1506,12 @@ export default function BarbeariaPage() {
       ) : null}
 
       {authPhase === "logado" && bookingSummary && !agendamentoConfirmado ? (
-        <div className="max-w-2xl mx-auto px-4 mb-6">
+        <div className="max-w-2xl mx-auto px-4 mb-6 space-y-3">
+          {erroAgendamento ? (
+            <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">
+              {erroAgendamento}
+            </div>
+          ) : null}
           <Card className="border-primary/25 bg-card/90">
             <CardContent className="p-4 space-y-4">
               <div>
