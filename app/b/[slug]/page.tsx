@@ -133,6 +133,10 @@ function toYMDLocal(d: Date) {
   return `${y}-${m}-${day}`
 }
 
+function pushRemindersOkSessionKey(slug: string) {
+  return `trimtime_push_reminders_ok_v1_${slug}`
+}
+
 type ClienteAgendamento = {
   id: string
   nome: string
@@ -202,6 +206,8 @@ export default function BarbeariaPage() {
   const [trimPlayCliente, setTrimPlayCliente] = useState<null | { id: string; nome: string }>(null)
   const [pushReminderMsg, setPushReminderMsg] = useState<string | null>(null)
   const [pushReminderBusy, setPushReminderBusy] = useState(false)
+  /** Após ativar com sucesso, some o bloco de lembretes (só barra Olá / Sair). */
+  const [pushRemindersActivated, setPushRemindersActivated] = useState(false)
 
   // Cadastro (nome + telefone; fluxo simples)
   const [formCadastro, setFormCadastro] = useState({ nome: "", telefone: "" })
@@ -289,6 +295,18 @@ export default function BarbeariaPage() {
       cancelled = true
     }
   }, [slug])
+
+  /** Lembrete push já ativado nesta aba — esconde o botão após refresh. */
+  useEffect(() => {
+    if (typeof window === "undefined" || authPhase !== "logado" || !clienteLogado) return
+    try {
+      if (sessionStorage.getItem(pushRemindersOkSessionKey(slug)) === "1") {
+        setPushRemindersActivated(true)
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [authPhase, clienteLogado, slug])
 
   /** Convidado: preenche com dados salvos neste aparelho (nome, telefone, e-mail, CPF, foto). */
   useEffect(() => {
@@ -508,33 +526,42 @@ export default function BarbeariaPage() {
     setHorarioSelecionado(null)
     setDadosCliente({ nome: "", telefone: "", email: "", cpf: "", foto: "", fotoPosicao: 50 })
     setPushReminderMsg(null)
+    setPushRemindersActivated(false)
+    try {
+      sessionStorage.removeItem(pushRemindersOkSessionKey(slug))
+    } catch {
+      /* ignore */
+    }
     setBookingSummary(null)
     setAgendamentoConfirmado(false)
     setTrimPlayStage("intro")
   }
+
+  const msgLembretesIndisponivel =
+    "Lembretes por notificação não estão disponíveis neste momento. Seu agendamento funciona normalmente."
 
   const ativarLembretesPush = async () => {
     setPushReminderMsg(null)
     setPushReminderBusy(true)
     try {
       if (typeof window === "undefined" || !("serviceWorker" in navigator) || !("PushManager" in window)) {
-        setPushReminderMsg("Seu navegador não suporta notificações push neste modo.")
+        setPushReminderMsg("Este navegador não permite ativar lembretes assim. Você pode continuar o agendamento.")
         return
       }
       const pkRes = await fetch("/api/public/push/vapid-public-key")
       if (!pkRes.ok) {
-        const j = (await pkRes.json().catch(() => ({}))) as { error?: string }
-        setPushReminderMsg(typeof j.error === "string" ? j.error : "Push ainda não configurado no servidor.")
+        await pkRes.json().catch(() => ({}))
+        setPushReminderMsg(msgLembretesIndisponivel)
         return
       }
       const { publicKey } = (await pkRes.json()) as { publicKey?: string }
       if (!publicKey) {
-        setPushReminderMsg("Chave pública de push indisponível.")
+        setPushReminderMsg(msgLembretesIndisponivel)
         return
       }
       const perm = await Notification.requestPermission()
       if (perm !== "granted") {
-        setPushReminderMsg("Permissão negada. Ative notificações nas configurações do navegador.")
+        setPushReminderMsg("Permissão negada. Se mudar de ideia, ative notificações nas configurações do navegador.")
         return
       }
       const reg = await navigator.serviceWorker.ready
@@ -549,14 +576,20 @@ export default function BarbeariaPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ subscription: json }),
       })
-      const sj = (await saveRes.json().catch(() => ({}))) as { error?: string }
+      await saveRes.json().catch(() => ({}))
       if (!saveRes.ok) {
-        setPushReminderMsg(typeof sj.error === "string" ? sj.error : "Não foi possível salvar o dispositivo.")
+        setPushReminderMsg("Não foi possível concluir agora. Tente de novo mais tarde.")
         return
       }
-      setPushReminderMsg("Pronto! Você receberá lembretes neste aparelho quando o cron estiver ativo.")
+      try {
+        sessionStorage.setItem(pushRemindersOkSessionKey(slug), "1")
+      } catch {
+        /* ignore */
+      }
+      setPushRemindersActivated(true)
+      setPushReminderMsg(null)
     } catch {
-      setPushReminderMsg("Erro ao ativar lembretes. Tente de novo ou use outro navegador.")
+      setPushReminderMsg("Algo deu errado ao ativar. Você pode tentar de novo depois.")
     } finally {
       setPushReminderBusy(false)
     }
@@ -1266,26 +1299,24 @@ export default function BarbeariaPage() {
               Sair
             </Button>
           </div>
-          <div className="px-4 pb-2 flex flex-col gap-1">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="w-full sm:w-auto border-border text-foreground"
-              disabled={pushReminderBusy}
-              onClick={() => void ativarLembretesPush()}
-            >
-              <Bell className="w-4 h-4 mr-2" />
-              {pushReminderBusy ? "Ativando…" : "Receber lembretes neste celular"}
-            </Button>
-            {pushReminderMsg ? (
-              <p className="text-xs text-muted-foreground">{pushReminderMsg}</p>
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                Use após instalar o app ou manter a página salva; requer VAPID configurado no servidor.
-              </p>
-            )}
-          </div>
+          {!pushRemindersActivated ? (
+            <div className="px-4 pb-2 flex flex-col gap-1">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="w-full sm:w-auto border-border text-foreground"
+                disabled={pushReminderBusy}
+                onClick={() => void ativarLembretesPush()}
+              >
+                <Bell className="w-4 h-4 mr-2" />
+                {pushReminderBusy ? "Ativando…" : "Receber lembretes neste celular"}
+              </Button>
+              {pushReminderMsg ? (
+                <p className="text-xs text-muted-foreground">{pushReminderMsg}</p>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       )}
 
