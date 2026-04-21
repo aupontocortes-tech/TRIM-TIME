@@ -347,15 +347,23 @@ export default function BarbeariaPage() {
         return
       }
     } else if (p.bookedWithoutLogin === false) {
-      /** Reservado a quem confirmou logado: sem sessão não exibir (evita misturar contas no mesmo aparelho). */
-      setBookingSummary(null)
-      setAgendamentoConfirmado(false)
-      return
+      /** Confirmado logado, sessão sumiu: só mostra se o telefone salvo neste aparelho bater. */
+      const saved = loadSavedClientProfile(slug)
+      const phoneOk =
+        typeof p.clientPhoneDigits === "string" &&
+        p.clientPhoneDigits.length >= 10 &&
+        saved?.telefone &&
+        clientPhonesMatch(p.clientPhoneDigits, saved.telefone)
+      if (!phoneOk) {
+        setBookingSummary(null)
+        setAgendamentoConfirmado(false)
+        return
+      }
     }
 
     setBookingSummary(p)
-    /** Sem uiFocus salvo, reabrir no fluxo principal com card (não prender na tela cheia antiga). */
-    const focus = p.uiFocus ?? "browsing"
+    /** Sem uiFocus salvo, reabrir na confirmação (evita cair na etapa 1 como novo agendamento). */
+    const focus = p.uiFocus ?? "confirmation"
     if (focus === "browsing") {
       setAgendamentoConfirmado(false)
       setTrimPlayStage("intro")
@@ -696,6 +704,8 @@ export default function BarbeariaPage() {
     .join(" - ")
   const displayCityLine = cityStateUnit || cityStateBase || null
   const needsUnitChoice = !!(publicMeta?.units && publicMeta.units.length > 1)
+  /** Com resumo de agendamento ativo, só o card de gestão (remarcar / jogo); sem etapas nem rodapé de novo agendamento. */
+  const showAgendamentoWizard = !bookingSummary
 
   const displayHorarioFuncionamento = (() => {
     const short: Record<(typeof dayKeyByIndex)[number], string> = {
@@ -1345,7 +1355,7 @@ export default function BarbeariaPage() {
         <div className="max-w-2xl mx-auto px-4 -mt-11 sm:-mt-12">
           <div className="flex items-end gap-4 mb-4">
             <div className="w-24 h-24 rounded-xl bg-background border-4 border-background overflow-hidden flex items-center justify-center shrink-0 ring-1 ring-border/40">
-              {authPhase === "logado" && fotoClienteHeader ? (
+              {authPhase === "logado" && fotoClienteHeader && (clienteLogado || bookingSummary) ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={fotoClienteHeader}
@@ -1363,6 +1373,18 @@ export default function BarbeariaPage() {
                 <>
                   <h2 className="text-xl sm:text-2xl font-bold text-foreground truncate">
                     Olá, {clienteLogado.nome.trim().split(/\s+/).filter(Boolean)[0] ?? "cliente"}
+                  </h2>
+                  <div className="flex items-center gap-2 text-muted-foreground text-sm mt-0.5 flex-wrap">
+                    <Star className="w-4 h-4 text-primary fill-primary shrink-0" />
+                    <span>{barbearia.avaliacao}</span>
+                    <span>({barbearia.totalAvaliacoes} avaliações)</span>
+                  </div>
+                </>
+              ) : bookingSummary ? (
+                <>
+                  <h2 className="text-xl sm:text-2xl font-bold text-foreground truncate">
+                    Olá,{" "}
+                    {bookingSummary.nomeExibicao.trim().split(/\s+/).filter(Boolean)[0] ?? "cliente"}
                   </h2>
                   <div className="flex items-center gap-2 text-muted-foreground text-sm mt-0.5 flex-wrap">
                     <Star className="w-4 h-4 text-primary fill-primary shrink-0" />
@@ -1500,6 +1522,8 @@ export default function BarbeariaPage() {
         </div>
       ) : null}
 
+      {showAgendamentoWizard ? (
+      <>
       {/* Indicador de Etapas */}
       <div className="max-w-2xl mx-auto px-4 mb-6">
         <div className="flex items-center justify-between">
@@ -1914,6 +1938,8 @@ export default function BarbeariaPage() {
           </div>
         </div>
       </div>
+      </>
+      ) : null}
 
       <Dialog
         open={fotoConfigOpen}

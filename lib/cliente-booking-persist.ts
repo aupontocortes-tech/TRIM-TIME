@@ -23,7 +23,7 @@ export type PersistedClientBookingV1 = {
   bookedWithoutLogin?: boolean
   /**
    * confirmation = tela cheia de confirmação (padrão ao concluir agendamento ou dados antigos sem campo).
-   * browsing = cliente voltou ao fluxo (etapa 1); resumo fica no card e pode reabrir confirmação / Trim Play.
+   * browsing = após "Concluir" no resumo: card de gestão sem novo wizard até remarcar.
    */
   uiFocus?: "confirmation" | "browsing"
 }
