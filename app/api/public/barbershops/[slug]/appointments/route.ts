@@ -101,6 +101,8 @@ export async function POST(
       date?: string
       time?: string
       unit_id?: string | null
+      remarca_appointment_ids?: string[]
+      remarca_date?: string
       client?: { nome?: string; telefone?: string; email?: string; cpf?: string; photo_url?: string | null }
     }
 
@@ -282,12 +284,28 @@ export async function POST(
       return NextResponse.json({ error: "Não foi possível identificar o cliente" }, { status: 400 })
     }
 
+    const remarcaAppointmentIds = Array.isArray(body.remarca_appointment_ids)
+      ? body.remarca_appointment_ids.map((v) => String(v).trim()).filter(Boolean)
+      : []
+    const remarcaDate = String(body.remarca_date ?? "").trim()
+    let remarcaDayBounds: { gte: Date; lt: Date } | null = null
+    if (!remarcaAppointmentIds.length && remarcaDate) {
+      try {
+        remarcaDayBounds = utcDayRangeForYmd(remarcaDate)
+      } catch {
+        remarcaDayBounds = null
+      }
+    }
+
     const existingSameDay = await prisma.appointment.findFirst({
       where: {
         barbershopId: shop.id,
         clientId: client.id,
         date: { gte: apptDayBounds.gte, lt: apptDayBounds.lt },
         status: { not: "canceled" },
+        ...(remarcaAppointmentIds.length
+          ? { id: { notIn: remarcaAppointmentIds } }
+          : {}),
       },
       select: { id: true },
     })
@@ -313,6 +331,9 @@ export async function POST(
         date: { gte: apptDayBounds.gte, lt: apptDayBounds.lt },
         status: { in: ["pending", "confirmed"] },
         time: { in: times.map((item) => item.time) },
+        ...(remarcaAppointmentIds.length
+          ? { id: { notIn: remarcaAppointmentIds } }
+          : {}),
       },
       select: { time: true },
     })
@@ -323,24 +344,51 @@ export async function POST(
       )
     }
 
-    const created = await prisma.$transaction(
-      times.map((item) =>
-        prisma.appointment.create({
-          data: {
+    const created = await prisma.$transaction(async (tx) => {
+      const inserted = await Promise.all(
+        times.map((item) =>
+          tx.appointment.create({
+            data: {
+              barbershopId: shop.id,
+              clientId: client.id,
+              barberId,
+              serviceId: item.service.id,
+              unitId: effectiveUnitId,
+              date: apptDate,
+              time: item.time,
+              status: "pending",
+              totalPrice: item.service.price,
+            },
+            select: { id: true, time: true },
+          })
+        )
+      )
+
+      if (remarcaAppointmentIds.length) {
+        await tx.appointment.updateMany({
+          where: {
+            id: { in: remarcaAppointmentIds },
             barbershopId: shop.id,
             clientId: client.id,
-            barberId,
-            serviceId: item.service.id,
-            unitId: effectiveUnitId,
-            date: apptDate,
-            time: item.time,
-            status: "pending",
-            totalPrice: item.service.price,
+            status: { in: ["pending", "confirmed"] },
           },
-          select: { id: true, time: true },
+          data: { status: "canceled" },
         })
-      )
-    )
+      } else if (remarcaDayBounds) {
+        await tx.appointment.updateMany({
+          where: {
+            barbershopId: shop.id,
+            clientId: client.id,
+            date: { gte: remarcaDayBounds.gte, lt: remarcaDayBounds.lt },
+            status: { in: ["pending", "confirmed"] },
+            id: { notIn: inserted.map((it) => it.id) },
+          },
+          data: { status: "canceled" },
+        })
+      }
+
+      return inserted
+    })
 
     if (created.length > 0) {
       void trySendWhatsAppAppointmentConfirmation(shop.id, created[0].id)

@@ -218,6 +218,7 @@ export default function BarbeariaPage() {
   const [fotoModalErr, setFotoModalErr] = useState<string | null>(null)
   const [agendamentoConfirmado, setAgendamentoConfirmado] = useState(false)
   const [bookingSummary, setBookingSummary] = useState<PersistedClientBookingV1 | null>(null)
+  const [isRemarcando, setIsRemarcando] = useState(false)
   const [bookingLoading, setBookingLoading] = useState(false)
   const [erroAgendamento, setErroAgendamento] = useState("")
   const [trimPlayStage, setTrimPlayStage] = useState<"intro" | "splash" | "game">("intro")
@@ -350,6 +351,7 @@ export default function BarbeariaPage() {
     const p = loadConfirmedBooking(slug)
     if (!p) {
       setBookingSummary(null)
+      setIsRemarcando(false)
       return
     }
 
@@ -361,6 +363,7 @@ export default function BarbeariaPage() {
         clientPhonesMatch(p.clientPhoneDigits, clienteLogado.telefone)
       if (!idMatch && !phoneMatch) {
         setBookingSummary(null)
+        setIsRemarcando(false)
         setAgendamentoConfirmado(false)
         return
       }
@@ -374,6 +377,7 @@ export default function BarbeariaPage() {
         clientPhonesMatch(p.clientPhoneDigits, saved.telefone)
       if (!phoneOk) {
         setBookingSummary(null)
+        setIsRemarcando(false)
         setAgendamentoConfirmado(false)
         return
       }
@@ -641,6 +645,7 @@ export default function BarbeariaPage() {
       /* ignore */
     }
     setBookingSummary(null)
+    setIsRemarcando(false)
     setAgendamentoConfirmado(false)
     setTrimPlayStage("intro")
   }
@@ -721,6 +726,7 @@ export default function BarbeariaPage() {
     setHorarioSelecionado(null)
     setAgendamentoConfirmado(false)
     setBookingSummary(null)
+    setIsRemarcando(false)
     setTrimPlayStage("intro")
     setErroAgendamento("")
   }
@@ -793,8 +799,8 @@ export default function BarbeariaPage() {
     .join(" - ")
   const displayCityLine = cityStateUnit || cityStateBase || null
   const needsUnitChoice = !!(publicMeta?.units && publicMeta.units.length > 1)
-  /** Com resumo de agendamento ativo, só o card de gestão (remarcar / jogo); sem etapas nem rodapé de novo agendamento. */
-  const showAgendamentoWizard = !bookingSummary
+  /** Com resumo de agendamento ativo, só o card de gestão; no modo remarcar, reabre o wizard. */
+  const showAgendamentoWizard = !bookingSummary || isRemarcando
 
   const displayHorarioFuncionamento = (() => {
     const short: Record<(typeof dayKeyByIndex)[number], string> = {
@@ -929,6 +935,10 @@ export default function BarbeariaPage() {
     }
     const prof = barbearia.profissionais.find((p) => p.id === profissionalSelecionado)
     if (!prof) return
+    const remarcaBase = isRemarcando ? bookingSummary ?? loadConfirmedBooking(slug) : null
+    const remarcaAppointmentIds =
+      remarcaBase?.appointmentIds?.map((id) => String(id).trim()).filter(Boolean) ?? []
+    const remarcaDate = remarcaBase?.dataIso ? toYMDLocal(new Date(remarcaBase.dataIso)) : undefined
     setBookingLoading(true)
     setErroAgendamento("")
     try {
@@ -942,6 +952,8 @@ export default function BarbeariaPage() {
           date: toYMDLocal(dataSelecionada),
           time: horarioSelecionado,
           unit_id: selectedUnitId,
+          remarca_appointment_ids: remarcaAppointmentIds.length ? remarcaAppointmentIds : undefined,
+          remarca_date: isRemarcando ? remarcaDate : undefined,
           client: {
             nome: dadosCliente.nome,
             telefone: dadosCliente.telefone,
@@ -992,6 +1004,7 @@ export default function BarbeariaPage() {
       }
       saveConfirmedBooking(slug, summary)
       setBookingSummary(summary)
+      setIsRemarcando(false)
       setAgendamentoConfirmado(true)
     } catch {
       setErroAgendamento("Erro ao confirmar agendamento. Tente novamente.")
@@ -1001,52 +1014,27 @@ export default function BarbeariaPage() {
   }
 
   const remarcarAgendamento = () => {
-    void (async () => {
-      setErroAgendamento("")
-      const summary = bookingSummary ?? loadConfirmedBooking(slug)
-      const payload: { appointment_ids?: string[]; date?: string; telefone?: string } = {}
-      if (summary?.appointmentIds?.length) {
-        payload.appointment_ids = summary.appointmentIds
-      } else if (summary?.dataIso) {
-        payload.date = toYMDLocal(new Date(summary.dataIso))
-      }
-      const tel =
-        dadosCliente.telefone?.trim() ||
-        loadSavedClientProfile(slug)?.telefone?.trim() ||
-        ""
-      if (tel) payload.telefone = tel
-      if (payload.appointment_ids?.length || payload.date) {
-        try {
-          const res = await fetch(
-            `/api/public/barbershops/${encodeURIComponent(slug)}/appointments/cancel`,
-            {
-              method: "POST",
-              credentials: "include",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(payload),
-            }
-          )
-          const body = (await res.json().catch(() => ({}))) as { error?: string }
-          if (!res.ok) {
-            setErroAgendamento(
-              body.error ||
-                "Não foi possível liberar seu horário anterior. Tente de novo ou fale com a barbearia."
-            )
-            return
-          }
-        } catch {
-          setErroAgendamento("Sem conexão. Verifique a internet e tente novamente.")
-          return
-        }
-      }
-      clearConfirmedBooking(slug)
-      setBookingSummary(null)
-      setAgendamentoConfirmado(false)
-      setTrimPlayStage("intro")
-      setEtapa(3)
-      setDataSelecionada(null)
-      setHorarioSelecionado(null)
-    })()
+    if (typeof window !== "undefined") {
+      const ok = window.confirm(
+        "Tem certeza que deseja remarcar? O agendamento atual só será alterado quando você confirmar o novo horário."
+      )
+      if (!ok) return
+    }
+    setErroAgendamento("")
+    setIsRemarcando(true)
+    setAgendamentoConfirmado(false)
+    setTrimPlayStage("intro")
+    setEtapa(3)
+    setDataSelecionada(null)
+    setHorarioSelecionado(null)
+  }
+
+  const voltarDaRemarcacao = () => {
+    setErroAgendamento("")
+    setIsRemarcando(false)
+    setEtapa(1)
+    setDataSelecionada(null)
+    setHorarioSelecionado(null)
   }
 
   /** Volta ao início do agendamento mantendo o resumo salvo (reabre app / link e vê o card + pode jogar de novo). */
@@ -1057,6 +1045,7 @@ export default function BarbeariaPage() {
       saveConfirmedBooking(slug, next)
       setBookingSummary(next)
     }
+    setIsRemarcando(false)
     setAgendamentoConfirmado(false)
     setTrimPlayStage("intro")
     setEtapa(1)
@@ -1588,7 +1577,7 @@ export default function BarbeariaPage() {
         </div>
       ) : null}
 
-      {authPhase === "logado" && bookingSummary && !agendamentoConfirmado ? (
+      {authPhase === "logado" && bookingSummary && !agendamentoConfirmado && !isRemarcando ? (
         <div className="max-w-2xl mx-auto px-4 mb-6 space-y-3">
           {erroAgendamento ? (
             <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">
@@ -2043,7 +2032,7 @@ export default function BarbeariaPage() {
           )}
           
           <div className="flex gap-3">
-            {etapa > 1 && (
+            {etapa > 1 ? (
               <Button
                 variant="outline"
                 onClick={() => setEtapa(etapa - 1)}
@@ -2052,7 +2041,16 @@ export default function BarbeariaPage() {
                 <ChevronLeft className="w-4 h-4 mr-1" />
                 Voltar
               </Button>
-            )}
+            ) : isRemarcando ? (
+              <Button
+                variant="outline"
+                onClick={voltarDaRemarcacao}
+                className="border-border text-foreground hover:bg-secondary"
+              >
+                <ChevronLeft className="w-4 h-4 mr-1" />
+                Voltar
+              </Button>
+            ) : null}
             
             <Button
               className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
