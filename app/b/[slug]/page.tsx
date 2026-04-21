@@ -1291,8 +1291,11 @@ export default function BarbeariaPage() {
 
       {/* Header da Barbearia */}
       <div className="relative">
-        <div className="h-32 bg-gradient-to-r from-primary/30 to-primary/10" />
-        <div className="max-w-2xl mx-auto px-4 -mt-12">
+        <div className="px-4 pt-4 pb-2 text-center max-w-2xl mx-auto">
+          <h1 className="text-base sm:text-lg font-bold text-foreground tracking-tight">{displayNome}</h1>
+        </div>
+        <div className="h-28 sm:h-32 bg-gradient-to-r from-primary/30 to-primary/10" />
+        <div className="max-w-2xl mx-auto px-4 -mt-11 sm:-mt-12">
           <div className="flex items-end gap-4 mb-4">
             <div className="w-24 h-24 rounded-xl bg-background border-4 border-background overflow-hidden flex items-center justify-center shrink-0 ring-1 ring-border/40">
               {authPhase === "logado" && fotoClienteHeader ? (
@@ -1308,13 +1311,28 @@ export default function BarbeariaPage() {
                 <img src={barbearia.logo} alt="Logo Trim Time" className="w-[5.25rem] h-[5.25rem] object-contain bg-background" />
               )}
             </div>
-            <div className="pb-2">
-              <h1 className="text-2xl font-bold text-foreground">{displayNome}</h1>
-              <div className="flex items-center gap-2 text-muted-foreground text-sm">
-                <Star className="w-4 h-4 text-primary fill-primary" />
-                <span>{barbearia.avaliacao}</span>
-                <span>({barbearia.totalAvaliacoes} avaliações)</span>
-              </div>
+            <div className="pb-2 min-w-0 flex-1 text-left">
+              {clienteLogado ? (
+                <>
+                  <h2 className="text-xl sm:text-2xl font-bold text-foreground truncate">
+                    Olá, {clienteLogado.nome.trim().split(/\s+/).filter(Boolean)[0] ?? "cliente"}
+                  </h2>
+                  <div className="flex items-center gap-2 text-muted-foreground text-sm mt-0.5 flex-wrap">
+                    <Star className="w-4 h-4 text-primary fill-primary shrink-0" />
+                    <span>{barbearia.avaliacao}</span>
+                    <span>({barbearia.totalAvaliacoes} avaliações)</span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <h2 className="text-lg sm:text-xl font-semibold text-foreground">Agende seu horário</h2>
+                  <div className="flex items-center gap-2 text-muted-foreground text-sm mt-0.5 flex-wrap">
+                    <Star className="w-4 h-4 text-primary fill-primary shrink-0" />
+                    <span>{barbearia.avaliacao}</span>
+                    <span>({barbearia.totalAvaliacoes} avaliações)</span>
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
@@ -1376,36 +1394,58 @@ export default function BarbeariaPage() {
       {authPhase === "logado" && bookingSummary && !agendamentoConfirmado ? (
         <div className="max-w-2xl mx-auto px-4 mb-6">
           <Card className="border-primary/25 bg-card/90">
-            <CardContent className="p-4 space-y-3">
-              <div className="flex items-center gap-2 text-foreground font-medium text-sm">
-                <Calendar className="w-4 h-4 text-primary shrink-0" />
-                Seu agendamento confirmado
+            <CardContent className="p-4 space-y-4">
+              <div>
+                <div className="flex items-center gap-2 text-foreground font-semibold text-base">
+                  <Calendar className="w-5 h-5 text-primary shrink-0" />
+                  Remarcar agendamento
+                </div>
+                <p className="text-sm text-foreground font-medium mt-2">
+                  {(() => {
+                    const d = new Date(bookingSummary.dataIso)
+                    return `${diasSemana[d.getDay()]}, ${d.getDate()} de ${meses[d.getMonth()]} às ${bookingSummary.horario}`
+                  })()}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {bookingSummary.servicos.map((s) => s.nome).join(", ")} · {bookingSummary.profissionalNome}
+                  {bookingSummary.unitName ? ` · ${bookingSummary.unitName}` : ""}
+                </p>
               </div>
-              <p className="text-sm text-foreground font-medium">
-                {(() => {
-                  const d = new Date(bookingSummary.dataIso)
-                  return `${diasSemana[d.getDay()]}, ${d.getDate()} de ${meses[d.getMonth()]} às ${bookingSummary.horario}`
-                })()}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {bookingSummary.servicos.map((s) => s.nome).join(", ")} · {bookingSummary.profissionalNome}
-                {bookingSummary.unitName ? ` · ${bookingSummary.unitName}` : ""}
-              </p>
-              <div className="flex flex-col sm:flex-row gap-2 pt-1">
+
+              <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 space-y-3">
+                <div>
+                  <p className="text-base sm:text-lg font-bold text-foreground leading-snug">
+                    Meu projeto Trim Time Play
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Enquanto espera o dia do corte, jogue e suba no ranking da barbearia.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full border-primary/40 text-foreground hover:bg-primary/10"
+                  onClick={() => verConfirmacaoEJogo(true)}
+                >
+                  Abrir Trim Time Play
+                </Button>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-2 pt-0">
                 <Button
                   type="button"
                   className="w-full sm:flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
-                  onClick={() => verConfirmacaoEJogo(false)}
+                  onClick={remarcarAgendamento}
                 >
-                  Ver confirmação
+                  Remarcar
                 </Button>
                 <Button
                   type="button"
                   variant="outline"
                   className="w-full sm:flex-1 border-border text-foreground hover:bg-secondary"
-                  onClick={() => verConfirmacaoEJogo(true)}
+                  onClick={() => verConfirmacaoEJogo(false)}
                 >
-                  Jogar Trim Play
+                  Ver confirmação
                 </Button>
               </div>
             </CardContent>
