@@ -1604,14 +1604,9 @@ export default function BarbeariaPage() {
               </div>
 
               <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 space-y-3">
-                <div>
-                  <p className="text-base sm:text-lg font-bold text-foreground leading-snug">
-                    Meu projeto Trim Time Play
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Enquanto espera o dia do corte, jogue e suba no ranking da barbearia.
-                  </p>
-                </div>
+                <p className="text-base sm:text-lg text-white leading-snug">
+                  Enquanto espera o dia do corte, jogue e suba no ranking da barbearia.
+                </p>
                 <Button
                   type="button"
                   variant="outline"
