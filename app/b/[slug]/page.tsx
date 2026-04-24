@@ -1604,7 +1604,7 @@ export default function BarbeariaPage() {
               </div>
 
               <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 space-y-3">
-                <p className="text-base sm:text-lg text-white leading-snug">
+                <p className="text-base sm:text-lg text-white leading-snug uppercase">
                   Enquanto espera o dia do corte, jogue e suba no ranking da barbearia.
                 </p>
                 <Button
