@@ -1308,6 +1308,7 @@ export default function BarbeariaPage() {
       return (
         <TrimPlayGame
           barbershopId={barbershopId}
+          unitId={bookingSummary?.unitId ?? null}
           clienteId={trimPlayCliente.id}
           clienteNome={trimPlayCliente.nome}
           onExit={() => setTrimPlayStage("intro")}

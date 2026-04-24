@@ -7,7 +7,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
-import { Music, Upload, Save, Play, Trash2, Plus, ArrowUp, ArrowDown } from "lucide-react"
+import { Music, Upload, Save, Play, Trash2, Plus, ArrowUp, ArrowDown, ChevronDown, Trophy } from "lucide-react"
 
 type AudioAsset = {
   id: string
@@ -113,6 +113,20 @@ export default function TrimPlayerAdminPage() {
     gameover: "efeito_texto",
   })
 
+  const [audioPanelOpen, setAudioPanelOpen] = useState(false)
+  const [visualPanelOpen, setVisualPanelOpen] = useState(false)
+
+  type RankingOverviewRow = {
+    rank: number
+    barbershop_id: string
+    name: string
+    top_score: number | null
+    ranking_entries: number
+  }
+  const [rankingOverview, setRankingOverview] = useState<RankingOverviewRow[]>([])
+  const [rankingOverviewLoading, setRankingOverviewLoading] = useState(true)
+  const [rankingOverviewError, setRankingOverviewError] = useState("")
+
   const grouped = useMemo(() => {
     const map = new Map<string, AudioAsset[]>()
     for (const c of ORDER) map.set(c, [])
@@ -193,6 +207,31 @@ export default function TrimPlayerAdminPage() {
       if (stopTimerRef.current) window.clearTimeout(stopTimerRef.current)
       if (savedTimerRef.current) window.clearTimeout(savedTimerRef.current)
       previewRef.current?.pause()
+    }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    setRankingOverviewLoading(true)
+    setRankingOverviewError("")
+    fetch("/api/admin/trimplay/ranking-overview", { credentials: "include" })
+      .then(async (r) => {
+        const j = await r.json().catch(() => ({}))
+        if (!r.ok) throw new Error(typeof j.error === "string" ? j.error : "Erro ao carregar visão global")
+        return j as { items?: RankingOverviewRow[] }
+      })
+      .then((j) => {
+        if (cancelled) return
+        setRankingOverview(Array.isArray(j.items) ? j.items : [])
+      })
+      .catch((e) => {
+        if (!cancelled) setRankingOverviewError(e instanceof Error ? e.message : "Erro")
+      })
+      .finally(() => {
+        if (!cancelled) setRankingOverviewLoading(false)
+      })
+    return () => {
+      cancelled = true
     }
   }, [])
 
@@ -583,10 +622,29 @@ export default function TrimPlayerAdminPage() {
 
       <div className="grid gap-8 lg:grid-cols-2 lg:gap-10 lg:items-start">
         <section className="space-y-4 min-w-0">
-          <div className="rounded-lg border border-[#D4AF37]/25 bg-zinc-950/80 px-4 py-3">
-            <h2 className="text-sm font-semibold text-[#D4AF37] tracking-wide">Áudio (admin)</h2>
-            <p className="text-xs text-zinc-500 mt-1">Upload, corte e teste por categoria (combos, vitória e fim de jogo).</p>
-          </div>
+          <button
+            type="button"
+            onClick={() => setAudioPanelOpen((v) => !v)}
+            className="w-full rounded-lg border border-[#D4AF37]/25 bg-zinc-950/80 px-4 py-3 text-left transition-colors hover:bg-zinc-900/90 hover:border-[#D4AF37]/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D4AF37]/45"
+            aria-expanded={audioPanelOpen}
+          >
+            <div className="flex items-start gap-3">
+              <ChevronDown
+                className={[
+                  "w-5 h-5 text-[#D4AF37] shrink-0 mt-0.5 transition-transform",
+                  audioPanelOpen ? "rotate-180" : "",
+                ].join(" ")}
+                aria-hidden
+              />
+              <div className="min-w-0">
+                <h2 className="text-sm font-semibold text-[#D4AF37] tracking-wide">Áudio (admin)</h2>
+                <p className="text-xs text-zinc-500 mt-1">
+                  Upload, corte e teste por categoria (combos, vitória e fim de jogo). Clique para expandir ou recolher.
+                </p>
+              </div>
+            </div>
+          </button>
+          {audioPanelOpen ? (
           <div className="grid gap-4">
         {ORDER.map((category) => (
           <Card key={category} className="bg-zinc-950 border-[#D4AF37]/35 text-white">
@@ -779,16 +837,35 @@ export default function TrimPlayerAdminPage() {
           </Card>
         ))}
           </div>
+          ) : null}
         </section>
 
         <section className="space-y-4 min-w-0 lg:border-l lg:border-[#D4AF37]/20 lg:pl-8 lg:sticky lg:top-6">
-          <div className="rounded-lg border border-[#D4AF37]/25 bg-zinc-950/80 px-4 py-3">
-            <h2 className="text-sm font-semibold text-[#D4AF37] tracking-wide">Efeitos visuais</h2>
-            <p className="text-xs text-zinc-500 mt-1">
-              Cada evento executa efeitos em sequência (loop). O jogo alterna automaticamente entre os itens da lista.
-            </p>
-          </div>
+          <button
+            type="button"
+            onClick={() => setVisualPanelOpen((v) => !v)}
+            className="w-full rounded-lg border border-[#D4AF37]/25 bg-zinc-950/80 px-4 py-3 text-left transition-colors hover:bg-zinc-900/90 hover:border-[#D4AF37]/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D4AF37]/45"
+            aria-expanded={visualPanelOpen}
+          >
+            <div className="flex items-start gap-3">
+              <ChevronDown
+                className={[
+                  "w-5 h-5 text-[#D4AF37] shrink-0 mt-0.5 transition-transform",
+                  visualPanelOpen ? "rotate-180" : "",
+                ].join(" ")}
+                aria-hidden
+              />
+              <div className="min-w-0">
+                <h2 className="text-sm font-semibold text-[#D4AF37] tracking-wide">Efeitos visuais</h2>
+                <p className="text-xs text-zinc-500 mt-1">
+                  Cada evento executa efeitos em sequência (loop). O jogo alterna automaticamente entre os itens da lista.
+                  Clique para expandir ou recolher.
+                </p>
+              </div>
+            </div>
+          </button>
 
+        {visualPanelOpen ? (
         <div className="grid gap-4">
           {VISUAL_EVENTS.map((eventKey) => (
             <Card key={eventKey} className="bg-zinc-950 border-[#D4AF37]/35 text-white">
@@ -922,8 +999,64 @@ export default function TrimPlayerAdminPage() {
             </Card>
           ))}
         </div>
+        ) : null}
         </section>
       </div>
+
+      <Card className="bg-zinc-950 border-[#D4AF37]/35 text-white">
+        <CardContent className="p-5 sm:p-6 space-y-4">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl border border-[#D4AF37]/35 bg-[#D4AF37]/10 flex items-center justify-center shrink-0">
+              <Trophy className="w-5 h-5 text-[#D4AF37]" />
+            </div>
+            <div className="min-w-0">
+              <h2 className="text-lg font-semibold text-white">Ranking Trim Play — visão global</h2>
+              <p className="text-sm text-zinc-400 mt-1">
+                Comparativo entre barbearias (melhor pontuação registrada e quantas posições existem no ranking). O detalhe
+                por jogador e por unidade fica em <strong className="text-zinc-300">Configurações → Trim Play</strong> no
+                painel de cada barbearia.
+              </p>
+            </div>
+          </div>
+
+          {rankingOverviewError ? (
+            <p className="text-sm text-red-300 border border-red-500/30 rounded-md px-3 py-2 bg-red-500/10">
+              {rankingOverviewError}
+            </p>
+          ) : null}
+
+          {rankingOverviewLoading ? (
+            <p className="text-sm text-zinc-500">Carregando…</p>
+          ) : rankingOverview.length === 0 ? (
+            <p className="text-sm text-zinc-500">Nenhuma pontuação registrada ainda.</p>
+          ) : (
+            <div className="overflow-x-auto rounded-lg border border-[#D4AF37]/20">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-[#D4AF37]/25 text-left text-zinc-400">
+                    <th className="py-2.5 px-3 font-medium">#</th>
+                    <th className="py-2.5 px-3 font-medium">Barbearia</th>
+                    <th className="py-2.5 px-3 font-medium text-right">Recorde</th>
+                    <th className="py-2.5 px-3 font-medium text-right">No ranking</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rankingOverview.map((row) => (
+                    <tr key={row.barbershop_id} className="border-b border-zinc-800/90">
+                      <td className="py-2.5 px-3 text-[#D4AF37] tabular-nums font-medium">{row.rank}</td>
+                      <td className="py-2.5 px-3 text-white font-medium">{row.name}</td>
+                      <td className="py-2.5 px-3 text-right tabular-nums text-[#D4AF37]">
+                        {row.top_score != null ? row.top_score : "—"}
+                      </td>
+                      <td className="py-2.5 px-3 text-right tabular-nums text-zinc-300">{row.ranking_entries}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   )
 }

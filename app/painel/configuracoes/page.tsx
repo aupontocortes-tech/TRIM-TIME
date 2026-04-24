@@ -52,6 +52,7 @@ import {
   ExternalLink,
   Plug,
   Camera,
+  Trophy,
 } from "lucide-react"
 import {
   Dialog,
@@ -138,7 +139,7 @@ const WA_SECTION_REMINDER_OPTIONS = [
 ] as const
 
 const CONFIG_TABS_LIST_CLASS =
-  "bg-secondary/50 border border-border w-full max-w-none grid grid-cols-2 min-[480px]:grid-cols-4 lg:grid-cols-8 gap-1.5 p-2 rounded-xl h-auto shadow-sm"
+  "bg-secondary/50 border border-border w-full max-w-none grid grid-cols-2 min-[480px]:grid-cols-3 lg:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-9 gap-1.5 p-2 rounded-xl h-auto shadow-sm"
 
 const CONFIG_TAB_TRIGGER_CLASS =
   "data-[state=active]:bg-primary data-[state=active]:text-primary-foreground w-full min-h-[52px] flex flex-col sm:flex-row items-center justify-center gap-1.5 sm:gap-2 px-2 py-2.5 text-sm sm:text-base font-semibold leading-tight text-center [&_svg]:!size-5 sm:[&_svg]:!size-6"
@@ -276,6 +277,18 @@ export default function ConfiguracoesPage() {
   const [subscriptionBusy, setSubscriptionBusy] = useState(false)
   const [subscriptionError, setSubscriptionError] = useState<string | null>(null)
   const [subscriptionOk, setSubscriptionOk] = useState<string | null>(null)
+
+  type TrimPlayRankRow = {
+    rank: number
+    cliente_id: string
+    cliente_nome: string
+    score: number
+    updated_at: string
+  }
+  const [trimPlayRankRows, setTrimPlayRankRows] = useState<TrimPlayRankRow[]>([])
+  const [trimPlayRankLoading, setTrimPlayRankLoading] = useState(false)
+  const [trimPlayRankError, setTrimPlayRankError] = useState<string | null>(null)
+  const [trimPlayRankUnitId, setTrimPlayRankUnitId] = useState("")
 
   useEffect(() => {
     // Garante que o origin já venha correto mesmo após navegações dentro do painel.
@@ -449,6 +462,32 @@ export default function ConfiguracoesPage() {
   useEffect(() => {
     if (!barbershopLoading && barbershop) void loadWhatsapp()
   }, [barbershopLoading, barbershop?.id, loadWhatsapp])
+
+  const loadTrimPlayRanking = useCallback(async () => {
+    if (!barbershop?.id) return
+    setTrimPlayRankLoading(true)
+    setTrimPlayRankError(null)
+    const q = trimPlayRankUnitId ? `?unit_id=${encodeURIComponent(trimPlayRankUnitId)}` : ""
+    try {
+      const r = await fetch(`/api/barbershops/trimplay-ranking${q}`, { credentials: "include" })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) {
+        setTrimPlayRankError(typeof j.error === "string" ? j.error : "Erro ao carregar ranking")
+        setTrimPlayRankRows([])
+        return
+      }
+      setTrimPlayRankRows(Array.isArray(j.top) ? j.top : [])
+    } catch {
+      setTrimPlayRankError("Erro de rede")
+      setTrimPlayRankRows([])
+    } finally {
+      setTrimPlayRankLoading(false)
+    }
+  }, [barbershop?.id, trimPlayRankUnitId])
+
+  useEffect(() => {
+    if (!barbershopLoading && barbershop?.id) void loadTrimPlayRanking()
+  }, [barbershopLoading, barbershop?.id, loadTrimPlayRanking])
 
   const linkAgendamento =
     origin && barbershop?.slug ? `${origin}/b/${barbershop.slug}` : barbershop?.slug ? `/b/${barbershop.slug}` : "—"
@@ -1304,6 +1343,10 @@ export default function ConfiguracoesPage() {
           <TabsTrigger value="integracao" className={CONFIG_TAB_TRIGGER_CLASS}>
             <Plug className="shrink-0" />
             <span className={CONFIG_TAB_LABEL_CLASS}>Integração</span>
+          </TabsTrigger>
+          <TabsTrigger value="trimplay" className={CONFIG_TAB_TRIGGER_CLASS}>
+            <Trophy className="shrink-0" />
+            <span className={CONFIG_TAB_LABEL_CLASS}>Trim Play</span>
           </TabsTrigger>
         </TabsList>
 
@@ -3009,6 +3052,98 @@ export default function ConfiguracoesPage() {
               {notifBusy ? "Salvando…" : "Salvar textos e horários (WhatsApp / lembretes)"}
             </Button>
           </div>
+        </TabsContent>
+
+        <TabsContent value="trimplay" className="space-y-6">
+          <Card className="bg-card border-border">
+            <CardHeader>
+              <CardTitle className="text-foreground flex items-center gap-2">
+                <Trophy className="w-5 h-5 text-primary" />
+                Ranking do Trim Play
+              </CardTitle>
+              <CardDescription className="text-muted-foreground">
+                Lista de jogadores e pontuações do mini jogo no link público de agendamento. Com várias unidades, você
+                pode ver o ranking geral da barbearia ou o de cada loja.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {units.length > 0 ? (
+                <Field className="max-w-md">
+                  <FieldLabel htmlFor="trimplay-rank-unit">Unidade</FieldLabel>
+                  <select
+                    id="trimplay-rank-unit"
+                    value={trimPlayRankUnitId}
+                    onChange={(e) => setTrimPlayRankUnitId(e.target.value)}
+                    className="mt-1 w-full bg-input border border-border text-foreground text-sm rounded-md px-3 py-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <option value="">Geral (sem unidade específica)</option>
+                    {units.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.name}
+                        {!u.active ? " — inativa" : ""}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              ) : null}
+
+              {trimPlayRankError ? (
+                <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+                  {trimPlayRankError}
+                </div>
+              ) : null}
+
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="border-border"
+                  disabled={trimPlayRankLoading}
+                  onClick={() => void loadTrimPlayRanking()}
+                >
+                  {trimPlayRankLoading ? "Atualizando…" : "Atualizar lista"}
+                </Button>
+              </div>
+
+              {trimPlayRankLoading && trimPlayRankRows.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Carregando ranking…</p>
+              ) : trimPlayRankRows.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Nenhuma pontuação neste escopo ainda.</p>
+              ) : (
+                <div className="overflow-x-auto rounded-lg border border-border">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-border text-left text-muted-foreground">
+                        <th className="py-2.5 px-3 font-medium">#</th>
+                        <th className="py-2.5 px-3 font-medium">Jogador</th>
+                        <th className="py-2.5 px-3 font-medium">ID cliente</th>
+                        <th className="py-2.5 px-3 font-medium text-right">Pontos</th>
+                        <th className="py-2.5 px-3 font-medium text-right hidden md:table-cell">Atualizado</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {trimPlayRankRows.map((row) => (
+                        <tr key={`${row.cliente_id}-${row.rank}`} className="border-b border-border/80">
+                          <td className="py-2.5 px-3 text-primary tabular-nums font-medium">{row.rank}</td>
+                          <td className="py-2.5 px-3 text-foreground">{row.cliente_nome}</td>
+                          <td className="py-2.5 px-3 text-muted-foreground font-mono text-xs truncate max-w-[8rem] md:max-w-none">
+                            {row.cliente_id}
+                          </td>
+                          <td className="py-2.5 px-3 text-right tabular-nums text-primary">{row.score}</td>
+                          <td className="py-2.5 px-3 text-right text-muted-foreground text-xs hidden md:table-cell">
+                            {new Date(row.updated_at).toLocaleString("pt-BR", {
+                              dateStyle: "short",
+                              timeStyle: "short",
+                            })}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>

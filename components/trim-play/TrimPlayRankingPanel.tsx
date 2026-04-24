@@ -50,6 +50,7 @@ function rankBadgeClasses(rank: number, fs: boolean): string {
 
 type Props = {
   barbershopId: string
+  unitId?: string | null
   clienteId?: string
   className?: string
   header?: ReactNode
@@ -59,6 +60,7 @@ type Props = {
 
 export function TrimPlayRankingPanel({
   barbershopId,
+  unitId = null,
   clienteId,
   className,
   header,
@@ -74,13 +76,16 @@ export function TrimPlayRankingPanel({
   const fs = variant === "fullscreen"
 
   useEffect(() => {
-    const cached = loadCachedRanking(barbershopId)
+    const cached = loadCachedRanking(barbershopId, unitId)
     if (cached) {
       setRanking({ top: cached.top, my: cached.my })
       setLoading(false)
+    } else {
+      setRanking(null)
+      setLoading(true)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [barbershopId])
+  }, [barbershopId, unitId])
 
   useEffect(() => {
     let cancelled = false
@@ -89,10 +94,10 @@ export function TrimPlayRankingPanel({
       setError(null)
       setLoading(true)
       try {
-        const data = await fetchTrimPlayRanking({ barbershopId, clienteId })
+        const data = await fetchTrimPlayRanking({ barbershopId, unitId, clienteId })
         if (cancelled) return
         setRanking(data)
-        saveCachedRanking(barbershopId, { top: data.top, my: data.my })
+        saveCachedRanking(barbershopId, { top: data.top, my: data.my }, unitId)
       } catch (e) {
         if (cancelled) return
         setError(e instanceof Error ? e.message : "Erro ao buscar ranking")
@@ -105,7 +110,7 @@ export function TrimPlayRankingPanel({
     return () => {
       cancelled = true
     }
-  }, [barbershopId, clienteId])
+  }, [barbershopId, unitId, clienteId])
 
   const rootClass = fs
     ? [

@@ -933,11 +933,14 @@ function ShapePreview({
 
 export function TrimPlayGame({
   barbershopId,
+  unitId = null,
   clienteId,
   clienteNome,
   onExit,
 }: {
   barbershopId: string
+  /** Ranking por unidade da barbearia; null = escopo geral. */
+  unitId?: string | null
   clienteId: string
   clienteNome: string
   onExit: () => void
@@ -1038,20 +1041,20 @@ export function TrimPlayGame({
   dragRef.current = drag
   comboStreakRef.current = comboStreak
   useEffect(() => {
-    const best = loadBestLocal(barbershopId, clienteId)
+    const best = loadBestLocal(barbershopId, clienteId, unitId)
     setBestLocal(best)
-  }, [barbershopId, clienteId])
+  }, [barbershopId, clienteId, unitId])
 
   const refreshMyRanking = useCallback(async () => {
     try {
       if (!navigator.onLine) return
-      const ranking = await fetchTrimPlayRanking({ barbershopId, clienteId })
-      saveCachedRanking(barbershopId, { top: ranking.top, my: ranking.my })
+      const ranking = await fetchTrimPlayRanking({ barbershopId, unitId, clienteId })
+      saveCachedRanking(barbershopId, { top: ranking.top, my: ranking.my }, unitId)
       setMyRanking(ranking.my ? { rank: ranking.my.rank, score: ranking.my.score } : null)
     } catch {
       // ranking temporariamente indisponivel
     }
-  }, [barbershopId, clienteId])
+  }, [barbershopId, unitId, clienteId])
 
   useEffect(() => {
     recentTemplatesRef.current = hand.filter(Boolean).map((x) => x!.templateId)
@@ -1076,19 +1079,20 @@ export function TrimPlayGame({
   }, [refreshMyRanking])
 
   const syncPending = async () => {
-    const pending = loadPendingScore(barbershopId, clienteId)
+    const pending = loadPendingScore(barbershopId, clienteId, unitId)
     if (pending === null) return
     try {
       if (!navigator.onLine) return
       await submitTrimPlayScore({
         barbershopId,
+        unitId,
         clienteId,
         clienteName: clienteNome,
         score: pending,
       })
-      clearPendingScore(barbershopId, clienteId)
-      const ranking = await fetchTrimPlayRanking({ barbershopId, clienteId })
-      saveCachedRanking(barbershopId, { top: ranking.top, my: ranking.my })
+      clearPendingScore(barbershopId, clienteId, unitId)
+      const ranking = await fetchTrimPlayRanking({ barbershopId, unitId, clienteId })
+      saveCachedRanking(barbershopId, { top: ranking.top, my: ranking.my }, unitId)
       setMyRanking(ranking.my ? { rank: ranking.my.rank, score: ranking.my.score } : null)
       setSyncError(null)
     } catch (e) {
@@ -1103,6 +1107,7 @@ export function TrimPlayGame({
         try {
           await submitTrimPlayScore({
             barbershopId,
+            unitId,
             clienteId,
             clienteName: clienteNome,
             score: deltaScore,
@@ -1110,15 +1115,15 @@ export function TrimPlayGame({
           await refreshMyRanking()
           setSyncError(null)
         } catch (e) {
-          savePendingScore(barbershopId, clienteId, deltaScore)
+          savePendingScore(barbershopId, clienteId, deltaScore, unitId)
           setSyncError(e instanceof Error ? e.message : "Sem conexão para sincronizar")
         }
       } else {
-        savePendingScore(barbershopId, clienteId, deltaScore)
+        savePendingScore(barbershopId, clienteId, deltaScore, unitId)
         setSyncError("Sem internet: pontuação será enviada quando voltar.")
       }
     },
-    [barbershopId, clienteId, clienteNome, refreshMyRanking]
+    [barbershopId, unitId, clienteId, clienteNome, refreshMyRanking]
   )
 
   useEffect(() => {
@@ -1127,7 +1132,7 @@ export function TrimPlayGame({
     void syncPending()
     return () => window.removeEventListener("online", run)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [barbershopId, clienteId])
+  }, [barbershopId, unitId, clienteId])
 
   const showToast = useCallback((msg: string) => {
     setToast(msg)
@@ -1172,16 +1177,16 @@ export function TrimPlayGame({
       setState("over")
       setGameOverAnimKey((k) => k + 1)
       window.setTimeout(() => playTrimPlayGameOver(), 240)
-      const storedBest = loadBestLocal(barbershopId, clienteId)
+      const storedBest = loadBestLocal(barbershopId, clienteId, unitId)
       if (finalScore > storedBest) {
         setBestLocal(finalScore)
-        saveBestLocal(barbershopId, clienteId, finalScore)
+        saveBestLocal(barbershopId, clienteId, finalScore, unitId)
       }
       const pendingRound = unsyncedRoundPointsRef.current
       unsyncedRoundPointsRef.current = 0
       await submitProgress(pendingRound)
     },
-    [barbershopId, clienteId, submitProgress]
+    [barbershopId, unitId, clienteId, submitProgress]
   )
 
   const updatePreview = useCallback((clientX: number, clientY: number, d: DragPayload) => {
@@ -1636,7 +1641,9 @@ export function TrimPlayGame({
               </div>
               <div>
                 <h2 className="text-lg font-semibold text-white tracking-tight">Ranking</h2>
-                <p className="text-xs text-white/45">Top jogadores desta barbearia</p>
+                <p className="text-xs text-white/45">
+                  {unitId ? "Top jogadores desta unidade" : "Top jogadores desta barbearia"}
+                </p>
               </div>
             </div>
             <button
@@ -1651,12 +1658,15 @@ export function TrimPlayGame({
           <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 py-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] flex flex-col">
             <TrimPlayRankingPanel
               barbershopId={barbershopId}
+              unitId={unitId}
               clienteId={clienteId}
               variant="fullscreen"
               header={
                 <div className="flex items-center gap-2 text-[#f0d060]">
                   <span className="font-semibold">Ranking</span>
-                  <span className="text-white/35 text-sm font-normal">· todos os jogadores</span>
+                  <span className="text-white/35 text-sm font-normal">
+                    · {unitId ? "esta unidade" : "barbearia (geral)"}
+                  </span>
                 </div>
               }
             />

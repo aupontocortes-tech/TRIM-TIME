@@ -1,5 +1,7 @@
 export async function submitTrimPlayScore(input: {
   barbershopId: string
+  /** Ranking por unidade; omitir ou null = escopo geral da barbearia. */
+  unitId?: string | null
   clienteId: string
   clienteName: string
   score: number
@@ -9,6 +11,7 @@ export async function submitTrimPlayScore(input: {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       barbershop_id: input.barbershopId,
+      unit_id: input.unitId ?? null,
       cliente_id: input.clienteId,
       cliente_name: input.clienteName,
       score: input.score,
@@ -26,10 +29,12 @@ export async function submitTrimPlayScore(input: {
 
 export async function fetchTrimPlayRanking(input: {
   barbershopId: string
+  unitId?: string | null
   clienteId?: string
 }) {
   const url = new URL("/api/trimplay/ranking", window.location.origin)
   url.searchParams.set("barbershop_id", input.barbershopId)
+  if (input.unitId) url.searchParams.set("unit_id", input.unitId)
   if (input.clienteId) url.searchParams.set("cliente_id", input.clienteId)
 
   const res = await fetch(url.toString(), { credentials: "include" })
@@ -43,4 +48,3 @@ export async function fetchTrimPlayRanking(input: {
     my: null | { cliente_id: string; score: number; rank: number }
   }
 }
-
