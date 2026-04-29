@@ -6,10 +6,12 @@ import { fetchBarbershopPlanContext } from "@/lib/barbershop-plan-server"
 import { canUseBarberCommission } from "@/lib/plans"
 import { aggregateCommissionsForRange } from "@/lib/commissions"
 import { resolveSelectedUnitId } from "@/lib/unit-context"
+import { expireStaleAppointmentsForBarbershop } from "@/lib/appointment-expiry"
 
 export async function GET() {
   try {
     const barbershopId = await requireBarbershopId()
+    await expireStaleAppointmentsForBarbershop(barbershopId)
     const supabase = createServiceRoleClient()
     const selectedUnitId = await resolveSelectedUnitId(barbershopId)
     const today = new Date().toISOString().slice(0, 10)

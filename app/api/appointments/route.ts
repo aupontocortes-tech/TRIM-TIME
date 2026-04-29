@@ -13,10 +13,12 @@ import {
 } from "@/lib/appointment-prisma-helpers"
 import { withServiceDescriptionsFromDb } from "@/lib/service-queries"
 import { trySendWhatsAppAppointmentConfirmation } from "@/lib/whatsapp-appointment-events"
+import { expireStaleAppointmentsForBarbershop } from "@/lib/appointment-expiry"
 
 export async function GET(request: Request) {
   try {
     const barbershopId = await requireBarbershopId()
+    await expireStaleAppointmentsForBarbershop(barbershopId)
     const { searchParams } = new URL(request.url)
     const date = searchParams.get("date") // YYYY-MM-DD
     const from = searchParams.get("from")
@@ -58,6 +60,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const barbershopId = await requireBarbershopId()
+    await expireStaleAppointmentsForBarbershop(barbershopId)
     const body = await request.json() as {
       client_id: string
       barber_id: string

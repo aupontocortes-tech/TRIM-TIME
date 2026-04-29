@@ -5,6 +5,7 @@ import { appointmentStartUtcMs } from "@/lib/appointment-reminder-time"
 import { renderNotificationTemplate, type NotificationTemplateVars } from "@/lib/notification-template"
 import { sendWebPushToClient } from "@/lib/web-push-send"
 import { sendWhatsAppByProvider, type WhatsAppSendResult } from "@/lib/whatsapp-send-unified"
+import { expireStaleAppointmentsWhere } from "@/lib/appointment-expiry"
 
 const PRESET_REMINDER_OFFSETS = new Set([30, 60, 120, 1440])
 
@@ -61,6 +62,8 @@ export type ReminderRunStats = {
  * Usa `barbershop.settings.notification_settings` e deduplica por `reminder_minutes` no `notification_log`.
  */
 export async function processAppointmentReminders(): Promise<ReminderRunStats> {
+  await expireStaleAppointmentsWhere({})
+
   const stats: ReminderRunStats = {
     appointments_scanned: 0,
     reminders_logged: 0,

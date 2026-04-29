@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { getActiveBarbershopBySlug } from "@/lib/public-booking"
 import { publicClientCookieName, verifyPublicClientSession } from "@/lib/public-client-session"
 import { findClientByPhoneDigits } from "@/lib/client-by-phone"
+import { expireStaleAppointmentsForBarbershop } from "@/lib/appointment-expiry"
 
 type AppointmentRow = {
   id: string
@@ -25,6 +26,8 @@ export async function GET(
     if (!shop || shop.suspendedAt) {
       return NextResponse.json({ error: "Barbearia não encontrada" }, { status: 404 })
     }
+
+    await expireStaleAppointmentsForBarbershop(shop.id)
 
     const url = new URL(request.url)
     const phone = url.searchParams.get("phone")?.trim() ?? ""

@@ -5,6 +5,7 @@ import { getActiveBarbershopBySlug } from "@/lib/public-booking"
 import { publicClientCookieName, verifyPublicClientSession } from "@/lib/public-client-session"
 import { findClientByPhoneDigits } from "@/lib/client-by-phone"
 import { utcDayRangeForYmd } from "@/lib/appointment-prisma-helpers"
+import { expireStaleAppointmentsForBarbershop } from "@/lib/appointment-expiry"
 
 /**
  * Cancela agendamentos do cliente (remarcação: libera o dia para novo horário).
@@ -20,6 +21,8 @@ export async function POST(
     if (!shop || shop.suspendedAt) {
       return NextResponse.json({ error: "Barbearia não encontrada" }, { status: 404 })
     }
+
+    await expireStaleAppointmentsForBarbershop(shop.id)
 
     const body = (await request.json().catch(() => ({}))) as {
       appointment_ids?: string[]

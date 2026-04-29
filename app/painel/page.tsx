@@ -19,6 +19,7 @@ import { useBarbershop } from "@/hooks/use-barbershop"
 import { useUnits } from "@/hooks/use-units"
 import type { DashboardStats } from "@/lib/db/types"
 import type { Appointment } from "@/lib/db/types"
+import { isSlotPastGraceFromYmd } from "@/lib/appointment-reminder-time"
 
 export default function PainelDashboard() {
   const { barbershop, loading: barbershopLoading } = useBarbershop()
@@ -36,7 +37,16 @@ export default function PainelDashboard() {
       fetch(`/api/appointments?date=${today}`, { credentials: "include" }).then((r) => (r.ok ? r.json() : [])),
     ]).then(([dashboardData, appointments]) => {
       setStats(dashboardData)
-      setAgendamentosHoje(Array.isArray(appointments) ? appointments : [])
+      const raw = Array.isArray(appointments) ? appointments : []
+      setAgendamentosHoje(
+        raw.filter((a) => {
+          if (a.status === "no_show") return false
+          if (a.status === "pending" || a.status === "confirmed") {
+            return !isSlotPastGraceFromYmd(a.date, a.time)
+          }
+          return true
+        })
+      )
     }).finally(() => setLoading(false))
   }, [barbershopLoading, unitsLoading, selectedUnitId])
 

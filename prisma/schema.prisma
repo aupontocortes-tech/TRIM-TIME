@@ -85,9 +85,28 @@ model Barbershop {
   supportMessages      SupportMessage[]
   trimPlayScores      TrimPlayScore[]
   barberInvites       BarberInvite[]
+  clientOtpCodes      ClientOtpCode[]
 
   @@index([email])
   @@index([role])
+}
+
+/// Código de 4 dígitos por e-mail (cadastro/login sem senha) no link público de agendamento.
+model ClientOtpCode {
+  id           String     @id @default(uuid()) @db.Uuid
+  barbershopId String     @map("barbershop_id") @db.Uuid
+  barbershop   Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  email        String
+  code         String     @db.VarChar(4)
+  expiresAt    DateTime   @map("expires_at") @db.Timestamptz
+  intent       String     @default("register") @db.VarChar(16)
+  nome         String?
+  telefone     String?    @map("telefone")
+  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([barbershopId, email])
+  @@index([expiresAt])
+  @@map("client_otp_codes")
 }
 
 /// Convite por link para o profissional completar o cadastro (nome, e-mail, telefone, CPF, foto).

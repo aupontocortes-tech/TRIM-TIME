@@ -13,6 +13,7 @@ import {
 import { withServiceDescriptionsFromDb } from "@/lib/service-queries"
 import { normalizeAppointmentTime } from "@/lib/scheduling"
 import { trySendWhatsAppAppointmentPostService } from "@/lib/whatsapp-appointment-events"
+import { expireStaleAppointmentsForBarbershop } from "@/lib/appointment-expiry"
 
 export async function PATCH(
   _request: Request,
@@ -20,6 +21,7 @@ export async function PATCH(
 ) {
   try {
     const barbershopId = await requireBarbershopId()
+    await expireStaleAppointmentsForBarbershop(barbershopId)
     const { id } = await params
     const body = await _request.json() as {
       status?: AppointmentStatus

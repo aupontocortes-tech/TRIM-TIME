@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/dialog"
 import type { Appointment, Barber, Client, Service } from "@/lib/db/types"
 import { useUnits } from "@/hooks/use-units"
+import { isSlotPastGraceFromYmd } from "@/lib/appointment-reminder-time"
 
 type AgendaItem = {
   id: string
@@ -169,7 +170,15 @@ export default function AgendaPage() {
         setAgendamentos([])
         return
       }
-      const list = (Array.isArray(data) ? data : []).map(mapAgendaItem)
+      const list = (Array.isArray(data) ? data : [])
+        .filter((a) => {
+          if (a.status === "no_show") return false
+          if (a.status === "pending" || a.status === "confirmed") {
+            return !isSlotPastGraceFromYmd(a.date, a.time)
+          }
+          return true
+        })
+        .map(mapAgendaItem)
       list.sort((a, b) => {
         const da = a.raw.date ?? ""
         const db = b.raw.date ?? ""

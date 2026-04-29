@@ -12,6 +12,7 @@ import { cpfDigits } from "@/lib/cpf"
 import { trySendWhatsAppAppointmentConfirmation } from "@/lib/whatsapp-appointment-events"
 import { parseAppointmentDate, utcDayRangeForYmd } from "@/lib/appointment-prisma-helpers"
 import { findClientByPhoneDigits } from "@/lib/client-by-phone"
+import { expireStaleAppointmentsForBarbershop } from "@/lib/appointment-expiry"
 
 function normalizeTime(time: string) {
   const raw = String(time ?? "").trim()
@@ -44,6 +45,8 @@ export async function GET(
     if (!shop || shop.suspendedAt) {
       return NextResponse.json({ error: "Barbearia não encontrada" }, { status: 404 })
     }
+
+    await expireStaleAppointmentsForBarbershop(shop.id)
 
     let unitId: string | null = null
     if (unitIdParam) {
@@ -94,6 +97,8 @@ export async function POST(
     if (!shop || shop.suspendedAt) {
       return NextResponse.json({ error: "Barbearia não encontrada" }, { status: 404 })
     }
+
+    await expireStaleAppointmentsForBarbershop(shop.id)
 
     const body = (await request.json().catch(() => ({}))) as {
       barber_id?: string
