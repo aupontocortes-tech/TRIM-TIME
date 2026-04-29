@@ -39,7 +39,7 @@ import {
 import { formatCpfDisplay, cpfDigits } from "@/lib/cpf"
 import { clientPhoneDigits, clientPhonesMatch } from "@/lib/client-phone-utils"
 import { openingHoursFromSettings } from "@/lib/barbershop-settings-ui"
-import type { BarbershopSettings } from "@/lib/db/types"
+import type { BarbershopBookingRules, BarbershopSettings } from "@/lib/db/types"
 import { compressImageToJpegDataUrl } from "@/lib/client-image-compress"
 import { MAX_PROFILE_PHOTO_DATA_URL_CHARS } from "@/lib/photo-data-url"
 import { urlBase64ToUint8Array } from "@/lib/push-client-utils"
@@ -136,6 +136,15 @@ function toYMDLocal(d: Date) {
   return `${y}-${m}-${day}`
 }
 
+function minutesFromHHMM(value: string): number | null {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(value ?? "").trim())
+  if (!m) return null
+  const hh = Number(m[1])
+  const mm = Number(m[2])
+  if (Number.isNaN(hh) || Number.isNaN(mm)) return null
+  return hh * 60 + mm
+}
+
 function pushRemindersOkSessionKey(slug: string) {
   return `trimtime_push_reminders_ok_v1_${slug}`
 }
@@ -169,6 +178,7 @@ type PublicShopPayload = {
   state: string | null
   cep: string | null
   opening_hours?: BarbershopSettings["opening_hours"] | null
+  booking_rules?: BarbershopBookingRules | null
   units: PublicUnit[]
   services: { id: string; name: string; description?: string; price: number; duration: number }[]
   barbers: { id: string; name: string; phone: string | null; photo_url?: string | null; photo_position?: number }[]
@@ -899,12 +909,53 @@ export default function BarbeariaPage() {
 
   const dayKeyFromDate = (d: Date) => dayKeyByIndex[d.getDay()]
 
+  const bookingRules = publicMeta?.booking_rules ?? null
+  const minLeadMinutes = Math.max(0, Math.round(Number(bookingRules?.min_lead_minutes ?? 30) || 30))
+
   const horarios = (() => {
     if (!dataSelecionada) return []
     const key = dayKeyFromDate(dataSelecionada)
     const day = openingHours[key]
     if (!day?.ativo) return []
     return gerarHorarios(day.abertura, day.fechamento)
+  })()
+
+  const horariosBloqueadosFolga = (() => {
+    if (!dataSelecionada) return new Set<string>()
+    const key = dayKeyFromDate(dataSelecionada)
+    const ranges = Array.isArray(bookingRules?.blocked_ranges?.[key]) ? bookingRules?.blocked_ranges?.[key] : []
+    if (!ranges?.length) return new Set<string>()
+    const blocked = new Set<string>()
+    for (const slot of horarios) {
+      const slotMin = minutesFromHHMM(slot)
+      if (slotMin == null) continue
+      const isBlocked = ranges.some((range) => {
+        const start = minutesFromHHMM(String(range?.start ?? ""))
+        const end = minutesFromHHMM(String(range?.end ?? ""))
+        return start != null && end != null && end > start && slotMin >= start && slotMin < end
+      })
+      if (isBlocked) blocked.add(slot)
+    }
+    return blocked
+  })()
+
+  const horariosBloqueadosAntecedencia = (() => {
+    if (!dataSelecionada) return new Set<string>()
+    const selected = new Date(
+      dataSelecionada.getFullYear(),
+      dataSelecionada.getMonth(),
+      dataSelecionada.getDate()
+    )
+    const now = new Date()
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    if (selected.getTime() !== today.getTime()) return new Set<string>()
+    const threshold = now.getHours() * 60 + now.getMinutes() + minLeadMinutes
+    const blocked = new Set<string>()
+    for (const slot of horarios) {
+      const slotMin = minutesFromHHMM(slot)
+      if (slotMin == null || slotMin < threshold) blocked.add(slot)
+    }
+    return blocked
   })()
 
   const selectedUnit =
@@ -1017,10 +1068,20 @@ export default function BarbeariaPage() {
   }, [dataSelecionada, profissionalSelecionado, slug, selectedUnitId, publicMeta])
 
   useEffect(() => {
-    if (horarioSelecionado && occupiedTimes.includes(horarioSelecionado)) {
+    if (!horarioSelecionado) return
+    if (
+      occupiedTimes.includes(horarioSelecionado) ||
+      horariosBloqueadosFolga.has(horarioSelecionado) ||
+      horariosBloqueadosAntecedencia.has(horarioSelecionado)
+    ) {
       setHorarioSelecionado(null)
     }
-  }, [horarioSelecionado, occupiedTimes])
+  }, [
+    horarioSelecionado,
+    occupiedTimes,
+    horariosBloqueadosFolga,
+    horariosBloqueadosAntecedencia,
+  ])
 
   const toggleServico = (id: string) => {
     setServicosSelecionados(prev => 
@@ -2085,25 +2146,38 @@ export default function BarbeariaPage() {
                   {horarios.map((horario) => {
                     const isSelecionado = horarioSelecionado === horario
                     const isOcupado = occupiedTimes.includes(horario)
+                    const isBloqueadoFolga = horariosBloqueadosFolga.has(horario)
+                    const isBloqueadoAntecedencia = horariosBloqueadosAntecedencia.has(horario)
+                    const isBloqueado = isOcupado || isBloqueadoFolga || isBloqueadoAntecedencia
                     
                     return (
                       <button
                         key={horario}
-                        disabled={isOcupado}
+                        disabled={isBloqueado}
                         onClick={() => setHorarioSelecionado(horario)}
                         className={`py-2 px-3 rounded-lg text-sm font-medium transition-all ${
-                          isOcupado
+                          isBloqueado
                             ? 'bg-secondary/50 text-muted-foreground/50 cursor-not-allowed'
                             : isSelecionado
                             ? 'bg-primary text-primary-foreground'
                             : 'bg-card hover:bg-primary/10 text-foreground'
                         }`}
+                        title={
+                          isBloqueadoAntecedencia
+                            ? `Disponível com ${minLeadMinutes} min de antecedência`
+                            : isBloqueadoFolga
+                            ? "Horário bloqueado pela barbearia"
+                            : undefined
+                        }
                       >
                         {horario}
                       </button>
                     )
                   })}
                 </div>
+                <p className="mt-3 text-xs text-muted-foreground">
+                  Horários já passados ou com menos de {minLeadMinutes} min de antecedência ficam bloqueados.
+                </p>
               </div>
             )}
           </div>

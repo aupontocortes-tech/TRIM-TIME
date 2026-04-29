@@ -13,6 +13,7 @@ import { trySendWhatsAppAppointmentConfirmation } from "@/lib/whatsapp-appointme
 import { parseAppointmentDate, utcDayRangeForYmd } from "@/lib/appointment-prisma-helpers"
 import { findClientByPhoneDigits } from "@/lib/client-by-phone"
 import { expireStaleAppointmentsForBarbershop } from "@/lib/appointment-expiry"
+import type { BarbershopSettings } from "@/lib/db/types"
 
 function normalizeTime(time: string) {
   const raw = String(time ?? "").trim()
@@ -25,6 +26,32 @@ function addMinutes(time: string, minutes: number) {
   const outH = Math.floor(total / 60)
   const outM = total % 60
   return `${String(outH).padStart(2, "0")}:${String(outM).padStart(2, "0")}`
+}
+
+function minutesFromHHMM(time: string): number | null {
+  const [hh, mm] = normalizeTime(time).split(":").map((v) => Number(v))
+  if (!Number.isFinite(hh) || !Number.isFinite(mm)) return null
+  return hh * 60 + mm
+}
+
+function weekdayKeyFromYmd(ymd: string):
+  | "domingo"
+  | "segunda"
+  | "terca"
+  | "quarta"
+  | "quinta"
+  | "sexta"
+  | "sabado" {
+  const [y, m, d] = ymd.split("-").map(Number)
+  const js = new Date(y, (m || 1) - 1, d || 1).getDay()
+  return ["domingo", "segunda", "terca", "quarta", "quinta", "sexta", "sabado"][js] as
+    | "domingo"
+    | "segunda"
+    | "terca"
+    | "quarta"
+    | "quinta"
+    | "sexta"
+    | "sabado"
 }
 
 export async function GET(
@@ -142,6 +169,44 @@ export async function POST(
       apptDayBounds = utcDayRangeForYmd(date)
     } catch {
       return NextResponse.json({ error: "Data inválida" }, { status: 400 })
+    }
+
+    const settings = (shop.settings as BarbershopSettings | null) ?? null
+    const bookingRules = settings?.booking_rules
+    const minLeadMinutes = Math.max(0, Math.round(Number(bookingRules?.min_lead_minutes ?? 30) || 30))
+    const now = new Date()
+    const slotDateLocal = new Date(`${date}T00:00:00`)
+    const todayLocal = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    if (slotDateLocal.getTime() === todayLocal.getTime()) {
+      const slotMin = minutesFromHHMM(time)
+      if (slotMin == null) {
+        return NextResponse.json({ error: "Horário inválido" }, { status: 400 })
+      }
+      const nowMin = now.getHours() * 60 + now.getMinutes()
+      if (slotMin < nowMin + minLeadMinutes) {
+        return NextResponse.json(
+          {
+            error: `Escolha um horário com pelo menos ${minLeadMinutes} min de antecedência.`,
+          },
+          { status: 409 }
+        )
+      }
+    }
+
+    const dayKey = weekdayKeyFromYmd(date)
+    const blockedRanges = Array.isArray(bookingRules?.blocked_ranges?.[dayKey])
+      ? bookingRules?.blocked_ranges?.[dayKey] ?? []
+      : []
+    const selectedMinutes = minutesFromHHMM(time)
+    if (selectedMinutes != null) {
+      const blocked = blockedRanges.some((range) => {
+        const start = minutesFromHHMM(String(range?.start ?? ""))
+        const end = minutesFromHHMM(String(range?.end ?? ""))
+        return start != null && end != null && end > start && selectedMinutes >= start && selectedMinutes < end
+      })
+      if (blocked) {
+        return NextResponse.json({ error: "Este horário está bloqueado pela barbearia." }, { status: 409 })
+      }
     }
 
     const activeUnits = await prisma.barbershopUnit.findMany({

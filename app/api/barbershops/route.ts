@@ -128,6 +128,18 @@ function mergeBarbershopSettings(
         : {}
     base.opening_hours = { ...oldH, ...inc.opening_hours }
   }
+  if (inc.booking_rules !== undefined) {
+    const oldB =
+      base.booking_rules &&
+      typeof base.booking_rules === "object" &&
+      !Array.isArray(base.booking_rules)
+        ? (base.booking_rules as Record<string, unknown>)
+        : {}
+    base.booking_rules = {
+      ...oldB,
+      ...(inc.booking_rules as Record<string, unknown>),
+    }
+  }
   if (inc.notification_settings !== undefined) {
     const oldN =
       base.notification_settings &&

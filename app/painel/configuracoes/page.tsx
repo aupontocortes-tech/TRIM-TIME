@@ -12,10 +12,15 @@ import type {
   SubscriptionPlan,
 } from "@/lib/db/types"
 import {
+  bookingRulesFromSettings,
+  bookingRulesToSettings,
   defaultHorariosUi,
+  defaultBookingRulesUi,
   openingHoursFromSettings,
   openingHoursToSettings,
   DIAS_SEMANA_KEYS,
+  type BlockedRangeUi,
+  type BookingRulesUi,
   type HorarioDiaUi,
 } from "@/lib/barbershop-settings-ui"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -179,6 +184,7 @@ export default function ConfiguracoesPage() {
   const [horarios, setHorarios] = useState<
     Record<(typeof DIAS_SEMANA_KEYS)[number], HorarioDiaUi>
   >(() => defaultHorariosUi())
+  const [bookingRules, setBookingRules] = useState<BookingRulesUi>(() => defaultBookingRulesUi())
 
   const [listaServicos, setListaServicos] = useState<Service[]>([])
   const [servicosLoading, setServicosLoading] = useState(true)
@@ -307,6 +313,7 @@ export default function ConfiguracoesPage() {
       cep: barbershop.settings?.cep ?? "",
     })
     setHorarios(openingHoursFromSettings(barbershop.settings?.opening_hours))
+    setBookingRules(bookingRulesFromSettings(barbershop.settings?.booking_rules))
   }, [
     barbershop?.id,
     barbershop?.updated_at,
@@ -550,6 +557,7 @@ export default function ConfiguracoesPage() {
     setSaveOk(false)
     try {
       const opening_hours = openingHoursToSettings(horarios as Record<string, HorarioDiaUi>)
+      const booking_rules = bookingRulesToSettings(bookingRules)
       const r = await fetch("/api/barbershops", {
         method: "PATCH",
         credentials: "include",
@@ -564,6 +572,7 @@ export default function ConfiguracoesPage() {
             state: barbearia.estado.trim() || undefined,
             cep: barbearia.cep.trim() || undefined,
             opening_hours,
+            booking_rules,
           },
         }),
       })
@@ -586,6 +595,42 @@ export default function ConfiguracoesPage() {
     setHorarios((prev) => ({
       ...prev,
       [dia]: { ...prev[dia as keyof typeof prev], ativo: !prev[dia as keyof typeof prev].ativo },
+    }))
+  }
+
+  const addBlockedRange = (dayKey: (typeof DIAS_SEMANA_KEYS)[number]) => {
+    setBookingRules((prev) => ({
+      ...prev,
+      blockedRanges: {
+        ...prev.blockedRanges,
+        [dayKey]: [...(prev.blockedRanges[dayKey] ?? []), { start: "12:00", end: "13:00" }],
+      },
+    }))
+  }
+
+  const updateBlockedRange = (
+    dayKey: (typeof DIAS_SEMANA_KEYS)[number],
+    index: number,
+    patch: Partial<BlockedRangeUi>
+  ) => {
+    setBookingRules((prev) => ({
+      ...prev,
+      blockedRanges: {
+        ...prev.blockedRanges,
+        [dayKey]: (prev.blockedRanges[dayKey] ?? []).map((range, i) =>
+          i === index ? { ...range, ...patch } : range
+        ),
+      },
+    }))
+  }
+
+  const removeBlockedRange = (dayKey: (typeof DIAS_SEMANA_KEYS)[number], index: number) => {
+    setBookingRules((prev) => ({
+      ...prev,
+      blockedRanges: {
+        ...prev.blockedRanges,
+        [dayKey]: (prev.blockedRanges[dayKey] ?? []).filter((_, i) => i !== index),
+      },
     }))
   }
 
@@ -1496,6 +1541,86 @@ export default function ConfiguracoesPage() {
                     </div>
                   )
                 })}
+              </div>
+
+              <div className="mt-8 rounded-lg border border-border p-4 space-y-4">
+                <div>
+                  <h3 className="text-foreground font-semibold">Regras de agendamento</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Configure antecedência mínima e bloqueios de horário (folga/almoço) para o cliente no link de agendamento.
+                  </p>
+                </div>
+
+                <Field className="max-w-[260px]">
+                  <FieldLabel htmlFor="min-lead-minutes">Antecedência mínima (minutos)</FieldLabel>
+                  <Input
+                    id="min-lead-minutes"
+                    type="number"
+                    min={0}
+                    step={5}
+                    value={bookingRules.minLeadMinutes}
+                    onChange={(e) =>
+                      setBookingRules((prev) => ({
+                        ...prev,
+                        minLeadMinutes: Math.max(0, Number(e.target.value) || 0),
+                      }))
+                    }
+                    className="bg-input border-border text-foreground"
+                  />
+                </Field>
+
+                <div className="space-y-3">
+                  {diasSemana.map((dia) => {
+                    const rows = bookingRules.blockedRanges[dia.key] ?? []
+                    return (
+                      <div key={`blocked-${dia.key}`} className="rounded-md border border-border/70 p-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-sm font-medium text-foreground">{dia.label}</p>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-8 border-border"
+                            onClick={() => addBlockedRange(dia.key)}
+                          >
+                            <Plus className="w-4 h-4 mr-1" />
+                            Bloquear faixa
+                          </Button>
+                        </div>
+                        {rows.length === 0 ? (
+                          <p className="text-xs text-muted-foreground mt-2">Sem bloqueios neste dia.</p>
+                        ) : (
+                          <div className="mt-3 space-y-2">
+                            {rows.map((range, idx) => (
+                              <div key={`${dia.key}-${idx}`} className="flex items-center gap-2">
+                                <Input
+                                  type="time"
+                                  value={range.start}
+                                  onChange={(e) => updateBlockedRange(dia.key, idx, { start: e.target.value })}
+                                  className="w-32 bg-input border-border text-foreground"
+                                />
+                                <span className="text-muted-foreground text-sm">até</span>
+                                <Input
+                                  type="time"
+                                  value={range.end}
+                                  onChange={(e) => updateBlockedRange(dia.key, idx, { end: e.target.value })}
+                                  className="w-32 bg-input border-border text-foreground"
+                                />
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  className="h-9 px-2 text-muted-foreground hover:text-destructive"
+                                  onClick={() => removeBlockedRange(dia.key, idx)}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
             </CardContent>
           </Card>

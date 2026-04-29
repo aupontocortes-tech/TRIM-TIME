@@ -14,6 +14,15 @@ export type BarbershopRole = "super_admin" | "admin_barbershop"
 /** Horário por dia (chaves: segunda, terca, …) — guardado em barbershops.settings.opening_hours */
 export type BarbershopOpeningDay = { active: boolean; open: string; close: string }
 
+/** Regras extras do agendamento público (link /b/:slug). */
+export type BarbershopBookingBlockedRange = { start: string; end: string }
+export type BarbershopBookingRules = {
+  /** Antecedência mínima em minutos para reservar (ex.: 30). */
+  min_lead_minutes?: number
+  /** Faixas bloqueadas por dia (chaves: segunda, terca, ...). */
+  blocked_ranges?: Record<string, BarbershopBookingBlockedRange[]>
+}
+
 /** Preferências de lembrete de agendamento (salvas em `barbershops.settings.notification_settings`). */
 export type BarbershopNotificationSettings = {
   /** Antes do horário do serviço, em minutos (ex.: 30, 60, 120, 1440 = 1 dia). */
@@ -50,6 +59,7 @@ export type BarbershopSettings = {
   state?: string
   cep?: string
   opening_hours?: Record<string, BarbershopOpeningDay>
+  booking_rules?: BarbershopBookingRules
   notification_settings?: BarbershopNotificationSettings
 }
 

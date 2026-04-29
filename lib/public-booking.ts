@@ -18,6 +18,7 @@ export async function getActiveBarbershopBySlug(slug: string) {
       slug: true,
       name: true,
       suspendedAt: true,
+      settings: true,
     },
   })
 }

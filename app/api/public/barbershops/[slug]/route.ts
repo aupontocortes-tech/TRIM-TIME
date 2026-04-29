@@ -81,6 +81,7 @@ export async function GET(
       state: settings?.state ?? null,
       cep: settings?.cep ?? null,
       opening_hours: settings?.opening_hours ?? null,
+      booking_rules: settings?.booking_rules ?? null,
       units: b.units,
       services: serviceRows.map((r) => {
         const s = serviceDbRowToApi(r)
