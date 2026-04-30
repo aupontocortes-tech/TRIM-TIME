@@ -186,6 +186,76 @@ function isMagicLinkRateLimitError(err: unknown): boolean {
   return raw.toLowerCase().includes("rate limit")
 }
 
+const MAGIC_PENDING_PREFIX = "trimtime_magic_pending:"
+
+type MagicPendingV1 = {
+  v: 1
+  mode: "register" | "login"
+  email: string
+  nome: string
+  telefone: string
+}
+
+function magicPendingStorageKey(slug: string) {
+  return `${MAGIC_PENDING_PREFIX}${slug}`
+}
+
+function saveMagicPending(slug: string, payload: Omit<MagicPendingV1, "v">) {
+  try {
+    const row: MagicPendingV1 = { v: 1, ...payload }
+    sessionStorage.setItem(magicPendingStorageKey(slug), JSON.stringify(row))
+  } catch {
+    /* ignore */
+  }
+}
+
+function loadMagicPending(slug: string): MagicPendingV1 | null {
+  try {
+    const raw = sessionStorage.getItem(magicPendingStorageKey(slug))
+    if (!raw) return null
+    const j = JSON.parse(raw) as MagicPendingV1
+    if (j?.v !== 1 || (j.mode !== "register" && j.mode !== "login")) return null
+    if (typeof j.email !== "string") return null
+    return j
+  } catch {
+    return null
+  }
+}
+
+function clearMagicPending(slug: string) {
+  try {
+    sessionStorage.removeItem(magicPendingStorageKey(slug))
+  } catch {
+    /* ignore */
+  }
+}
+
+function readMagicModeFromUrl(): "register" | "login" | null {
+  if (typeof window === "undefined") return null
+  try {
+    const q = new URLSearchParams(window.location.search)
+    if (q.get("ml") === "login") return "login"
+    if (q.get("ml") === "register") return "register"
+  } catch {
+    /* ignore */
+  }
+  return null
+}
+
+function stripMagicLinkQueryFromUrl() {
+  if (typeof window === "undefined") return
+  try {
+    const u = new URL(window.location.href)
+    if (u.searchParams.get("magic") !== "1") return
+    u.searchParams.delete("magic")
+    u.searchParams.delete("ml")
+    const next = u.pathname + (u.searchParams.toString() ? `?${u.searchParams}` : "") + u.hash
+    window.history.replaceState({}, "", next)
+  } catch {
+    /* ignore */
+  }
+}
+
 function pushRemindersOkSessionKey(slug: string) {
   return `trimtime_push_reminders_ok_v1_${slug}`
 }
@@ -247,7 +317,8 @@ export default function BarbeariaPage() {
   const slug = (params?.slug as string) || "trim-time"
   const storageSuffix = `_${slug}`
   const supabase = useMemo(() => createSupabaseBrowserClient(), [])
-  const lastMagicTokenRef = useRef<string | null>(null)
+  const magicCompleteDoneRef = useRef<string | null>(null)
+  const magicCompleteInFlightRef = useRef<string | null>(null)
 
   const [authPhase, setAuthPhase] = useState<
     "loading" | "cadastro" | "login" | "link_sent" | "logado"
@@ -370,10 +441,19 @@ export default function BarbeariaPage() {
     let cancelled = false
 
     const completeMagicLogin = async (accessToken: string) => {
-      if (!accessToken || lastMagicTokenRef.current === accessToken) return
-      lastMagicTokenRef.current = accessToken
+      if (!accessToken) return
+      if (magicCompleteDoneRef.current === accessToken) return
+      if (magicCompleteInFlightRef.current === accessToken) return
+      magicCompleteInFlightRef.current = accessToken
       setAuthLoading(true)
       setMagicLinkError("")
+      const pending = typeof window !== "undefined" ? loadMagicPending(slug) : null
+      const mlUrl = typeof window !== "undefined" ? readMagicModeFromUrl() : null
+      let mode: "register" | "login" = "register"
+      if (pending?.mode) mode = pending.mode
+      else if (mlUrl) mode = mlUrl
+      const nome = (pending?.nome ?? "").trim()
+      const telefone = pending?.telefone ?? ""
       try {
         const res = await fetch(
           `/api/public/barbershops/${encodeURIComponent(slug)}/auth/magic/complete`,
@@ -385,19 +465,24 @@ export default function BarbeariaPage() {
             },
             credentials: "include",
             body: JSON.stringify({
-              mode: magicLinkMode,
-              nome: formCadastro.nome.trim(),
-              telefone: formCadastro.telefone,
+              mode,
+              nome,
+              telefone,
             }),
           }
         )
         const data = (await res.json().catch(() => ({}))) as { error?: string; client?: ClienteAgendamento }
         if (!res.ok || !data.client) {
-          setMagicLinkError(data.error || "Não foi possível concluir o acesso")
-          setAuthPhase("link_sent")
+          if (!cancelled) {
+            setMagicLinkError(data.error || "Não foi possível concluir o acesso")
+            setAuthPhase("link_sent")
+          }
           return
         }
         if (cancelled) return
+        magicCompleteDoneRef.current = accessToken
+        clearMagicPending(slug)
+        stripMagicLinkQueryFromUrl()
         setClienteLogado(data.client)
         setDadosCliente({
           nome: data.client.nome,
@@ -414,6 +499,7 @@ export default function BarbeariaPage() {
           setAuthPhase("link_sent")
         }
       } finally {
+        magicCompleteInFlightRef.current = null
         if (!cancelled) setAuthLoading(false)
       }
     }
@@ -432,7 +518,7 @@ export default function BarbeariaPage() {
       cancelled = true
       authListener.subscription.unsubscribe()
     }
-  }, [formCadastro.nome, formCadastro.telefone, magicLinkMode, slug, supabase])
+  }, [slug, supabase])
 
   useEffect(() => {
     const units = publicMeta?.units
@@ -471,6 +557,32 @@ export default function BarbeariaPage() {
             foto: c.photo_url?.trim() || saved?.foto?.trim() || "",
             fotoPosicao: saved?.fotoPosicao ?? 50,
           })
+          return
+        }
+        let magicReturn = false
+        try {
+          magicReturn = new URLSearchParams(window.location.search).get("magic") === "1"
+        } catch {
+          /* ignore */
+        }
+        const pending = typeof window !== "undefined" ? loadMagicPending(slug) : null
+        const ml = typeof window !== "undefined" ? readMagicModeFromUrl() : null
+        if (magicReturn && (pending || ml === "login")) {
+          setClienteLogado(null)
+          if (pending) {
+            setOtpEmail(pending.email)
+            setMagicLinkMode(pending.mode)
+            if (pending.mode === "register") {
+              setFormCadastro({
+                nome: pending.nome || "",
+                telefone: pending.telefone || "",
+                email: pending.email || "",
+              })
+            }
+          } else if (ml === "login") {
+            setMagicLinkMode("login")
+          }
+          setAuthPhase("link_sent")
           return
         }
         setClienteLogado(null)
@@ -707,7 +819,8 @@ export default function BarbeariaPage() {
 
   const sendMagicLink = async (mode: "register" | "login", email: string) => {
     const preferredBase = magicLinkRedirectBase()
-    const redirectTo = `${preferredBase}/b/${encodeURIComponent(slug)}?magic=1`
+    const redirectTo = `${preferredBase}/b/${encodeURIComponent(slug)}?magic=1&ml=${encodeURIComponent(mode)}`
+    const normalizedEmail = email.trim().toLowerCase()
     const options =
       mode === "register"
         ? {
@@ -724,10 +837,16 @@ export default function BarbeariaPage() {
             emailRedirectTo: redirectTo,
           }
     const { error } = await supabase.auth.signInWithOtp({
-      email,
+      email: normalizedEmail,
       options,
     })
     if (error) throw error
+    saveMagicPending(slug, {
+      mode,
+      email: normalizedEmail,
+      nome: mode === "register" ? formCadastro.nome.trim() : "",
+      telefone: mode === "register" ? formCadastro.telefone : "",
+    })
   }
 
   const handleCadastro = async (e: React.FormEvent) => {
@@ -758,7 +877,7 @@ export default function BarbeariaPage() {
         return
       }
       await sendMagicLink("register", email)
-      startMagicLinkCooldown(25)
+      startMagicLinkCooldown(60)
       setOtpEmail(email)
       setMagicLinkMode("register")
       setAuthPhase("link_sent")
@@ -775,7 +894,7 @@ export default function BarbeariaPage() {
     setAuthLoading(true)
     try {
       await sendMagicLink(magicLinkMode, otpEmail)
-      startMagicLinkCooldown(25)
+      startMagicLinkCooldown(60)
     } catch (e) {
       if (isMagicLinkRateLimitError(e)) startMagicLinkCooldown(90)
       setMagicLinkError(formatMagicLinkSendError(e))
@@ -834,7 +953,7 @@ export default function BarbeariaPage() {
         return
       }
       await sendMagicLink("login", email)
-      startMagicLinkCooldown(25)
+      startMagicLinkCooldown(60)
       setOtpEmail(email)
       setMagicLinkMode("login")
       setAuthPhase("link_sent")
@@ -859,6 +978,9 @@ export default function BarbeariaPage() {
     setAuthPhase("cadastro")
     setOtpEmail("")
     setMagicLinkError("")
+    clearMagicPending(slug)
+    magicCompleteDoneRef.current = null
+    magicCompleteInFlightRef.current = null
     setFormLogin({ email: "" })
     setFormCadastro({ nome: "", telefone: "", email: "" })
     await supabase.auth.signOut().catch(() => {})
@@ -1453,7 +1575,7 @@ export default function BarbeariaPage() {
                 </div>
                 <h1 className="text-xl font-bold text-foreground text-center mb-1">Verifique seu e-mail</h1>
                 <p className="text-sm text-muted-foreground text-center mb-6">
-                  Enviamos um link mágico para <span className="text-foreground font-medium">{otpEmail}</span>. Abra o e-mail e toque no link para continuar.
+                  Enviamos um link mágico para <span className="text-foreground font-medium">{otpEmail}</span>. Abra o e-mail e toque no link para continuar. Você tem alguns minutos para usar o link; se expirar muito rápido, no painel do Supabase (Authentication) aumente a validade do OTP por e-mail.
                 </p>
                 <div className="space-y-4">
                   {magicLinkError ? (
