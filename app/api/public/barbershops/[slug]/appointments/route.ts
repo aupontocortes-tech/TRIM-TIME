@@ -11,8 +11,8 @@ import { assertValidProfilePhotoDataUrl } from "@/lib/photo-data-url"
 import { cpfDigits } from "@/lib/cpf"
 import { trySendWhatsAppAppointmentConfirmation } from "@/lib/whatsapp-appointment-events"
 import { parseAppointmentDate, utcDayRangeForYmd } from "@/lib/appointment-prisma-helpers"
-import { findClientByPhoneDigits } from "@/lib/client-by-phone"
 import { expireStaleAppointmentsForBarbershop } from "@/lib/appointment-expiry"
+import { appointmentStartsAtUtcFromYmd } from "@/lib/appointment-reminder-time"
 import type { BarbershopSettings } from "@/lib/db/types"
 
 function localYmd(d: Date): string {
@@ -187,13 +187,10 @@ export async function POST(
       if (slotMin == null) {
         return NextResponse.json({ error: "Horário inválido" }, { status: 400 })
       }
-      const [yy, mo, dd] = date.split("-").map(Number)
-      if (!yy || !mo || !dd) {
-        return NextResponse.json({ error: "Data inválida" }, { status: 400 })
+      const slotStart = appointmentStartsAtUtcFromYmd(date, time)
+      if (Number.isNaN(slotStart.getTime())) {
+        return NextResponse.json({ error: "Horário inválido" }, { status: 400 })
       }
-      const hh = Math.floor(slotMin / 60)
-      const mm = slotMin % 60
-      const slotStart = new Date(yy, mo - 1, dd, hh, mm, 0, 0)
       if (slotStart.getTime() < now.getTime() + minLeadMinutes * 60_000) {
         return NextResponse.json(
           {
@@ -264,20 +261,32 @@ export async function POST(
     const cookieStore = await cookies()
     const rawSession = cookieStore.get(publicClientCookieName(slug))?.value
     const session = verifyPublicClientSession(slug, rawSession)
-    let client = session
-      ? await prisma.client.findFirst({
-          where: { id: session.clientId, barbershopId: shop.id },
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            phone: true,
-            photoUrl: true,
-            cpf: true,
-            notes: true,
-          },
-        })
-      : null
+    if (!session) {
+      return NextResponse.json(
+        { error: "Faça login para agendar. Confirme o acesso pelo link enviado ao seu e-mail." },
+        { status: 401 }
+      )
+    }
+
+    let client = await prisma.client.findFirst({
+      where: { id: session.clientId, barbershopId: shop.id },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        photoUrl: true,
+        cpf: true,
+        notes: true,
+      },
+    })
+
+    if (!client) {
+      return NextResponse.json(
+        { error: "Sessão inválida ou expirada. Entre novamente pelo link de verificação." },
+        { status: 401 }
+      )
+    }
 
     const nome = String(clientPayload.nome ?? client?.name ?? "").trim()
     const telefone = String(clientPayload.telefone ?? client?.phone ?? "").trim()
@@ -303,36 +312,6 @@ export async function POST(
           { error: e instanceof Error ? e.message : "Foto inválida" },
           { status: 400 }
         )
-      }
-    }
-
-    if (!client) {
-      if (!nome || !telefone) {
-        return NextResponse.json({ error: "Informe nome e telefone para continuar" }, { status: 400 })
-      }
-      const byPhone = await findClientByPhoneDigits(shop.id, telefone)
-      if (byPhone) {
-        client = byPhone
-      } else {
-        client = await prisma.client.create({
-          data: {
-            barbershopId: shop.id,
-            name: nome,
-            phone: telefone || null,
-            email: email || null,
-            cpf: cpfUpdate ?? null,
-            photoUrl: photoUpdate ?? null,
-          },
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            phone: true,
-            photoUrl: true,
-            cpf: true,
-            notes: true,
-          },
-        })
       }
     }
 

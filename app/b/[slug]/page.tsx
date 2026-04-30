@@ -145,6 +145,14 @@ function minutesFromHHMM(value: string): number | null {
   return hh * 60 + mm
 }
 
+function isValidEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim().toLowerCase())
+}
+
+function stripTrailingSlash(value: string): string {
+  return value.replace(/\/+$/, "")
+}
+
 function pushRemindersOkSessionKey(slug: string) {
   return `trimtime_push_reminders_ok_v1_${slug}`
 }
@@ -395,8 +403,6 @@ export default function BarbeariaPage() {
   }, [publicMeta, slug])
 
   useEffect(() => {
-    const forceAccountUi =
-      typeof window !== "undefined" && /[?&](conta|signup|login)=1(?:&|$)/i.test(window.location.search)
     let cancelled = false
 
     fetch(`/api/public/barbershops/${encodeURIComponent(slug)}/auth/session`, {
@@ -421,17 +427,13 @@ export default function BarbeariaPage() {
           })
           return
         }
-        if (forceAccountUi) {
-          setAuthPhase("cadastro")
-          return
-        }
         setClienteLogado(null)
-        setAuthPhase("logado")
+        setAuthPhase("cadastro")
       })
       .catch(() => {
         if (cancelled) return
         setClienteLogado(null)
-        setAuthPhase(forceAccountUi ? "cadastro" : "logado")
+        setAuthPhase("cadastro")
       })
 
     return () => {
@@ -449,23 +451,6 @@ export default function BarbeariaPage() {
     } catch {
       /* ignore */
     }
-  }, [authPhase, clienteLogado, slug])
-
-  /** Convidado: preenche com dados salvos neste aparelho (nome, telefone, e-mail, CPF, foto). */
-  useEffect(() => {
-    if (authPhase !== "logado" || clienteLogado) return
-    const saved = loadSavedClientProfile(slug)
-    if (!saved) return
-    setDadosCliente((prev) => ({
-      ...prev,
-      nome: prev.nome || saved.nome || "",
-      telefone: prev.telefone || saved.telefone || "",
-      email: prev.email || saved.email || "",
-      cpf: prev.cpf || (saved.cpf ? formatCpfDisplay(saved.cpf) : "") || "",
-      ...(saved.foto && !prev.foto
-        ? { foto: saved.foto, fotoPosicao: saved.fotoPosicao ?? 50 }
-        : {}),
-    }))
   }, [authPhase, clienteLogado, slug])
 
   /** Reabrir o link: restaura resumo; tela cheia ou modo navegação conforme uiFocus salvo */
@@ -675,7 +660,9 @@ export default function BarbeariaPage() {
     formatCpfDisplay(value.replace(/\D/g, "").slice(0, 11))
 
   const sendMagicLink = async (mode: "register" | "login", email: string) => {
-    const redirectTo = `${window.location.origin}/b/${encodeURIComponent(slug)}?magic=1`
+    const configuredBase = String(process.env.NEXT_PUBLIC_APP_URL ?? "").trim()
+    const preferredBase = configuredBase ? stripTrailingSlash(configuredBase) : stripTrailingSlash(window.location.origin)
+    const redirectTo = `${preferredBase}/b/${encodeURIComponent(slug)}?magic=1`
     const options =
       mode === "register"
         ? {
@@ -716,6 +703,13 @@ export default function BarbeariaPage() {
       return
     }
     try {
+      const configuredBase = String(process.env.NEXT_PUBLIC_APP_URL ?? "").trim()
+      if (!configuredBase && /^(localhost|127\.0\.0\.1)$/i.test(window.location.hostname)) {
+        setErroCadastro(
+          "Para abrir o link no celular, configure NEXT_PUBLIC_APP_URL com a URL pública do app (ex.: https://seu-dominio.com)."
+        )
+        return
+      }
       await sendMagicLink("register", email)
       setOtpEmail(email)
       setMagicLinkMode("register")
@@ -779,6 +773,13 @@ export default function BarbeariaPage() {
         setErroLogin("Informe um e-mail válido")
         return
       }
+      const configuredBase = String(process.env.NEXT_PUBLIC_APP_URL ?? "").trim()
+      if (!configuredBase && /^(localhost|127\.0\.0\.1)$/i.test(window.location.hostname)) {
+        setErroLogin(
+          "Para abrir o link no celular, configure NEXT_PUBLIC_APP_URL com a URL pública do app (ex.: https://seu-dominio.com)."
+        )
+        return
+      }
       await sendMagicLink("login", email)
       setOtpEmail(email)
       setMagicLinkMode("login")
@@ -823,15 +824,6 @@ export default function BarbeariaPage() {
     setIsRemarcando(false)
     setAgendamentoConfirmado(false)
     setTrimPlayStage("intro")
-  }
-
-  const irParaLoginPorLink = () => {
-    setErroLogin("")
-    setErroCadastro("")
-    setMagicLinkError("")
-    setLoginLegacy(false)
-    setOtpEmail("")
-    setAuthPhase("cadastro")
   }
 
   const msgLembretesIndisponivel =
@@ -890,29 +882,6 @@ export default function BarbeariaPage() {
     } finally {
       setPushReminderBusy(false)
     }
-  }
-
-  const entrarComoConvidado = () => {
-    setClienteLogado(null)
-    setAuthPhase("logado")
-    setDadosCliente((prev) => ({
-      nome: prev.nome || "",
-      telefone: prev.telefone || "",
-      email: prev.email || "",
-      cpf: prev.cpf || "",
-      foto: prev.foto || "",
-      fotoPosicao: prev.fotoPosicao ?? 50,
-    }))
-    setEtapa(1)
-    setServicosSelecionados([])
-    setProfissionalSelecionado(null)
-    setDataSelecionada(null)
-    setHorarioSelecionado(null)
-    setAgendamentoConfirmado(false)
-    setBookingSummary(null)
-    setIsRemarcando(false)
-    setTrimPlayStage("intro")
-    setErroAgendamento("")
   }
 
   const barbearia = {
@@ -1156,7 +1125,13 @@ export default function BarbeariaPage() {
       }
       case 2: return profissionalSelecionado !== null
       case 3: return dataSelecionada !== null && horarioSelecionado !== null
-      case 4: return publicMeta !== null && dadosCliente.nome.trim() !== "" && dadosCliente.telefone.trim() !== ""
+      case 4:
+        return (
+          publicMeta !== null &&
+          dadosCliente.nome.trim() !== "" &&
+          dadosCliente.telefone.trim() !== "" &&
+          isValidEmail(dadosCliente.email)
+        )
       default: return false
     }
   }
@@ -1170,6 +1145,10 @@ export default function BarbeariaPage() {
     const cpfNorm = cpfDigits(dadosCliente.cpf)
     if (dadosCliente.cpf.trim() && !cpfNorm) {
       setErroAgendamento("CPF inválido: use 11 dígitos ou deixe em branco.")
+      return
+    }
+    if (!isValidEmail(dadosCliente.email)) {
+      setErroAgendamento("E-mail obrigatório: informe um e-mail válido.")
       return
     }
     const prof = barbearia.profissionais.find((p) => p.id === profissionalSelecionado)
@@ -1330,9 +1309,10 @@ export default function BarbeariaPage() {
               <div className="flex justify-center mb-4">
                 <img src={barbearia.logo} alt="" className="w-14 h-14 rounded-xl object-contain bg-background" />
               </div>
-              <h1 className="text-xl font-bold text-foreground text-center mb-1">Cadastre-se (opcional)</h1>
+              <h1 className="text-xl font-bold text-foreground text-center mb-1">Cadastre-se</h1>
               <p className="text-sm text-muted-foreground text-center mb-6">
-                {displayNome} — nome, WhatsApp e e-mail. Enviamos um link mágico para confirmar o acesso.
+                {displayNome} — para agendar é obrigatório confirmar o acesso. Informe nome, WhatsApp e e-mail;
+                enviamos um link mágico.
               </p>
               <form onSubmit={handleCadastro} className="space-y-4">
                 {erroCadastro && (
@@ -1392,17 +1372,6 @@ export default function BarbeariaPage() {
                   Entrar
                 </button>
               </p>
-
-              <div className="mt-4">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full border-border text-foreground hover:bg-secondary"
-                  onClick={entrarComoConvidado}
-                >
-                  Agendar sem conta
-                </Button>
-              </div>
             </CardContent>
           </Card>
         </div>
@@ -1488,8 +1457,8 @@ export default function BarbeariaPage() {
               <h1 className="text-xl font-bold text-foreground text-center mb-1">Entrar</h1>
               <p className="text-sm text-muted-foreground text-center mb-6">
                 {loginLegacy
-                  ? "Conta criada antes com e-mail e senha"
-                  : "Link mágico no e-mail (sem senha). Contas antigas com senha: opção abaixo."}
+                  ? "Para agendar é preciso estar logado. Conta antiga com e-mail e senha."
+                  : "Para agendar é preciso confirmar o acesso. Enviamos um link mágico no e-mail. Contas antigas com senha: opção abaixo."}
               </p>
               <form onSubmit={handleLogin} className="space-y-4">
                 {erroLogin && (
@@ -1574,17 +1543,6 @@ export default function BarbeariaPage() {
                   Cadastre-se
                 </button>
               </p>
-
-              <div className="mt-4">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full border-border text-foreground hover:bg-secondary"
-                  onClick={entrarComoConvidado}
-                >
-                  Agendar sem conta
-                </Button>
-              </div>
             </CardContent>
           </Card>
         </div>
@@ -1721,44 +1679,37 @@ export default function BarbeariaPage() {
     )
   }
 
+  if (!clienteLogado) {
+    return (
+      <>
+        {clientBookingInstallPrompt}
+        <div className="min-h-screen bg-background flex items-center justify-center p-4">
+          <div className="text-muted-foreground">Carregando...</div>
+        </div>
+      </>
+    )
+  }
+
   return (
     <>
       {clientBookingInstallPrompt}
       <div className="min-h-screen bg-background">
-      {/* Barra: conta (entrar/sair) */}
+      {/* Barra: conta (só com login confirmado) */}
       <div className="sticky top-0 z-20 border-b border-border bg-background/90 backdrop-blur">
         <div className="flex items-center justify-between px-4 py-2">
-          {clienteLogado ? (
-            <span className="text-sm text-muted-foreground truncate">
-              Olá, {clienteLogado.nome.split(" ")[0]}
-            </span>
-          ) : (
-            <span className="text-sm text-muted-foreground truncate">
-              Você está como convidado
-            </span>
-          )}
-          {clienteLogado ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="text-muted-foreground hover:text-foreground"
-              onClick={handleLogout}
-            >
-              <LogOut className="w-4 h-4 mr-1" />
-              Sair
-            </Button>
-          ) : (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="border-border text-foreground"
-              onClick={irParaLoginPorLink}
-            >
-              Entrar com link
-            </Button>
-          )}
+          <span className="text-sm text-muted-foreground truncate">
+            Olá, {clienteLogado.nome.split(" ")[0]}
+          </span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground hover:text-foreground"
+            onClick={handleLogout}
+          >
+            <LogOut className="w-4 h-4 mr-1" />
+            Sair
+          </Button>
         </div>
         {clienteLogado && !pushRemindersActivated ? (
           <div className="px-4 pb-2 flex flex-col gap-1">
@@ -2230,7 +2181,7 @@ export default function BarbeariaPage() {
                 />
               </div>
               <div>
-                <Label htmlFor="email" className="text-foreground">E-mail (opcional)</Label>
+                <Label htmlFor="email" className="text-foreground">E-mail (obrigatório)</Label>
                 <Input
                   id="email"
                   type="email"
@@ -2238,6 +2189,7 @@ export default function BarbeariaPage() {
                   value={dadosCliente.email}
                   onChange={(e) => setDadosCliente(prev => ({ ...prev, email: e.target.value }))}
                   className="mt-1 bg-card border-border focus:border-primary"
+                  required
                 />
               </div>
               <div>
