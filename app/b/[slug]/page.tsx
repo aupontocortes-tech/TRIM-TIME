@@ -264,6 +264,41 @@ export default function BarbeariaPage() {
   const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null)
   const [occupiedTimes, setOccupiedTimes] = useState<string[]>([])
 
+  /** Atualiza a grade quando o relógio avança (só etapa Horário + data = hoje). */
+  const [bookingClockTick, setBookingClockTick] = useState(0)
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const bump = () => setBookingClockTick((n) => n + 1)
+    const hojeNaGrade =
+      etapa === 3 &&
+      dataSelecionada != null &&
+      toYMDLocal(dataSelecionada) === toYMDLocal(new Date())
+
+    const onVis = () => {
+      if (document.visibilityState !== "visible") return
+      if (
+        etapa !== 3 ||
+        !dataSelecionada ||
+        toYMDLocal(dataSelecionada) !== toYMDLocal(new Date())
+      ) {
+        return
+      }
+      bump()
+    }
+    document.addEventListener("visibilitychange", onVis)
+
+    let intervalId: number | undefined
+    if (hojeNaGrade) {
+      bump()
+      intervalId = window.setInterval(bump, 10_000)
+    }
+
+    return () => {
+      document.removeEventListener("visibilitychange", onVis)
+      if (intervalId !== undefined) window.clearInterval(intervalId)
+    }
+  }, [etapa, dataSelecionada])
+
   useEffect(() => {
     let cancelled = false
     fetch(`/api/public/barbershops/${encodeURIComponent(slug)}`)
@@ -901,7 +936,10 @@ export default function BarbeariaPage() {
         : barbeariaData.profissionais.map((barber) => ({ ...barber, id: String(barber.id) })),
   }
   const dias = gerarDias()
-  const openingHours = openingHoursFromSettings(publicMeta?.opening_hours ?? undefined)
+  const openingHours = useMemo(
+    () => openingHoursFromSettings(publicMeta?.opening_hours ?? undefined),
+    [publicMeta]
+  )
   const dayKeyByIndex = [
     "domingo",
     "segunda",
@@ -917,15 +955,15 @@ export default function BarbeariaPage() {
   const bookingRules = publicMeta?.booking_rules ?? null
   const minLeadMinutes = Math.max(0, Math.round(Number(bookingRules?.min_lead_minutes ?? 30) || 30))
 
-  const horarios = (() => {
-    if (!dataSelecionada) return []
+  const horarios = useMemo(() => {
+    if (!dataSelecionada) return [] as string[]
     const key = dayKeyFromDate(dataSelecionada)
     const day = openingHours[key]
     if (!day?.ativo) return []
     return gerarHorarios(day.abertura, day.fechamento)
-  })()
+  }, [dataSelecionada, openingHours])
 
-  const horariosBloqueadosFolga = (() => {
+  const horariosBloqueadosFolga = useMemo(() => {
     if (!dataSelecionada) return new Set<string>()
     const key = dayKeyFromDate(dataSelecionada)
     const ranges = Array.isArray(bookingRules?.blocked_ranges?.[key]) ? bookingRules?.blocked_ranges?.[key] : []
@@ -942,26 +980,27 @@ export default function BarbeariaPage() {
       if (isBlocked) blocked.add(slot)
     }
     return blocked
-  })()
+  }, [dataSelecionada, bookingRules, horarios])
 
-  const horariosBloqueadosAntecedencia = (() => {
+  const horariosBloqueadosAntecedencia = useMemo(() => {
     if (!dataSelecionada) return new Set<string>()
-    const selected = new Date(
-      dataSelecionada.getFullYear(),
-      dataSelecionada.getMonth(),
-      dataSelecionada.getDate()
-    )
     const now = new Date()
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-    if (selected.getTime() !== today.getTime()) return new Set<string>()
-    const threshold = now.getHours() * 60 + now.getMinutes() + minLeadMinutes
+    if (toYMDLocal(dataSelecionada) !== toYMDLocal(now)) return new Set<string>()
+    const cutoffMs = now.getTime() + minLeadMinutes * 60_000
+    const y = dataSelecionada.getFullYear()
+    const mo = dataSelecionada.getMonth()
+    const d = dataSelecionada.getDate()
     const blocked = new Set<string>()
     for (const slot of horarios) {
       const slotMin = minutesFromHHMM(slot)
-      if (slotMin == null || slotMin < threshold) blocked.add(slot)
+      if (slotMin == null) continue
+      const hh = Math.floor(slotMin / 60)
+      const mm = slotMin % 60
+      const slotStart = new Date(y, mo, d, hh, mm, 0, 0)
+      if (slotStart.getTime() < cutoffMs) blocked.add(slot)
     }
     return blocked
-  })()
+  }, [dataSelecionada, minLeadMinutes, horarios, bookingClockTick])
 
   const selectedUnit =
     publicMeta?.units?.find((u) => u.id === selectedUnitId) ?? null

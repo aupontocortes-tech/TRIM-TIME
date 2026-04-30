@@ -15,6 +15,13 @@ import { findClientByPhoneDigits } from "@/lib/client-by-phone"
 import { expireStaleAppointmentsForBarbershop } from "@/lib/appointment-expiry"
 import type { BarbershopSettings } from "@/lib/db/types"
 
+function localYmd(d: Date): string {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, "0")
+  const day = String(d.getDate()).padStart(2, "0")
+  return `${y}-${m}-${day}`
+}
+
 function normalizeTime(time: string) {
   const raw = String(time ?? "").trim()
   return raw.length >= 5 ? raw.slice(0, 5) : raw
@@ -175,15 +182,19 @@ export async function POST(
     const bookingRules = settings?.booking_rules
     const minLeadMinutes = Math.max(0, Math.round(Number(bookingRules?.min_lead_minutes ?? 30) || 30))
     const now = new Date()
-    const slotDateLocal = new Date(`${date}T00:00:00`)
-    const todayLocal = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-    if (slotDateLocal.getTime() === todayLocal.getTime()) {
+    if (date === localYmd(now)) {
       const slotMin = minutesFromHHMM(time)
       if (slotMin == null) {
         return NextResponse.json({ error: "Horário inválido" }, { status: 400 })
       }
-      const nowMin = now.getHours() * 60 + now.getMinutes()
-      if (slotMin < nowMin + minLeadMinutes) {
+      const [yy, mo, dd] = date.split("-").map(Number)
+      if (!yy || !mo || !dd) {
+        return NextResponse.json({ error: "Data inválida" }, { status: 400 })
+      }
+      const hh = Math.floor(slotMin / 60)
+      const mm = slotMin % 60
+      const slotStart = new Date(yy, mo - 1, dd, hh, mm, 0, 0)
+      if (slotStart.getTime() < now.getTime() + minLeadMinutes * 60_000) {
         return NextResponse.json(
           {
             error: `Escolha um horário com pelo menos ${minLeadMinutes} min de antecedência.`,
