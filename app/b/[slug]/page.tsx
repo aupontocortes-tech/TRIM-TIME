@@ -1,11 +1,10 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo, useRef } from "react"
 import { useParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp"
 import { Label } from "@/components/ui/label"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
@@ -17,14 +16,15 @@ import {
   ChevronRight,
   Check,
   Calendar,
-  Eye,
   EyeOff,
+  Eye,
   LogOut,
   Phone,
   Building2,
   Bell,
   Camera,
 } from "lucide-react"
+import { createClient as createSupabaseBrowserClient } from "@/lib/supabase/client"
 import {
   clearConfirmedBooking,
   loadConfirmedBooking,
@@ -205,9 +205,11 @@ export default function BarbeariaPage() {
   const params = useParams()
   const slug = (params?.slug as string) || "trim-time"
   const storageSuffix = `_${slug}`
+  const supabase = useMemo(() => createSupabaseBrowserClient(), [])
+  const lastMagicTokenRef = useRef<string | null>(null)
 
   const [authPhase, setAuthPhase] = useState<
-    "loading" | "cadastro" | "cadastro_otp" | "login" | "login_otp" | "logado"
+    "loading" | "cadastro" | "login" | "link_sent" | "logado"
   >("loading")
   const [clienteLogado, setClienteLogado] = useState<ClienteAgendamento | null>(null)
   const [authLoading, setAuthLoading] = useState(false)
@@ -242,14 +244,13 @@ export default function BarbeariaPage() {
   /** Após ativar com sucesso, some o bloco de lembretes (só barra Olá / Sair). */
   const [pushRemindersActivated, setPushRemindersActivated] = useState(false)
 
-  // Cadastro: nome + telefone + e-mail → código OTP por e-mail
+  // Cadastro: nome + telefone + e-mail → magic link do Supabase por e-mail
   const [formCadastro, setFormCadastro] = useState({ nome: "", telefone: "", email: "" })
   const [erroCadastro, setErroCadastro] = useState("")
 
   const [otpEmail, setOtpEmail] = useState("")
-  const [otpIntent, setOtpIntent] = useState<"register" | "login">("register")
-  const [otpCode, setOtpCode] = useState("")
-  const [otpVerifyError, setOtpVerifyError] = useState("")
+  const [magicLinkMode, setMagicLinkMode] = useState<"register" | "login">("register")
+  const [magicLinkError, setMagicLinkError] = useState("")
 
   // Login sem senha: e-mail → OTP. Legado: e-mail/telefone + senha
   const [formLogin, setFormLogin] = useState({ email: "" })
@@ -275,6 +276,74 @@ export default function BarbeariaPage() {
       cancelled = true
     }
   }, [slug])
+
+  useEffect(() => {
+    let cancelled = false
+
+    const completeMagicLogin = async (accessToken: string) => {
+      if (!accessToken || lastMagicTokenRef.current === accessToken) return
+      lastMagicTokenRef.current = accessToken
+      setAuthLoading(true)
+      setMagicLinkError("")
+      try {
+        const res = await fetch(
+          `/api/public/barbershops/${encodeURIComponent(slug)}/auth/magic/complete`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${accessToken}`,
+            },
+            credentials: "include",
+            body: JSON.stringify({
+              mode: magicLinkMode,
+              nome: formCadastro.nome.trim(),
+              telefone: formCadastro.telefone,
+            }),
+          }
+        )
+        const data = (await res.json().catch(() => ({}))) as { error?: string; client?: ClienteAgendamento }
+        if (!res.ok || !data.client) {
+          setMagicLinkError(data.error || "Não foi possível concluir o acesso")
+          setAuthPhase("link_sent")
+          return
+        }
+        if (cancelled) return
+        setClienteLogado(data.client)
+        setDadosCliente({
+          nome: data.client.nome,
+          telefone: data.client.telefone,
+          email: data.client.email,
+          cpf: data.client.cpf ? formatCpfDisplay(data.client.cpf) : "",
+          foto: data.client.photo_url ?? "",
+          fotoPosicao: 50,
+        })
+        setAuthPhase("logado")
+      } catch {
+        if (!cancelled) {
+          setMagicLinkError("Erro ao concluir acesso pelo link. Tente novamente.")
+          setAuthPhase("link_sent")
+        }
+      } finally {
+        if (!cancelled) setAuthLoading(false)
+      }
+    }
+
+    supabase.auth.getSession().then(({ data }) => {
+      const token = data.session?.access_token
+      if (token) void completeMagicLogin(token)
+    })
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      const token = session?.access_token
+      if (token) void completeMagicLogin(token)
+    })
+
+    return () => {
+      cancelled = true
+      authListener.subscription.unsubscribe()
+    }
+  }, [formCadastro.nome, formCadastro.telefone, magicLinkMode, slug, supabase])
 
   useEffect(() => {
     const units = publicMeta?.units
@@ -570,10 +639,34 @@ export default function BarbeariaPage() {
   const formatCpfInput = (value: string) =>
     formatCpfDisplay(value.replace(/\D/g, "").slice(0, 11))
 
+  const sendMagicLink = async (mode: "register" | "login", email: string) => {
+    const redirectTo = `${window.location.origin}/b/${encodeURIComponent(slug)}?magic=1`
+    const options =
+      mode === "register"
+        ? {
+            shouldCreateUser: true,
+            emailRedirectTo: redirectTo,
+            data: {
+              nome: formCadastro.nome.trim(),
+              telefone: formCadastro.telefone,
+              slug,
+            },
+          }
+        : {
+            shouldCreateUser: false,
+            emailRedirectTo: redirectTo,
+          }
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options,
+    })
+    if (error) throw error
+  }
+
   const handleCadastro = async (e: React.FormEvent) => {
     e.preventDefault()
     setErroCadastro("")
-    setOtpVerifyError("")
+    setMagicLinkError("")
     setAuthLoading(true)
     const digits = formCadastro.telefone.replace(/\D/g, "")
     if (digits.length < 10) {
@@ -588,101 +681,24 @@ export default function BarbeariaPage() {
       return
     }
     try {
-      const res = await fetch(`/api/public/barbershops/${encodeURIComponent(slug)}/auth/otp/send`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          intent: "register",
-          nome: formCadastro.nome.trim(),
-          telefone: formCadastro.telefone,
-          email,
-        }),
-      })
-      const data = (await res.json().catch(() => ({}))) as { error?: string }
-      if (!res.ok) {
-        setErroCadastro(data.error || "Não foi possível enviar o código")
-        return
-      }
+      await sendMagicLink("register", email)
       setOtpEmail(email)
-      setOtpIntent("register")
-      setOtpCode("")
-      setAuthPhase("cadastro_otp")
+      setMagicLinkMode("register")
+      setAuthPhase("link_sent")
     } catch {
-      setErroCadastro("Erro ao enviar código. Tente novamente.")
+      setErroCadastro("Erro ao enviar link. Tente novamente.")
     } finally {
       setAuthLoading(false)
     }
   }
 
-  const handleResendOtp = async () => {
-    setOtpVerifyError("")
+  const handleResendMagicLink = async () => {
+    setMagicLinkError("")
     setAuthLoading(true)
     try {
-      const body =
-        otpIntent === "register"
-          ? {
-              intent: "register",
-              email: otpEmail,
-              nome: formCadastro.nome.trim(),
-              telefone: formCadastro.telefone,
-            }
-          : { intent: "login", email: otpEmail }
-      const res = await fetch(`/api/public/barbershops/${encodeURIComponent(slug)}/auth/otp/send`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify(body),
-      })
-      const data = (await res.json().catch(() => ({}))) as { error?: string }
-      if (!res.ok) {
-        setOtpVerifyError(data.error || "Não foi possível reenviar")
-        return
-      }
-      setOtpCode("")
+      await sendMagicLink(magicLinkMode, otpEmail)
     } catch {
-      setOtpVerifyError("Erro ao reenviar. Tente novamente.")
-    } finally {
-      setAuthLoading(false)
-    }
-  }
-
-  const handleVerifyOtp = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setOtpVerifyError("")
-    if (otpCode.replace(/\D/g, "").length !== 4) {
-      setOtpVerifyError("Digite os 4 dígitos do código")
-      return
-    }
-    setAuthLoading(true)
-    try {
-      const res = await fetch(`/api/public/barbershops/${encodeURIComponent(slug)}/auth/otp/verify`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          intent: otpIntent,
-          email: otpEmail,
-          code: otpCode.replace(/\D/g, "").slice(0, 4),
-        }),
-      })
-      const data = (await res.json().catch(() => ({}))) as { error?: string; client?: ClienteAgendamento }
-      if (!res.ok || !data.client) {
-        setOtpVerifyError(data.error || "Código inválido")
-        return
-      }
-      setClienteLogado(data.client)
-      setDadosCliente({
-        nome: data.client.nome,
-        telefone: data.client.telefone,
-        email: data.client.email,
-        cpf: data.client.cpf ? formatCpfDisplay(data.client.cpf) : "",
-        foto: data.client.photo_url ?? "",
-        fotoPosicao: 50,
-      })
-      setAuthPhase("logado")
-    } catch {
-      setOtpVerifyError("Erro ao validar. Tente novamente.")
+      setMagicLinkError("Erro ao reenviar link. Tente novamente.")
     } finally {
       setAuthLoading(false)
     }
@@ -691,7 +707,7 @@ export default function BarbeariaPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setErroLogin("")
-    setOtpVerifyError("")
+    setMagicLinkError("")
     setAuthLoading(true)
     try {
       if (loginLegacy) {
@@ -728,23 +744,12 @@ export default function BarbeariaPage() {
         setErroLogin("Informe um e-mail válido")
         return
       }
-      const res = await fetch(`/api/public/barbershops/${encodeURIComponent(slug)}/auth/otp/send`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ intent: "login", email }),
-      })
-      const data = (await res.json().catch(() => ({}))) as { error?: string }
-      if (!res.ok) {
-        setErroLogin(data.error || "Não foi possível enviar o código")
-        return
-      }
+      await sendMagicLink("login", email)
       setOtpEmail(email)
-      setOtpIntent("login")
-      setOtpCode("")
-      setAuthPhase("login_otp")
+      setMagicLinkMode("login")
+      setAuthPhase("link_sent")
     } catch {
-      setErroLogin("Erro ao entrar. Tente novamente.")
+      setErroLogin("Erro ao enviar link. Confira o e-mail e tente novamente.")
     } finally {
       setAuthLoading(false)
     }
@@ -762,10 +767,10 @@ export default function BarbeariaPage() {
     setClienteLogado(null)
     setAuthPhase("cadastro")
     setOtpEmail("")
-    setOtpCode("")
-    setOtpVerifyError("")
+    setMagicLinkError("")
     setFormLogin({ email: "" })
     setFormCadastro({ nome: "", telefone: "", email: "" })
+    await supabase.auth.signOut().catch(() => {})
     setEtapa(1)
     setServicosSelecionados([])
     setProfissionalSelecionado(null)
@@ -1279,7 +1284,7 @@ export default function BarbeariaPage() {
               </div>
               <h1 className="text-xl font-bold text-foreground text-center mb-1">Cadastre-se (opcional)</h1>
               <p className="text-sm text-muted-foreground text-center mb-6">
-                {displayNome} — nome, WhatsApp e e-mail. Enviamos um código de 4 dígitos (válido 5 min).
+                {displayNome} — nome, WhatsApp e e-mail. Enviamos um link mágico para confirmar o acesso.
               </p>
               <form onSubmit={handleCadastro} className="space-y-4">
                 {erroCadastro && (
@@ -1326,7 +1331,7 @@ export default function BarbeariaPage() {
                   disabled={authLoading}
                   className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
                 >
-                  {authLoading ? "Enviando código..." : "Receber código por e-mail"}
+                  {authLoading ? "Enviando link..." : "Receber link por e-mail"}
                 </Button>
               </form>
               <p className="text-center text-sm text-muted-foreground mt-4">
@@ -1358,7 +1363,7 @@ export default function BarbeariaPage() {
     )
   }
 
-  if (authPhase === "cadastro_otp") {
+  if (authPhase === "link_sent") {
     return (
       <>
         {clientBookingInstallPrompt}
@@ -1372,59 +1377,44 @@ export default function BarbeariaPage() {
                 </div>
                 <h1 className="text-xl font-bold text-foreground text-center mb-1">Verifique seu e-mail</h1>
                 <p className="text-sm text-muted-foreground text-center mb-6">
-                  Digite o código de 4 dígitos enviado para <span className="text-foreground font-medium">{otpEmail}</span>
+                  Enviamos um link mágico para <span className="text-foreground font-medium">{otpEmail}</span>. Abra o e-mail e toque no link para continuar.
                 </p>
-                <form onSubmit={handleVerifyOtp} className="space-y-4">
-                  {otpVerifyError ? (
+                <div className="space-y-4">
+                  {magicLinkError ? (
                     <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
-                      {otpVerifyError}
+                      {magicLinkError}
                     </div>
                   ) : null}
-                  <div className="flex justify-center">
-                    <InputOTP
-                      maxLength={4}
-                      value={otpCode}
-                      onChange={(v) => setOtpCode(v.replace(/\D/g, "").slice(0, 4))}
-                      pattern="^[0-9]*$"
-                      inputMode="numeric"
-                      aria-label="Código de 4 dígitos"
-                    >
-                      <InputOTPGroup>
-                        <InputOTPSlot index={0} />
-                        <InputOTPSlot index={1} />
-                        <InputOTPSlot index={2} />
-                        <InputOTPSlot index={3} />
-                      </InputOTPGroup>
-                    </InputOTP>
-                  </div>
                   <Button
-                    type="submit"
-                    disabled={authLoading || otpCode.replace(/\D/g, "").length !== 4}
+                    type="button"
+                    disabled={authLoading}
                     className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+                    onClick={() => {
+                      if (typeof window !== "undefined") window.location.reload()
+                    }}
                   >
-                    {authLoading ? "Validando..." : "Confirmar e continuar"}
+                    {authLoading ? "Aguardando..." : "Já cliquei no link"}
                   </Button>
-                </form>
+                </div>
                 <div className="flex flex-col gap-2 mt-4">
                   <Button
                     type="button"
                     variant="outline"
                     className="w-full border-border"
                     disabled={authLoading}
-                    onClick={() => void handleResendOtp()}
+                    onClick={() => void handleResendMagicLink()}
                   >
-                    Reenviar código
+                    Reenviar link
                   </Button>
                   <button
                     type="button"
                     className="text-center text-sm text-muted-foreground hover:text-foreground underline-offset-2 hover:underline"
                     onClick={() => {
-                      setOtpCode("")
-                      setOtpVerifyError("")
-                      setAuthPhase("cadastro")
+                      setMagicLinkError("")
+                      setAuthPhase(magicLinkMode === "register" ? "cadastro" : "login")
                     }}
                   >
-                    Voltar e alterar dados
+                    Voltar
                   </button>
                 </div>
               </CardContent>
@@ -1451,7 +1441,7 @@ export default function BarbeariaPage() {
               <p className="text-sm text-muted-foreground text-center mb-6">
                 {loginLegacy
                   ? "Conta criada antes com e-mail e senha"
-                  : "Código de 4 dígitos no e-mail (sem senha). Contas antigas com senha: opção abaixo."}
+                  : "Link mágico no e-mail (sem senha). Contas antigas com senha: opção abaixo."}
               </p>
               <form onSubmit={handleLogin} className="space-y-4">
                 {erroLogin && (
@@ -1513,7 +1503,7 @@ export default function BarbeariaPage() {
                   disabled={authLoading}
                   className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
                 >
-                  {authLoading ? (loginLegacy ? "Entrando..." : "Enviando código...") : loginLegacy ? "Entrar" : "Receber código por e-mail"}
+                  {authLoading ? (loginLegacy ? "Entrando..." : "Enviando link...") : loginLegacy ? "Entrar" : "Receber link por e-mail"}
                 </Button>
               </form>
               <button
@@ -1524,7 +1514,7 @@ export default function BarbeariaPage() {
                   setLoginLegacy((v) => !v)
                 }}
               >
-                {loginLegacy ? "Voltar para código por e-mail" : "Conta antiga com senha?"}
+                {loginLegacy ? "Voltar para link por e-mail" : "Conta antiga com senha?"}
               </button>
               <p className="text-center text-sm text-muted-foreground mt-4">
                 Não tem conta?{" "}
@@ -1551,83 +1541,6 @@ export default function BarbeariaPage() {
           </Card>
         </div>
       </div>
-      </>
-    )
-  }
-
-  if (authPhase === "login_otp") {
-    return (
-      <>
-        {clientBookingInstallPrompt}
-        <div className="min-h-screen bg-background">
-          <div className="h-32 bg-gradient-to-r from-primary/30 to-primary/10" />
-          <div className="max-w-md mx-auto px-4 -mt-8">
-            <Card className="bg-card border-border">
-              <CardContent className="p-6">
-                <div className="flex justify-center mb-4">
-                  <img src={barbearia.logo} alt="" className="w-14 h-14 rounded-xl object-contain bg-background" />
-                </div>
-                <h1 className="text-xl font-bold text-foreground text-center mb-1">Código no e-mail</h1>
-                <p className="text-sm text-muted-foreground text-center mb-6">
-                  Digite os 4 dígitos enviados para <span className="text-foreground font-medium">{otpEmail}</span>
-                </p>
-                <form onSubmit={handleVerifyOtp} className="space-y-4">
-                  {otpVerifyError ? (
-                    <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
-                      {otpVerifyError}
-                    </div>
-                  ) : null}
-                  <div className="flex justify-center">
-                    <InputOTP
-                      maxLength={4}
-                      value={otpCode}
-                      onChange={(v) => setOtpCode(v.replace(/\D/g, "").slice(0, 4))}
-                      pattern="^[0-9]*$"
-                      inputMode="numeric"
-                      aria-label="Código de 4 dígitos"
-                    >
-                      <InputOTPGroup>
-                        <InputOTPSlot index={0} />
-                        <InputOTPSlot index={1} />
-                        <InputOTPSlot index={2} />
-                        <InputOTPSlot index={3} />
-                      </InputOTPGroup>
-                    </InputOTP>
-                  </div>
-                  <Button
-                    type="submit"
-                    disabled={authLoading || otpCode.replace(/\D/g, "").length !== 4}
-                    className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
-                  >
-                    {authLoading ? "Entrando..." : "Entrar"}
-                  </Button>
-                </form>
-                <div className="flex flex-col gap-2 mt-4">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="w-full border-border"
-                    disabled={authLoading}
-                    onClick={() => void handleResendOtp()}
-                  >
-                    Reenviar código
-                  </Button>
-                  <button
-                    type="button"
-                    className="text-center text-sm text-muted-foreground hover:text-foreground underline-offset-2 hover:underline"
-                    onClick={() => {
-                      setOtpCode("")
-                      setOtpVerifyError("")
-                      setAuthPhase("login")
-                    }}
-                  >
-                    Voltar
-                  </button>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
       </>
     )
   }
