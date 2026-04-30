@@ -825,6 +825,15 @@ export default function BarbeariaPage() {
     setTrimPlayStage("intro")
   }
 
+  const irParaLoginPorLink = () => {
+    setErroLogin("")
+    setErroCadastro("")
+    setMagicLinkError("")
+    setLoginLegacy(false)
+    setOtpEmail("")
+    setAuthPhase("cadastro")
+  }
+
   const msgLembretesIndisponivel =
     "Lembretes por notificação não estão disponíveis neste momento. Seu agendamento funciona normalmente."
 
@@ -1716,13 +1725,19 @@ export default function BarbeariaPage() {
     <>
       {clientBookingInstallPrompt}
       <div className="min-h-screen bg-background">
-      {/* Barra: Sair */}
-      {clienteLogado && (
-        <div className="sticky top-0 z-20 border-b border-border bg-background/90 backdrop-blur">
-          <div className="flex items-center justify-between px-4 py-2">
+      {/* Barra: conta (entrar/sair) */}
+      <div className="sticky top-0 z-20 border-b border-border bg-background/90 backdrop-blur">
+        <div className="flex items-center justify-between px-4 py-2">
+          {clienteLogado ? (
             <span className="text-sm text-muted-foreground truncate">
               Olá, {clienteLogado.nome.split(" ")[0]}
             </span>
+          ) : (
+            <span className="text-sm text-muted-foreground truncate">
+              Você está como convidado
+            </span>
+          )}
+          {clienteLogado ? (
             <Button
               type="button"
               variant="ghost"
@@ -1733,27 +1748,37 @@ export default function BarbeariaPage() {
               <LogOut className="w-4 h-4 mr-1" />
               Sair
             </Button>
-          </div>
-          {!pushRemindersActivated ? (
-            <div className="px-4 pb-2 flex flex-col gap-1">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="w-full sm:w-auto border-border text-foreground"
-                disabled={pushReminderBusy}
-                onClick={() => void ativarLembretesPush()}
-              >
-                <Bell className="w-4 h-4 mr-2" />
-                {pushReminderBusy ? "Ativando…" : "Receber lembretes neste celular"}
-              </Button>
-              {pushReminderMsg ? (
-                <p className="text-xs text-muted-foreground">{pushReminderMsg}</p>
-              ) : null}
-            </div>
-          ) : null}
+          ) : (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="border-border text-foreground"
+              onClick={irParaLoginPorLink}
+            >
+              Entrar com link
+            </Button>
+          )}
         </div>
-      )}
+        {clienteLogado && !pushRemindersActivated ? (
+          <div className="px-4 pb-2 flex flex-col gap-1">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="w-full sm:w-auto border-border text-foreground"
+              disabled={pushReminderBusy}
+              onClick={() => void ativarLembretesPush()}
+            >
+              <Bell className="w-4 h-4 mr-2" />
+              {pushReminderBusy ? "Ativando…" : "Receber lembretes neste celular"}
+            </Button>
+            {pushReminderMsg ? (
+              <p className="text-xs text-muted-foreground">{pushReminderMsg}</p>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
 
       {/* Header da Barbearia */}
       <div className="relative">
