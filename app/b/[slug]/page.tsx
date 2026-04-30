@@ -153,6 +153,31 @@ function stripTrailingSlash(value: string): string {
   return value.replace(/\/+$/, "")
 }
 
+/**
+ * URL base do link mágico: em produção usa sempre o domínio da página atual
+ * (evita falha do Supabase quando NEXT_PUBLIC_APP_URL difere do domínio real ou não está na lista).
+ * Em localhost, usa NEXT_PUBLIC_APP_URL se existir (tunnel/ngrok para testar no celular).
+ */
+function magicLinkRedirectBase(): string {
+  if (typeof window === "undefined") return ""
+  const configured = stripTrailingSlash(String(process.env.NEXT_PUBLIC_APP_URL ?? "").trim())
+  const origin = stripTrailingSlash(window.location.origin)
+  const host = window.location.hostname
+  const isLoopback = /^(localhost|127\.0\.0\.1)$/i.test(host) || host === "[::1]"
+  if (isLoopback && configured) return configured
+  return origin
+}
+
+function formatMagicLinkSendError(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err ?? "")
+  const msg = raw.trim() || "Erro desconhecido ao enviar o link."
+  const lower = msg.toLowerCase()
+  if (lower.includes("redirect") || lower.includes("url")) {
+    return `${msg} Verifique no Supabase (Authentication → URL Configuration) se a URL do site e as Redirect URLs incluem ${typeof window !== "undefined" ? window.location.origin : ""}/**`
+  }
+  return msg
+}
+
 function pushRemindersOkSessionKey(slug: string) {
   return `trimtime_push_reminders_ok_v1_${slug}`
 }
@@ -660,8 +685,7 @@ export default function BarbeariaPage() {
     formatCpfDisplay(value.replace(/\D/g, "").slice(0, 11))
 
   const sendMagicLink = async (mode: "register" | "login", email: string) => {
-    const configuredBase = String(process.env.NEXT_PUBLIC_APP_URL ?? "").trim()
-    const preferredBase = configuredBase ? stripTrailingSlash(configuredBase) : stripTrailingSlash(window.location.origin)
+    const preferredBase = magicLinkRedirectBase()
     const redirectTo = `${preferredBase}/b/${encodeURIComponent(slug)}?magic=1`
     const options =
       mode === "register"
@@ -703,10 +727,12 @@ export default function BarbeariaPage() {
       return
     }
     try {
-      const configuredBase = String(process.env.NEXT_PUBLIC_APP_URL ?? "").trim()
-      if (!configuredBase && /^(localhost|127\.0\.0\.1)$/i.test(window.location.hostname)) {
+      const host = window.location.hostname
+      const isNarrowLocal = /^(localhost|127\.0\.0\.1)$/i.test(host) || host === "[::1]"
+      const hasTunnel = String(process.env.NEXT_PUBLIC_APP_URL ?? "").trim().length > 0
+      if (isNarrowLocal && !hasTunnel) {
         setErroCadastro(
-          "Para abrir o link no celular, configure NEXT_PUBLIC_APP_URL com a URL pública do app (ex.: https://seu-dominio.com)."
+          "Para abrir o link no celular a partir do PC, configure NEXT_PUBLIC_APP_URL com uma URL pública (ex.: ngrok ou seu domínio) ou teste já abrindo o site pelo domínio de produção."
         )
         return
       }
@@ -714,8 +740,8 @@ export default function BarbeariaPage() {
       setOtpEmail(email)
       setMagicLinkMode("register")
       setAuthPhase("link_sent")
-    } catch {
-      setErroCadastro("Erro ao enviar link. Tente novamente.")
+    } catch (e) {
+      setErroCadastro(formatMagicLinkSendError(e))
     } finally {
       setAuthLoading(false)
     }
@@ -726,8 +752,8 @@ export default function BarbeariaPage() {
     setAuthLoading(true)
     try {
       await sendMagicLink(magicLinkMode, otpEmail)
-    } catch {
-      setMagicLinkError("Erro ao reenviar link. Tente novamente.")
+    } catch (e) {
+      setMagicLinkError(formatMagicLinkSendError(e))
     } finally {
       setAuthLoading(false)
     }
@@ -773,10 +799,12 @@ export default function BarbeariaPage() {
         setErroLogin("Informe um e-mail válido")
         return
       }
-      const configuredBase = String(process.env.NEXT_PUBLIC_APP_URL ?? "").trim()
-      if (!configuredBase && /^(localhost|127\.0\.0\.1)$/i.test(window.location.hostname)) {
+      const host = window.location.hostname
+      const isNarrowLocal = /^(localhost|127\.0\.0\.1)$/i.test(host) || host === "[::1]"
+      const hasTunnel = String(process.env.NEXT_PUBLIC_APP_URL ?? "").trim().length > 0
+      if (isNarrowLocal && !hasTunnel) {
         setErroLogin(
-          "Para abrir o link no celular, configure NEXT_PUBLIC_APP_URL com a URL pública do app (ex.: https://seu-dominio.com)."
+          "Para testar o link no celular a partir do PC, configure NEXT_PUBLIC_APP_URL (URL pública) ou abra o app pelo domínio de produção."
         )
         return
       }
@@ -784,8 +812,8 @@ export default function BarbeariaPage() {
       setOtpEmail(email)
       setMagicLinkMode("login")
       setAuthPhase("link_sent")
-    } catch {
-      setErroLogin("Erro ao enviar link. Confira o e-mail e tente novamente.")
+    } catch (e) {
+      setErroLogin(formatMagicLinkSendError(e))
     } finally {
       setAuthLoading(false)
     }
