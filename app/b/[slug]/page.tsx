@@ -172,10 +172,18 @@ function formatMagicLinkSendError(err: unknown): string {
   const raw = err instanceof Error ? err.message : String(err ?? "")
   const msg = raw.trim() || "Erro desconhecido ao enviar o link."
   const lower = msg.toLowerCase()
+  if (lower.includes("rate limit")) {
+    return "Muitas tentativas em sequência. Aguarde um pouco e tente novamente."
+  }
   if (lower.includes("redirect") || lower.includes("url")) {
     return `${msg} Verifique no Supabase (Authentication → URL Configuration) se a URL do site e as Redirect URLs incluem ${typeof window !== "undefined" ? window.location.origin : ""}/**`
   }
   return msg
+}
+
+function isMagicLinkRateLimitError(err: unknown): boolean {
+  const raw = err instanceof Error ? err.message : String(err ?? "")
+  return raw.toLowerCase().includes("rate limit")
 }
 
 function pushRemindersOkSessionKey(slug: string) {
@@ -284,6 +292,8 @@ export default function BarbeariaPage() {
   const [otpEmail, setOtpEmail] = useState("")
   const [magicLinkMode, setMagicLinkMode] = useState<"register" | "login">("register")
   const [magicLinkError, setMagicLinkError] = useState("")
+  const [magicLinkCooldownUntil, setMagicLinkCooldownUntil] = useState<number>(0)
+  const [magicLinkNow, setMagicLinkNow] = useState<number>(Date.now())
 
   // Login sem senha: e-mail → OTP. Legado: e-mail/telefone + senha
   const [formLogin, setFormLogin] = useState({ email: "" })
@@ -296,6 +306,17 @@ export default function BarbeariaPage() {
   const [publicMeta, setPublicMeta] = useState<PublicShopPayload | null>(null)
   const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null)
   const [occupiedTimes, setOccupiedTimes] = useState<string[]>([])
+
+  useEffect(() => {
+    const id = window.setInterval(() => setMagicLinkNow(Date.now()), 1000)
+    return () => window.clearInterval(id)
+  }, [])
+
+  const startMagicLinkCooldown = (seconds: number) => {
+    setMagicLinkCooldownUntil(Date.now() + Math.max(1, seconds) * 1000)
+  }
+  const magicLinkCooldownSec = Math.max(0, Math.ceil((magicLinkCooldownUntil - magicLinkNow) / 1000))
+  const magicLinkBlocked = magicLinkCooldownSec > 0
 
   /** Atualiza a grade quando o relógio avança (só etapa Horário + data = hoje). */
   const [bookingClockTick, setBookingClockTick] = useState(0)
@@ -737,10 +758,12 @@ export default function BarbeariaPage() {
         return
       }
       await sendMagicLink("register", email)
+      startMagicLinkCooldown(25)
       setOtpEmail(email)
       setMagicLinkMode("register")
       setAuthPhase("link_sent")
     } catch (e) {
+      if (isMagicLinkRateLimitError(e)) startMagicLinkCooldown(90)
       setErroCadastro(formatMagicLinkSendError(e))
     } finally {
       setAuthLoading(false)
@@ -752,7 +775,9 @@ export default function BarbeariaPage() {
     setAuthLoading(true)
     try {
       await sendMagicLink(magicLinkMode, otpEmail)
+      startMagicLinkCooldown(25)
     } catch (e) {
+      if (isMagicLinkRateLimitError(e)) startMagicLinkCooldown(90)
       setMagicLinkError(formatMagicLinkSendError(e))
     } finally {
       setAuthLoading(false)
@@ -809,10 +834,12 @@ export default function BarbeariaPage() {
         return
       }
       await sendMagicLink("login", email)
+      startMagicLinkCooldown(25)
       setOtpEmail(email)
       setMagicLinkMode("login")
       setAuthPhase("link_sent")
     } catch (e) {
+      if (isMagicLinkRateLimitError(e)) startMagicLinkCooldown(90)
       setErroLogin(formatMagicLinkSendError(e))
     } finally {
       setAuthLoading(false)
@@ -1384,10 +1411,14 @@ export default function BarbeariaPage() {
                 </div>
                 <Button
                   type="submit"
-                  disabled={authLoading}
+                  disabled={authLoading || magicLinkBlocked}
                   className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
                 >
-                  {authLoading ? "Enviando link..." : "Receber link por e-mail"}
+                  {authLoading
+                    ? "Enviando link..."
+                    : magicLinkBlocked
+                    ? `Aguarde ${magicLinkCooldownSec}s`
+                    : "Receber link por e-mail"}
                 </Button>
               </form>
               <p className="text-center text-sm text-muted-foreground mt-4">
@@ -1446,10 +1477,10 @@ export default function BarbeariaPage() {
                     type="button"
                     variant="outline"
                     className="w-full border-border"
-                    disabled={authLoading}
+                    disabled={authLoading || magicLinkBlocked}
                     onClick={() => void handleResendMagicLink()}
                   >
-                    Reenviar link
+                    {magicLinkBlocked ? `Aguarde ${magicLinkCooldownSec}s` : "Reenviar link"}
                   </Button>
                   <button
                     type="button"
@@ -1545,10 +1576,18 @@ export default function BarbeariaPage() {
                 )}
                 <Button
                   type="submit"
-                  disabled={authLoading}
+                  disabled={authLoading || magicLinkBlocked}
                   className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
                 >
-                  {authLoading ? (loginLegacy ? "Entrando..." : "Enviando link...") : loginLegacy ? "Entrar" : "Receber link por e-mail"}
+                  {authLoading
+                    ? loginLegacy
+                      ? "Entrando..."
+                      : "Enviando link..."
+                    : loginLegacy
+                    ? "Entrar"
+                    : magicLinkBlocked
+                    ? `Aguarde ${magicLinkCooldownSec}s`
+                    : "Receber link por e-mail"}
                 </Button>
               </form>
               <button
