@@ -1373,33 +1373,38 @@ export default function BarbeariaPage() {
                   <span className="text-foreground font-medium">{otpEmail || "seu e-mail"}</span>. Digite abaixo. Ele
                   vale até <strong className="text-foreground">10 minutos</strong>, como no e-mail.
                 </p>
-                <div className="space-y-4 flex flex-col items-center">
+                <div className="space-y-4 flex flex-col items-center w-full">
                   {otpError ? (
                     <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm w-full">
                       {otpError}
                     </div>
                   ) : null}
-                  <InputOTP
-                    maxLength={6}
-                    value={otpCode}
-                    disabled={authLoading}
-                    onChange={(v) => {
-                      const next = v.replace(/\D/g, "").slice(0, 6)
-                      setOtpCode(next)
-                      setOtpError("")
-                      if (next.length === 6) void verifyOtpDigits(next)
-                    }}
-                    containerClassName="justify-center"
-                  >
-                    <InputOTPGroup>
-                      <InputOTPSlot index={0} />
-                      <InputOTPSlot index={1} />
-                      <InputOTPSlot index={2} />
-                      <InputOTPSlot index={3} />
-                      <InputOTPSlot index={4} />
-                      <InputOTPSlot index={5} />
-                    </InputOTPGroup>
-                  </InputOTP>
+                  <div className="w-full max-w-[min(100%,20rem)] rounded-xl border-2 border-primary/25 bg-primary/5 dark:bg-primary/10 p-4 sm:p-5 shadow-inner">
+                    <p className="text-xs text-center text-muted-foreground mb-3 font-medium uppercase tracking-wide">
+                      Digite o código
+                    </p>
+                    <InputOTP
+                      maxLength={6}
+                      value={otpCode}
+                      disabled={authLoading}
+                      onChange={(v) => {
+                        const next = v.replace(/\D/g, "").slice(0, 6)
+                        setOtpCode(next)
+                        setOtpError("")
+                        if (next.length === 6) void verifyOtpDigits(next)
+                      }}
+                      containerClassName="justify-center w-full"
+                    >
+                      <InputOTPGroup className="justify-center w-full flex-wrap sm:flex-nowrap">
+                        <InputOTPSlot index={0} />
+                        <InputOTPSlot index={1} />
+                        <InputOTPSlot index={2} />
+                        <InputOTPSlot index={3} />
+                        <InputOTPSlot index={4} />
+                        <InputOTPSlot index={5} />
+                      </InputOTPGroup>
+                    </InputOTP>
+                  </div>
                 </div>
                 <div className="flex flex-col gap-2 mt-6">
                   <Button
