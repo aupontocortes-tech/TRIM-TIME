@@ -154,6 +154,10 @@ function messageFromUnknownError(err: unknown): string {
   return "Algo deu errado. Tente novamente."
 }
 
+const OTP_UI_MAX_INVALID = 10
+const OTP_UI_LOCKOUT_MS = 60_000
+const OTP_UI_RESEND_COOLDOWN_MS = 60_000
+
 function pushRemindersOkSessionKey(slug: string) {
   return `trimtime_push_reminders_ok_v1_${slug}`
 }
@@ -260,6 +264,10 @@ export default function BarbeariaPage() {
   const [otpIntent, setOtpIntent] = useState<"register" | "login">("register")
   const [otpCode, setOtpCode] = useState("")
   const [otpError, setOtpError] = useState("")
+  const [otpInvalidCount, setOtpInvalidCount] = useState(0)
+  const [otpLockUntil, setOtpLockUntil] = useState<number | null>(null)
+  const [otpResendNotBefore, setOtpResendNotBefore] = useState<number | null>(null)
+  const [otpUiNow, setOtpUiNow] = useState(() => Date.now())
 
   // Login sem senha: e-mail → código. Legado: e-mail/telefone + senha
   const [formLogin, setFormLogin] = useState({ email: "" })
@@ -334,6 +342,19 @@ export default function BarbeariaPage() {
       setSelectedUnitId(saved)
     }
   }, [publicMeta, slug])
+
+  useEffect(() => {
+    if (authPhase !== "codigo") return
+    const id = window.setInterval(() => setOtpUiNow(Date.now()), 1000)
+    return () => window.clearInterval(id)
+  }, [authPhase])
+
+  useEffect(() => {
+    if (authPhase !== "codigo" || !otpLockUntil || otpUiNow < otpLockUntil) return
+    setOtpLockUntil(null)
+    setOtpInvalidCount(0)
+    setOtpError("")
+  }, [authPhase, otpLockUntil, otpUiNow])
 
   useEffect(() => {
     let cancelled = false
@@ -614,9 +635,14 @@ export default function BarbeariaPage() {
     }
   }
 
-  const verifyOtpDigits = async (digits: string) => {
-    const code = digits.replace(/\D/g, "").slice(0, 8)
-    if (code.length !== 6 || otpVerifyBusyRef.current) return
+  const handleConfirmOtp = async () => {
+    if (otpLockUntil && otpUiNow < otpLockUntil) return
+    const code = otpCode.replace(/\D/g, "").slice(0, 6)
+    if (code.length !== 6) {
+      setOtpError("Digite os 6 dígitos e toque em Confirmar.")
+      return
+    }
+    if (otpVerifyBusyRef.current || authLoading) return
     const em = otpEmail.trim().toLowerCase()
     if (!em) {
       setOtpError("E-mail ausente. Volte e tente de novo.")
@@ -634,10 +660,22 @@ export default function BarbeariaPage() {
       })
       const data = (await res.json().catch(() => ({}))) as { error?: string; client?: ClienteAgendamento }
       if (!res.ok || !data.client) {
-        setOtpError(data.error || "Código inválido ou expirado.")
-        setOtpCode("")
+        setOtpInvalidCount((prev) => {
+          const next = prev + 1
+          if (next >= OTP_UI_MAX_INVALID) {
+            setOtpLockUntil(Date.now() + OTP_UI_LOCKOUT_MS)
+            setOtpError(
+              `Código inválido (tentativa ${next} de ${OTP_UI_MAX_INVALID}). Aguarde 60 segundos para tentar de novo.`
+            )
+          } else {
+            setOtpError(`Código inválido (tentativa ${next} de ${OTP_UI_MAX_INVALID}).`)
+          }
+          return next
+        })
         return
       }
+      setOtpInvalidCount(0)
+      setOtpLockUntil(null)
       setClienteLogado(data.client)
       setDadosCliente({
         nome: data.client.nome,
@@ -650,8 +688,7 @@ export default function BarbeariaPage() {
       setOtpCode("")
       setAuthPhase("logado")
     } catch {
-      setOtpError("Erro ao validar o código. Tente novamente.")
-      setOtpCode("")
+      setOtpError("Erro de rede. Tente novamente sem sair desta tela.")
     } finally {
       otpVerifyBusyRef.current = false
       setAuthLoading(false)
@@ -680,6 +717,10 @@ export default function BarbeariaPage() {
       setOtpEmail(email)
       setOtpIntent("register")
       setOtpCode("")
+      setOtpInvalidCount(0)
+      setOtpLockUntil(null)
+      setOtpError("")
+      setOtpResendNotBefore(Date.now() + OTP_UI_RESEND_COOLDOWN_MS)
       setAuthPhase("codigo")
     } catch (e) {
       setErroCadastro(messageFromUnknownError(e))
@@ -689,6 +730,8 @@ export default function BarbeariaPage() {
   }
 
   const handleResendOtp = async () => {
+    if (otpResendNotBefore && Date.now() < otpResendNotBefore) return
+    if (authLoading || otpVerifyBusyRef.current) return
     setOtpError("")
     const em = otpEmail.trim().toLowerCase()
     if (!em || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) {
@@ -706,6 +749,9 @@ export default function BarbeariaPage() {
     try {
       await sendOtpEmailRequest(otpIntent, em)
       setOtpCode("")
+      setOtpInvalidCount(0)
+      setOtpLockUntil(null)
+      setOtpResendNotBefore(Date.now() + OTP_UI_RESEND_COOLDOWN_MS)
     } catch (e) {
       setOtpError(messageFromUnknownError(e))
     } finally {
@@ -757,6 +803,10 @@ export default function BarbeariaPage() {
       setOtpEmail(email)
       setOtpIntent("login")
       setOtpCode("")
+      setOtpInvalidCount(0)
+      setOtpLockUntil(null)
+      setOtpError("")
+      setOtpResendNotBefore(Date.now() + OTP_UI_RESEND_COOLDOWN_MS)
       setAuthPhase("codigo")
     } catch (e) {
       setErroLogin(messageFromUnknownError(e))
@@ -779,6 +829,9 @@ export default function BarbeariaPage() {
     setOtpEmail("")
     setOtpCode("")
     setOtpError("")
+    setOtpInvalidCount(0)
+    setOtpLockUntil(null)
+    setOtpResendNotBefore(null)
     setOtpIntent("register")
     setFormLogin({ email: "" })
     setFormCadastro({ nome: "", telefone: "", email: "" })
@@ -1356,6 +1409,16 @@ export default function BarbeariaPage() {
   }
 
   if (authPhase === "codigo") {
+    const otpLocked = otpLockUntil != null && otpUiNow < otpLockUntil
+    const lockSecLeft =
+      otpLocked && otpLockUntil != null ? Math.max(0, Math.ceil((otpLockUntil - otpUiNow) / 1000)) : 0
+    const resendSecLeft =
+      otpResendNotBefore != null && otpUiNow < otpResendNotBefore
+        ? Math.max(0, Math.ceil((otpResendNotBefore - otpUiNow) / 1000))
+        : 0
+    const codeDigits = otpCode.replace(/\D/g, "")
+    const canConfirm = codeDigits.length === 6 && !otpLocked && !authLoading
+
     return (
       <>
         {clientBookingInstallPrompt}
@@ -1370,11 +1433,18 @@ export default function BarbeariaPage() {
                 <h1 className="text-xl font-bold text-foreground text-center mb-1">Código no e-mail</h1>
                 <p className="text-sm text-muted-foreground text-center mb-6">
                   Enviamos um código numérico (em geral <strong className="text-foreground">6 dígitos</strong>) para{" "}
-                  <span className="text-foreground font-medium">{otpEmail || "seu e-mail"}</span>. Digite abaixo. Ele
-                  vale até <strong className="text-foreground">10 minutos</strong>, como no e-mail.
+                  <span className="text-foreground font-medium">{otpEmail || "seu e-mail"}</span>. Digite o código e
+                  toque em <strong className="text-foreground">Confirmar</strong>. O mesmo código vale até{" "}
+                  <strong className="text-foreground">10 minutos</strong> — você pode corrigir e confirmar de novo sem
+                  pedir outro e-mail.
                 </p>
                 <div className="space-y-4 flex flex-col items-center w-full">
-                  {otpError ? (
+                  {otpLocked ? (
+                    <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-400 text-sm w-full text-center">
+                      Muitas tentativas. Aguarde <strong>{lockSecLeft}s</strong> para digitar de novo.
+                    </div>
+                  ) : null}
+                  {otpError && !otpLocked ? (
                     <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm w-full">
                       {otpError}
                     </div>
@@ -1386,12 +1456,11 @@ export default function BarbeariaPage() {
                     <InputOTP
                       maxLength={6}
                       value={otpCode}
-                      disabled={authLoading}
+                      disabled={authLoading || otpLocked}
                       onChange={(v) => {
                         const next = v.replace(/\D/g, "").slice(0, 6)
                         setOtpCode(next)
                         setOtpError("")
-                        if (next.length === 6) void verifyOtpDigits(next)
                       }}
                       containerClassName="justify-center w-full"
                     >
@@ -1405,16 +1474,28 @@ export default function BarbeariaPage() {
                       </InputOTPGroup>
                     </InputOTP>
                   </div>
+                  <Button
+                    type="button"
+                    disabled={!canConfirm}
+                    className="w-full max-w-[min(100%,20rem)] bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                    onClick={() => void handleConfirmOtp()}
+                  >
+                    {authLoading ? "Verificando..." : "Confirmar"}
+                  </Button>
                 </div>
                 <div className="flex flex-col gap-2 mt-6">
                   <Button
                     type="button"
                     variant="outline"
                     className="w-full border-border"
-                    disabled={authLoading}
+                    disabled={authLoading || resendSecLeft > 0}
                     onClick={() => void handleResendOtp()}
                   >
-                    Reenviar código
+                    {resendSecLeft > 0
+                      ? `Reenviar código (${resendSecLeft}s)`
+                      : authLoading
+                      ? "Enviando..."
+                      : "Reenviar código"}
                   </Button>
                   <button
                     type="button"
@@ -1422,6 +1503,9 @@ export default function BarbeariaPage() {
                     onClick={() => {
                       setOtpError("")
                       setOtpCode("")
+                      setOtpInvalidCount(0)
+                      setOtpLockUntil(null)
+                      setOtpResendNotBefore(null)
                       setAuthPhase(otpIntent === "register" ? "cadastro" : "login")
                     }}
                   >
