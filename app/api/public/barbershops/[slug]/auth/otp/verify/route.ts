@@ -6,7 +6,7 @@ import { clientPhoneDigits } from "@/lib/client-phone-utils"
 import { buildClientNotes, parseClientNotes } from "@/lib/client-auth-notes"
 import { getClientPasswordHash, getActiveBarbershopBySlug, toPublicClientSession } from "@/lib/public-booking"
 import { publicClientCookieName, signPublicClientSession } from "@/lib/public-client-session"
-import { createServiceRoleClient } from "@/lib/supabase/server"
+import { createAnonServerAuthClient } from "@/lib/supabase/server"
 
 export const dynamic = "force-dynamic"
 
@@ -40,18 +40,21 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     const email = normalizeEmail(String(body.email ?? ""))
     const token = normalizeOtpToken(String(body.code ?? ""))
 
-    if (!email || token.length < 6) {
+    if (!email || token.length < 6 || token.length > 10) {
       return NextResponse.json(
-        { error: "E-mail e código numérico do e-mail (geralmente 6 dígitos) são obrigatórios" },
+        {
+          error:
+            "Informe o e-mail e o código exatamente como no e-mail (só números, em geral 6 dígitos).",
+        },
         { status: 400 }
       )
     }
 
     let supabase
     try {
-      supabase = createServiceRoleClient()
+      supabase = createAnonServerAuthClient()
     } catch {
-      return NextResponse.json({ error: "Supabase não configurado no servidor." }, { status: 500 })
+      return NextResponse.json({ error: "Supabase não configurado (URL e ANON_KEY)." }, { status: 500 })
     }
 
     const { data: authData, error: authErr } = await supabase.auth.verifyOtp({
@@ -61,8 +64,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     })
 
     if (authErr || !authData.user) {
+      const raw = authErr?.message?.toLowerCase() ?? ""
+      let error =
+        "Código inválido ou expirado. Confira os 6 dígitos, peça um novo código ou use outro navegador (antivírus às vezes consome o link)."
+      if (raw.includes("expired") || raw.includes("otp_expired")) {
+        error = "Código expirado. Peça um novo em «Receber código»."
+      }
       return NextResponse.json(
-        { error: "Código inválido ou expirado. Peça um novo código." },
+        {
+          error,
+          ...(process.env.NODE_ENV === "development" && authErr?.message
+            ? { debug: authErr.message }
+            : {}),
+        },
         { status: 401 }
       )
     }
@@ -75,6 +89,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
 
     const meta = (user.user_metadata || {}) as Record<string, unknown>
     const metaSlug = asStr(meta.barbershop_slug)
+    if (!metaSlug) {
+      return NextResponse.json(
+        {
+          error:
+            "Peça um novo código nesta mesma barbearia (dados da sessão incompletos). Se persistir, saia e entre de novo no link.",
+        },
+        { status: 400 }
+      )
+    }
     if (metaSlug !== slug) {
       return NextResponse.json({ error: "Este código não é válido para esta barbearia." }, { status: 403 })
     }

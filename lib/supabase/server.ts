@@ -30,6 +30,28 @@ export async function createClient() {
 
 import { createClient as createSupabaseClient } from "@supabase/supabase-js"
 
+/**
+ * Anon, sem cookies — para signInWithOtp / verifyOtp em API routes.
+ * O GoTrue valida o OTP no mesmo fluxo do client público; com service_role a verificação
+ * costuma retornar “token inválido ou expirado” mesmo com código certo.
+ */
+export function createAnonServerAuthClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (!url || !key) {
+    throw new Error(
+      "Supabase não configurado. Defina NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY."
+    )
+  }
+  return createSupabaseClient(url, key, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+  })
+}
+
 /** Cliente com service_role para API routes (backend-only). Nunca exponha no cliente. */
 export function createServiceRoleClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL

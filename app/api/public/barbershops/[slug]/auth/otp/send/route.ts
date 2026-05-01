@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { findClientByPhoneDigits } from "@/lib/client-by-phone"
 import { clientPhoneDigits } from "@/lib/client-phone-utils"
 import { getClientPasswordHash, getActiveBarbershopBySlug } from "@/lib/public-booking"
-import { createServiceRoleClient } from "@/lib/supabase/server"
+import { createAnonServerAuthClient } from "@/lib/supabase/server"
 
 export const dynamic = "force-dynamic"
 
@@ -147,13 +147,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
 
     let supabase
     try {
-      supabase = createServiceRoleClient()
+      supabase = createAnonServerAuthClient()
     } catch {
       await prisma.clientOtpCode.delete({ where: { id: audit.id } }).catch(() => {})
       return NextResponse.json(
         {
           error:
-            "Supabase não configurado no servidor (NEXT_PUBLIC_SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY).",
+            "Supabase não configurado (NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY).",
         },
         { status: 500 }
       )
