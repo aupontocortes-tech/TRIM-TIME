@@ -1,15 +1,17 @@
-import { randomInt } from "node:crypto"
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { findClientByPhoneDigits } from "@/lib/client-by-phone"
 import { clientPhoneDigits } from "@/lib/client-phone-utils"
 import { getClientPasswordHash, getActiveBarbershopBySlug } from "@/lib/public-booking"
-import { sendClientOtpEmail } from "@/lib/send-client-otp-email"
+import { createServiceRoleClient } from "@/lib/supabase/server"
 
 export const dynamic = "force-dynamic"
 
+/** Linha só para rate limit; o código real vem no e-mail via Supabase Auth. */
+const OTP_AUDIT_PLACEHOLDER = "****"
+
 const OTP_TTL_MS = 5 * 60 * 1000
-const RESEND_COOLDOWN_MS = 60 * 1000
+const OTP_RESEND_COOLDOWN_MS = 60 * 1000
 const MAX_SENDS_WINDOW_MS = 10 * 60 * 1000
 const MAX_SENDS_IN_WINDOW = 5
 
@@ -19,10 +21,6 @@ function normalizeEmail(s: string) {
 
 function isValidEmail(s: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s)
-}
-
-function genCode() {
-  return String(randomInt(0, 10000)).padStart(4, "0")
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ slug: string }> }) {
@@ -70,9 +68,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       orderBy: { createdAt: "desc" },
       select: { createdAt: true },
     })
-    if (lastSend && now.getTime() - lastSend.createdAt.getTime() < RESEND_COOLDOWN_MS) {
+    if (lastSend && now.getTime() - lastSend.createdAt.getTime() < OTP_RESEND_COOLDOWN_MS) {
       const waitSec = Math.ceil(
-        (RESEND_COOLDOWN_MS - (now.getTime() - lastSend.createdAt.getTime())) / 1000
+        (OTP_RESEND_COOLDOWN_MS - (now.getTime() - lastSend.createdAt.getTime())) / 1000
       )
       return NextResponse.json(
         { error: `Aguarde ${waitSec}s para reenviar o código.` },
@@ -109,7 +107,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       const byPhone = await findClientByPhoneDigits(shop.id, telefone)
       if (byPhone?.email && normalizeEmail(byPhone.email) !== email) {
         return NextResponse.json(
-          { error: "Este telefone já está em uso por outro e-mail. Use o e-mail cadastrado ou fale com a barbearia." },
+          {
+            error:
+              "Este telefone já está em uso por outro e-mail. Use o e-mail cadastrado ou fale com a barbearia.",
+          },
           { status: 409 }
         )
       }
@@ -129,14 +130,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       }
     }
 
-    const code = genCode()
     const expiresAt = new Date(now.getTime() + OTP_TTL_MS)
 
-    const row = await prisma.clientOtpCode.create({
+    const audit = await prisma.clientOtpCode.create({
       data: {
         barbershopId: shop.id,
         email,
-        code,
+        code: OTP_AUDIT_PLACEHOLDER,
         expiresAt,
         intent,
         nome: intent === "register" ? nome : null,
@@ -144,15 +144,43 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       },
     })
 
-    const sent = await sendClientOtpEmail({
-      to: email,
-      shopName: shop.name,
-      code,
-      expiresInMinutes: 5,
+    let supabase
+    try {
+      supabase = createServiceRoleClient()
+    } catch {
+      await prisma.clientOtpCode.delete({ where: { id: audit.id } }).catch(() => {})
+      return NextResponse.json(
+        {
+          error:
+            "Supabase não configurado no servidor (NEXT_PUBLIC_SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY).",
+        },
+        { status: 500 }
+      )
+    }
+
+    const metadata: Record<string, string> = {
+      intent,
+      barbershop_slug: slug,
+    }
+    if (intent === "register") {
+      metadata.nome = nome
+      metadata.telefone = telefone
+    }
+
+    const { error: authErr } = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        shouldCreateUser: true,
+        data: metadata,
+      },
     })
-    if (!sent.ok) {
-      await prisma.clientOtpCode.delete({ where: { id: row.id } }).catch(() => {})
-      return NextResponse.json({ error: sent.error }, { status: 500 })
+
+    if (authErr) {
+      await prisma.clientOtpCode.delete({ where: { id: audit.id } }).catch(() => {})
+      return NextResponse.json(
+        { error: authErr.message || "Não foi possível enviar o código por e-mail." },
+        { status: 400 }
+      )
     }
 
     return NextResponse.json({ ok: true, expires_in_seconds: Math.floor(OTP_TTL_MS / 1000) })

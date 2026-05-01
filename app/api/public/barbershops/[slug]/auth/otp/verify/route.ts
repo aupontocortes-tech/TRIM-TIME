@@ -1,4 +1,3 @@
-import { timingSafeEqual } from "node:crypto"
 import { NextResponse } from "next/server"
 import { cookies } from "next/headers"
 import { prisma } from "@/lib/prisma"
@@ -7,6 +6,7 @@ import { clientPhoneDigits } from "@/lib/client-phone-utils"
 import { buildClientNotes, parseClientNotes } from "@/lib/client-auth-notes"
 import { getClientPasswordHash, getActiveBarbershopBySlug, toPublicClientSession } from "@/lib/public-booking"
 import { publicClientCookieName, signPublicClientSession } from "@/lib/public-client-session"
+import { createServiceRoleClient } from "@/lib/supabase/server"
 
 export const dynamic = "force-dynamic"
 
@@ -14,11 +14,13 @@ function normalizeEmail(s: string) {
   return s.trim().toLowerCase()
 }
 
-function codesEqual(a: string, b: string) {
-  const x = Buffer.from(a.padStart(4, "0"), "utf8")
-  const y = Buffer.from(b.padStart(4, "0"), "utf8")
-  if (x.length !== y.length) return false
-  return timingSafeEqual(x, y)
+/** Supabase Auth envia OTP numérico (em geral 6 dígitos; alguns projetos usam 8). */
+function normalizeOtpToken(raw: string) {
+  return String(raw ?? "").replace(/\D/g, "").slice(0, 12)
+}
+
+function asStr(v: unknown) {
+  return typeof v === "string" ? v.trim() : ""
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ slug: string }> }) {
@@ -36,24 +38,52 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     }
     const intent = body.intent === "login" ? "login" : "register"
     const email = normalizeEmail(String(body.email ?? ""))
-    const codeRaw = String(body.code ?? "").replace(/\D/g, "").slice(0, 4)
+    const token = normalizeOtpToken(String(body.code ?? ""))
 
-    if (!email || codeRaw.length !== 4) {
-      return NextResponse.json({ error: "E-mail e código de 4 dígitos são obrigatórios" }, { status: 400 })
+    if (!email || token.length < 6) {
+      return NextResponse.json(
+        { error: "E-mail e código numérico do e-mail (geralmente 6 dígitos) são obrigatórios" },
+        { status: 400 }
+      )
     }
 
-    const row = await prisma.clientOtpCode.findFirst({
-      where: {
-        barbershopId: shop.id,
-        email,
-        intent,
-        expiresAt: { gt: new Date() },
-      },
-      orderBy: { createdAt: "desc" },
+    let supabase
+    try {
+      supabase = createServiceRoleClient()
+    } catch {
+      return NextResponse.json({ error: "Supabase não configurado no servidor." }, { status: 500 })
+    }
+
+    const { data: authData, error: authErr } = await supabase.auth.verifyOtp({
+      email,
+      token,
+      type: "email",
     })
 
-    if (!row || !codesEqual(row.code, codeRaw)) {
-      return NextResponse.json({ error: "Código inválido ou expirado" }, { status: 401 })
+    if (authErr || !authData.user) {
+      return NextResponse.json(
+        { error: "Código inválido ou expirado. Peça um novo código." },
+        { status: 401 }
+      )
+    }
+
+    const user = authData.user
+    const userEmail = user.email ? normalizeEmail(user.email) : ""
+    if (!userEmail || userEmail !== email) {
+      return NextResponse.json({ error: "E-mail não confere com o código." }, { status: 400 })
+    }
+
+    const meta = (user.user_metadata || {}) as Record<string, unknown>
+    const metaSlug = asStr(meta.barbershop_slug)
+    if (metaSlug !== slug) {
+      return NextResponse.json({ error: "Este código não é válido para esta barbearia." }, { status: 403 })
+    }
+    const metaIntent = meta.intent === "login" ? "login" : "register"
+    if (metaIntent !== intent) {
+      return NextResponse.json(
+        { error: "Use a mesma tela (cadastro ou entrar) em que pediu o código." },
+        { status: 400 }
+      )
     }
 
     await prisma.clientOtpCode.deleteMany({
@@ -83,10 +113,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       return NextResponse.json({ ok: true, client: toPublicClientSession(client) })
     }
 
-    const nome = String(row.nome ?? "").trim()
-    const telefone = String(row.telefone ?? "").trim()
+    const nome = asStr(meta.nome)
+    const telefone = asStr(meta.telefone)
     if (!nome || !telefone) {
-      return NextResponse.json({ error: "Dados do cadastro incompletos. Solicite um novo código." }, { status: 400 })
+      return NextResponse.json(
+        { error: "Dados do cadastro incompletos. Volte ao cadastro e peça um novo código." },
+        { status: 400 }
+      )
     }
     const digits = clientPhoneDigits(telefone)
     if (digits.length < 10) {

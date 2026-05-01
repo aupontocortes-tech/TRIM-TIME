@@ -252,7 +252,7 @@ export default function BarbeariaPage() {
   /** Após ativar com sucesso, some o bloco de lembretes (só barra Olá / Sair). */
   const [pushRemindersActivated, setPushRemindersActivated] = useState(false)
 
-  // Cadastro: nome + telefone + e-mail → código de 4 dígitos por e-mail (API /auth/otp)
+  // Cadastro: nome + telefone + e-mail → código por e-mail via Supabase Auth (API /auth/otp)
   const [formCadastro, setFormCadastro] = useState({ nome: "", telefone: "", email: "" })
   const [erroCadastro, setErroCadastro] = useState("")
 
@@ -615,8 +615,8 @@ export default function BarbeariaPage() {
   }
 
   const verifyOtpDigits = async (digits: string) => {
-    const code = digits.replace(/\D/g, "").slice(0, 4)
-    if (code.length !== 4 || otpVerifyBusyRef.current) return
+    const code = digits.replace(/\D/g, "").slice(0, 8)
+    if (code.length !== 6 || otpVerifyBusyRef.current) return
     const em = otpEmail.trim().toLowerCase()
     if (!em) {
       setOtpError("E-mail ausente. Volte e tente de novo.")
@@ -1287,7 +1287,7 @@ export default function BarbeariaPage() {
               <h1 className="text-xl font-bold text-foreground text-center mb-1">Cadastre-se</h1>
               <p className="text-sm text-muted-foreground text-center mb-6">
                 {displayNome} — para agendar é obrigatório confirmar o acesso. Informe nome, WhatsApp e e-mail;
-                enviamos um código de 4 dígitos por e-mail.
+                enviamos um código numérico por e-mail (Supabase, em geral 6 dígitos).
               </p>
               <form onSubmit={handleCadastro} className="space-y-4">
                 {erroCadastro && (
@@ -1369,7 +1369,7 @@ export default function BarbeariaPage() {
                 </div>
                 <h1 className="text-xl font-bold text-foreground text-center mb-1">Código no e-mail</h1>
                 <p className="text-sm text-muted-foreground text-center mb-6">
-                  Enviamos um código de <strong className="text-foreground">4 dígitos</strong> para{" "}
+                  Enviamos um código numérico (em geral <strong className="text-foreground">6 dígitos</strong>) para{" "}
                   <span className="text-foreground font-medium">{otpEmail || "seu e-mail"}</span>. Digite abaixo. O
                   código vale alguns minutos.
                 </p>
@@ -1380,14 +1380,14 @@ export default function BarbeariaPage() {
                     </div>
                   ) : null}
                   <InputOTP
-                    maxLength={4}
+                    maxLength={6}
                     value={otpCode}
                     disabled={authLoading}
                     onChange={(v) => {
-                      const next = v.replace(/\D/g, "").slice(0, 4)
+                      const next = v.replace(/\D/g, "").slice(0, 6)
                       setOtpCode(next)
                       setOtpError("")
-                      if (next.length === 4) void verifyOtpDigits(next)
+                      if (next.length === 6) void verifyOtpDigits(next)
                     }}
                     containerClassName="justify-center"
                   >
@@ -1396,6 +1396,8 @@ export default function BarbeariaPage() {
                       <InputOTPSlot index={1} />
                       <InputOTPSlot index={2} />
                       <InputOTPSlot index={3} />
+                      <InputOTPSlot index={4} />
+                      <InputOTPSlot index={5} />
                     </InputOTPGroup>
                   </InputOTP>
                 </div>
@@ -1445,7 +1447,7 @@ export default function BarbeariaPage() {
               <p className="text-sm text-muted-foreground text-center mb-6">
                 {loginLegacy
                   ? "Para agendar é preciso estar logado. Conta antiga com e-mail e senha."
-                  : "Para agendar é preciso confirmar o acesso. Enviamos um código de 4 dígitos no e-mail. Contas antigas com senha: opção abaixo."}
+                  : "Para agendar é preciso confirmar o acesso. Enviamos um código numérico no e-mail (via Supabase). Contas antigas com senha: opção abaixo."}
               </p>
               <form onSubmit={handleLogin} className="space-y-4">
                 {erroLogin && (

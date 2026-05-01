@@ -91,7 +91,7 @@ model Barbershop {
   @@index([role])
 }
 
-/// Código de 4 dígitos por e-mail (cadastro/login sem senha) no link público de agendamento.
+/// Auditoria / rate limit de envios OTP; o código real vem do e-mail (Supabase Auth).
 model ClientOtpCode {
   id           String     @id @default(uuid()) @db.Uuid
   barbershopId String     @map("barbershop_id") @db.Uuid
