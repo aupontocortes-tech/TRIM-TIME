@@ -5,6 +5,7 @@ import { useParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp"
 import { Label } from "@/components/ui/label"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
@@ -24,7 +25,6 @@ import {
   Bell,
   Camera,
 } from "lucide-react"
-import { createClient as createSupabaseBrowserClient } from "@/lib/supabase/client"
 import {
   clearConfirmedBooking,
   loadConfirmedBooking,
@@ -149,114 +149,9 @@ function isValidEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim().toLowerCase())
 }
 
-function stripTrailingSlash(value: string): string {
-  return value.replace(/\/+$/, "")
-}
-
-/**
- * URL base do link mágico: em produção usa sempre o domínio da página atual
- * (evita falha do Supabase quando NEXT_PUBLIC_APP_URL difere do domínio real ou não está na lista).
- * Em localhost, usa NEXT_PUBLIC_APP_URL se existir (tunnel/ngrok para testar no celular).
- */
-function magicLinkRedirectBase(): string {
-  if (typeof window === "undefined") return ""
-  const configured = stripTrailingSlash(String(process.env.NEXT_PUBLIC_APP_URL ?? "").trim())
-  const origin = stripTrailingSlash(window.location.origin)
-  const host = window.location.hostname
-  const isLoopback = /^(localhost|127\.0\.0\.1)$/i.test(host) || host === "[::1]"
-  if (isLoopback && configured) return configured
-  return origin
-}
-
-function formatMagicLinkSendError(err: unknown): string {
-  const raw = err instanceof Error ? err.message : String(err ?? "")
-  const msg = raw.trim() || "Erro desconhecido ao enviar o link."
-  const lower = msg.toLowerCase()
-  if (lower.includes("rate limit")) {
-    return "Muitas tentativas em sequência. Aguarde um pouco e tente novamente."
-  }
-  if (lower.includes("redirect") || lower.includes("url")) {
-    return `${msg} Verifique no Supabase (Authentication → URL Configuration) se a URL do site e as Redirect URLs incluem ${typeof window !== "undefined" ? window.location.origin : ""}/**`
-  }
-  return msg
-}
-
-const MAGIC_PENDING_PREFIX = "trimtime_magic_pending:"
-/** Só para dados extras no mesmo aparelho; o fluxo continua válido pela URL (?ml=) e pelo Supabase após expirar. */
-const MAGIC_PENDING_TTL_MS = 5 * 60 * 1000
-
-type MagicPendingV1 = {
-  v: 1
-  mode: "register" | "login"
-  email: string
-  nome: string
-  telefone: string
-  savedAt: number
-}
-
-function magicPendingStorageKey(slug: string) {
-  return `${MAGIC_PENDING_PREFIX}${slug}`
-}
-
-function saveMagicPending(slug: string, payload: Omit<MagicPendingV1, "v" | "savedAt">) {
-  try {
-    const row: MagicPendingV1 = { v: 1, savedAt: Date.now(), ...payload }
-    sessionStorage.setItem(magicPendingStorageKey(slug), JSON.stringify(row))
-  } catch {
-    /* ignore */
-  }
-}
-
-function loadMagicPending(slug: string): MagicPendingV1 | null {
-  try {
-    const raw = sessionStorage.getItem(magicPendingStorageKey(slug))
-    if (!raw) return null
-    const j = JSON.parse(raw) as MagicPendingV1
-    if (j?.v !== 1 || (j.mode !== "register" && j.mode !== "login")) return null
-    if (typeof j.email !== "string") return null
-    const savedAt = typeof j.savedAt === "number" ? j.savedAt : 0
-    if (savedAt && Date.now() - savedAt > MAGIC_PENDING_TTL_MS) {
-      sessionStorage.removeItem(magicPendingStorageKey(slug))
-      return null
-    }
-    return j
-  } catch {
-    return null
-  }
-}
-
-function clearMagicPending(slug: string) {
-  try {
-    sessionStorage.removeItem(magicPendingStorageKey(slug))
-  } catch {
-    /* ignore */
-  }
-}
-
-function readMagicModeFromUrl(): "register" | "login" | null {
-  if (typeof window === "undefined") return null
-  try {
-    const q = new URLSearchParams(window.location.search)
-    if (q.get("ml") === "login") return "login"
-    if (q.get("ml") === "register") return "register"
-  } catch {
-    /* ignore */
-  }
-  return null
-}
-
-function stripMagicLinkQueryFromUrl() {
-  if (typeof window === "undefined") return
-  try {
-    const u = new URL(window.location.href)
-    if (u.searchParams.get("magic") !== "1") return
-    u.searchParams.delete("magic")
-    u.searchParams.delete("ml")
-    const next = u.pathname + (u.searchParams.toString() ? `?${u.searchParams}` : "") + u.hash
-    window.history.replaceState({}, "", next)
-  } catch {
-    /* ignore */
-  }
+function messageFromUnknownError(err: unknown): string {
+  if (err instanceof Error && err.message.trim()) return err.message.trim()
+  return "Algo deu errado. Tente novamente."
 }
 
 function pushRemindersOkSessionKey(slug: string) {
@@ -319,12 +214,10 @@ export default function BarbeariaPage() {
   const params = useParams()
   const slug = (params?.slug as string) || "trim-time"
   const storageSuffix = `_${slug}`
-  const supabase = useMemo(() => createSupabaseBrowserClient(), [])
-  const magicCompleteDoneRef = useRef<string | null>(null)
-  const magicCompleteInFlightRef = useRef<string | null>(null)
+  const otpVerifyBusyRef = useRef(false)
 
   const [authPhase, setAuthPhase] = useState<
-    "loading" | "cadastro" | "login" | "link_sent" | "logado"
+    "loading" | "cadastro" | "login" | "codigo" | "logado"
   >("loading")
   const [clienteLogado, setClienteLogado] = useState<ClienteAgendamento | null>(null)
   const [authLoading, setAuthLoading] = useState(false)
@@ -359,15 +252,16 @@ export default function BarbeariaPage() {
   /** Após ativar com sucesso, some o bloco de lembretes (só barra Olá / Sair). */
   const [pushRemindersActivated, setPushRemindersActivated] = useState(false)
 
-  // Cadastro: nome + telefone + e-mail → magic link do Supabase por e-mail
+  // Cadastro: nome + telefone + e-mail → código de 4 dígitos por e-mail (API /auth/otp)
   const [formCadastro, setFormCadastro] = useState({ nome: "", telefone: "", email: "" })
   const [erroCadastro, setErroCadastro] = useState("")
 
   const [otpEmail, setOtpEmail] = useState("")
-  const [magicLinkMode, setMagicLinkMode] = useState<"register" | "login">("register")
-  const [magicLinkError, setMagicLinkError] = useState("")
+  const [otpIntent, setOtpIntent] = useState<"register" | "login">("register")
+  const [otpCode, setOtpCode] = useState("")
+  const [otpError, setOtpError] = useState("")
 
-  // Login sem senha: e-mail → OTP. Legado: e-mail/telefone + senha
+  // Login sem senha: e-mail → código. Legado: e-mail/telefone + senha
   const [formLogin, setFormLogin] = useState({ email: "" })
   const [loginLegacy, setLoginLegacy] = useState(false)
   const [formLoginLegacy, setFormLoginLegacy] = useState({ emailOuTelefone: "", senha: "" })
@@ -428,89 +322,6 @@ export default function BarbeariaPage() {
   }, [slug])
 
   useEffect(() => {
-    let cancelled = false
-
-    const completeMagicLogin = async (accessToken: string) => {
-      if (!accessToken) return
-      if (magicCompleteDoneRef.current === accessToken) return
-      if (magicCompleteInFlightRef.current === accessToken) return
-      magicCompleteInFlightRef.current = accessToken
-      setAuthLoading(true)
-      setMagicLinkError("")
-      const pending = typeof window !== "undefined" ? loadMagicPending(slug) : null
-      const mlUrl = typeof window !== "undefined" ? readMagicModeFromUrl() : null
-      let mode: "register" | "login" = "register"
-      if (pending?.mode) mode = pending.mode
-      else if (mlUrl) mode = mlUrl
-      const nome = (pending?.nome ?? "").trim()
-      const telefone = pending?.telefone ?? ""
-      try {
-        const res = await fetch(
-          `/api/public/barbershops/${encodeURIComponent(slug)}/auth/magic/complete`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${accessToken}`,
-            },
-            credentials: "include",
-            body: JSON.stringify({
-              mode,
-              nome,
-              telefone,
-            }),
-          }
-        )
-        const data = (await res.json().catch(() => ({}))) as { error?: string; client?: ClienteAgendamento }
-        if (!res.ok || !data.client) {
-          if (!cancelled) {
-            setMagicLinkError(data.error || "Não foi possível concluir o acesso")
-            setAuthPhase("link_sent")
-          }
-          return
-        }
-        if (cancelled) return
-        magicCompleteDoneRef.current = accessToken
-        clearMagicPending(slug)
-        stripMagicLinkQueryFromUrl()
-        setClienteLogado(data.client)
-        setDadosCliente({
-          nome: data.client.nome,
-          telefone: data.client.telefone,
-          email: data.client.email,
-          cpf: data.client.cpf ? formatCpfDisplay(data.client.cpf) : "",
-          foto: data.client.photo_url ?? "",
-          fotoPosicao: 50,
-        })
-        setAuthPhase("logado")
-      } catch {
-        if (!cancelled) {
-          setMagicLinkError("Erro ao concluir acesso pelo link. Tente novamente.")
-          setAuthPhase("link_sent")
-        }
-      } finally {
-        magicCompleteInFlightRef.current = null
-        if (!cancelled) setAuthLoading(false)
-      }
-    }
-
-    supabase.auth.getSession().then(({ data }) => {
-      const token = data.session?.access_token
-      if (token) void completeMagicLogin(token)
-    })
-
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
-      const token = session?.access_token
-      if (token) void completeMagicLogin(token)
-    })
-
-    return () => {
-      cancelled = true
-      authListener.subscription.unsubscribe()
-    }
-  }, [slug, supabase])
-
-  useEffect(() => {
     const units = publicMeta?.units
     if (!units?.length) return
     if (units.length === 1) {
@@ -547,33 +358,6 @@ export default function BarbeariaPage() {
             foto: c.photo_url?.trim() || saved?.foto?.trim() || "",
             fotoPosicao: saved?.fotoPosicao ?? 50,
           })
-          return
-        }
-        let magicReturn = false
-        try {
-          magicReturn = new URLSearchParams(window.location.search).get("magic") === "1"
-        } catch {
-          /* ignore */
-        }
-        const pending = typeof window !== "undefined" ? loadMagicPending(slug) : null
-        const ml = typeof window !== "undefined" ? readMagicModeFromUrl() : null
-        if (magicReturn) {
-          setClienteLogado(null)
-          if (pending) {
-            setOtpEmail(pending.email)
-            setMagicLinkMode(pending.mode)
-            if (pending.mode === "register") {
-              setFormCadastro({
-                nome: pending.nome || "",
-                telefone: pending.telefone || "",
-                email: pending.email || "",
-              })
-            }
-          } else {
-            if (ml === "login") setMagicLinkMode("login")
-            else if (ml === "register") setMagicLinkMode("register")
-          }
-          setAuthPhase("link_sent")
           return
         }
         setClienteLogado(null)
@@ -808,42 +592,76 @@ export default function BarbeariaPage() {
   const formatCpfInput = (value: string) =>
     formatCpfDisplay(value.replace(/\D/g, "").slice(0, 11))
 
-  const sendMagicLink = async (mode: "register" | "login", email: string) => {
-    const preferredBase = magicLinkRedirectBase()
-    const redirectTo = `${preferredBase}/b/${encodeURIComponent(slug)}?magic=1&ml=${encodeURIComponent(mode)}`
-    const normalizedEmail = email.trim().toLowerCase()
-    const options =
-      mode === "register"
+  const sendOtpEmailRequest = async (intent: "register" | "login", email: string) => {
+    const normalized = email.trim().toLowerCase()
+    const body =
+      intent === "register"
         ? {
-            shouldCreateUser: true,
-            emailRedirectTo: redirectTo,
-            data: {
-              nome: formCadastro.nome.trim(),
-              telefone: formCadastro.telefone,
-              slug,
-            },
+            intent: "register" as const,
+            email: normalized,
+            nome: formCadastro.nome.trim(),
+            telefone: formCadastro.telefone,
           }
-        : {
-            shouldCreateUser: false,
-            emailRedirectTo: redirectTo,
-          }
-    const { error } = await supabase.auth.signInWithOtp({
-      email: normalizedEmail,
-      options,
+        : { intent: "login" as const, email: normalized }
+    const res = await fetch(`/api/public/barbershops/${encodeURIComponent(slug)}/auth/otp/send`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
     })
-    if (error) throw error
-    saveMagicPending(slug, {
-      mode,
-      email: normalizedEmail,
-      nome: mode === "register" ? formCadastro.nome.trim() : "",
-      telefone: mode === "register" ? formCadastro.telefone : "",
-    })
+    const data = (await res.json().catch(() => ({}))) as { error?: string }
+    if (!res.ok) {
+      throw new Error(data.error?.trim() || "Não foi possível enviar o código.")
+    }
+  }
+
+  const verifyOtpDigits = async (digits: string) => {
+    const code = digits.replace(/\D/g, "").slice(0, 4)
+    if (code.length !== 4 || otpVerifyBusyRef.current) return
+    const em = otpEmail.trim().toLowerCase()
+    if (!em) {
+      setOtpError("E-mail ausente. Volte e tente de novo.")
+      return
+    }
+    otpVerifyBusyRef.current = true
+    setAuthLoading(true)
+    setOtpError("")
+    try {
+      const res = await fetch(`/api/public/barbershops/${encodeURIComponent(slug)}/auth/otp/verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ intent: otpIntent, email: em, code }),
+      })
+      const data = (await res.json().catch(() => ({}))) as { error?: string; client?: ClienteAgendamento }
+      if (!res.ok || !data.client) {
+        setOtpError(data.error || "Código inválido ou expirado.")
+        setOtpCode("")
+        return
+      }
+      setClienteLogado(data.client)
+      setDadosCliente({
+        nome: data.client.nome,
+        telefone: data.client.telefone,
+        email: data.client.email,
+        cpf: data.client.cpf ? formatCpfDisplay(data.client.cpf) : "",
+        foto: data.client.photo_url ?? "",
+        fotoPosicao: 50,
+      })
+      setOtpCode("")
+      setAuthPhase("logado")
+    } catch {
+      setOtpError("Erro ao validar o código. Tente novamente.")
+      setOtpCode("")
+    } finally {
+      otpVerifyBusyRef.current = false
+      setAuthLoading(false)
+    }
   }
 
   const handleCadastro = async (e: React.FormEvent) => {
     e.preventDefault()
     setErroCadastro("")
-    setMagicLinkError("")
+    setOtpError("")
     setAuthLoading(true)
     const digits = formCadastro.telefone.replace(/\D/g, "")
     if (digits.length < 10) {
@@ -858,38 +676,38 @@ export default function BarbeariaPage() {
       return
     }
     try {
-      const host = window.location.hostname
-      const isNarrowLocal = /^(localhost|127\.0\.0\.1)$/i.test(host) || host === "[::1]"
-      const hasTunnel = String(process.env.NEXT_PUBLIC_APP_URL ?? "").trim().length > 0
-      if (isNarrowLocal && !hasTunnel) {
-        setErroCadastro(
-          "Para abrir o link no celular a partir do PC, configure NEXT_PUBLIC_APP_URL com uma URL pública (ex.: ngrok ou seu domínio) ou teste já abrindo o site pelo domínio de produção."
-        )
-        return
-      }
-      await sendMagicLink("register", email)
+      await sendOtpEmailRequest("register", email)
       setOtpEmail(email)
-      setMagicLinkMode("register")
-      setAuthPhase("link_sent")
+      setOtpIntent("register")
+      setOtpCode("")
+      setAuthPhase("codigo")
     } catch (e) {
-      setErroCadastro(formatMagicLinkSendError(e))
+      setErroCadastro(messageFromUnknownError(e))
     } finally {
       setAuthLoading(false)
     }
   }
 
-  const handleResendMagicLink = async () => {
-    setMagicLinkError("")
+  const handleResendOtp = async () => {
+    setOtpError("")
     const em = otpEmail.trim().toLowerCase()
     if (!em || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) {
-      setMagicLinkError("Use Voltar, informe o e-mail e peça o link de novo.")
+      setOtpError("Use Voltar e informe o e-mail de novo.")
       return
+    }
+    if (otpIntent === "register") {
+      const digits = formCadastro.telefone.replace(/\D/g, "")
+      if (digits.length < 10 || !formCadastro.nome.trim()) {
+        setOtpError("Volte ao cadastro e confira nome, telefone e e-mail.")
+        return
+      }
     }
     setAuthLoading(true)
     try {
-      await sendMagicLink(magicLinkMode, em)
+      await sendOtpEmailRequest(otpIntent, em)
+      setOtpCode("")
     } catch (e) {
-      setMagicLinkError(formatMagicLinkSendError(e))
+      setOtpError(messageFromUnknownError(e))
     } finally {
       setAuthLoading(false)
     }
@@ -898,7 +716,7 @@ export default function BarbeariaPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setErroLogin("")
-    setMagicLinkError("")
+    setOtpError("")
     setAuthLoading(true)
     try {
       if (loginLegacy) {
@@ -935,21 +753,13 @@ export default function BarbeariaPage() {
         setErroLogin("Informe um e-mail válido")
         return
       }
-      const host = window.location.hostname
-      const isNarrowLocal = /^(localhost|127\.0\.0\.1)$/i.test(host) || host === "[::1]"
-      const hasTunnel = String(process.env.NEXT_PUBLIC_APP_URL ?? "").trim().length > 0
-      if (isNarrowLocal && !hasTunnel) {
-        setErroLogin(
-          "Para testar o link no celular a partir do PC, configure NEXT_PUBLIC_APP_URL (URL pública) ou abra o app pelo domínio de produção."
-        )
-        return
-      }
-      await sendMagicLink("login", email)
+      await sendOtpEmailRequest("login", email)
       setOtpEmail(email)
-      setMagicLinkMode("login")
-      setAuthPhase("link_sent")
+      setOtpIntent("login")
+      setOtpCode("")
+      setAuthPhase("codigo")
     } catch (e) {
-      setErroLogin(formatMagicLinkSendError(e))
+      setErroLogin(messageFromUnknownError(e))
     } finally {
       setAuthLoading(false)
     }
@@ -967,13 +777,11 @@ export default function BarbeariaPage() {
     setClienteLogado(null)
     setAuthPhase("cadastro")
     setOtpEmail("")
-    setMagicLinkError("")
-    clearMagicPending(slug)
-    magicCompleteDoneRef.current = null
-    magicCompleteInFlightRef.current = null
+    setOtpCode("")
+    setOtpError("")
+    setOtpIntent("register")
     setFormLogin({ email: "" })
     setFormCadastro({ nome: "", telefone: "", email: "" })
-    await supabase.auth.signOut().catch(() => {})
     setEtapa(1)
     setServicosSelecionados([])
     setProfissionalSelecionado(null)
@@ -1479,7 +1287,7 @@ export default function BarbeariaPage() {
               <h1 className="text-xl font-bold text-foreground text-center mb-1">Cadastre-se</h1>
               <p className="text-sm text-muted-foreground text-center mb-6">
                 {displayNome} — para agendar é obrigatório confirmar o acesso. Informe nome, WhatsApp e e-mail;
-                enviamos um link mágico.
+                enviamos um código de 4 dígitos por e-mail.
               </p>
               <form onSubmit={handleCadastro} className="space-y-4">
                 {erroCadastro && (
@@ -1526,7 +1334,7 @@ export default function BarbeariaPage() {
                   disabled={authLoading}
                   className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
                 >
-                  {authLoading ? "Enviando link..." : "Receber link por e-mail"}
+                  {authLoading ? "Enviando código..." : "Receber código por e-mail"}
                 </Button>
               </form>
               <p className="text-center text-sm text-muted-foreground mt-4">
@@ -1547,7 +1355,7 @@ export default function BarbeariaPage() {
     )
   }
 
-  if (authPhase === "link_sent") {
+  if (authPhase === "codigo") {
     return (
       <>
         {clientBookingInstallPrompt}
@@ -1559,44 +1367,55 @@ export default function BarbeariaPage() {
                 <div className="flex justify-center mb-4">
                   <img src={barbearia.logo} alt="" className="w-14 h-14 rounded-xl object-contain bg-background" />
                 </div>
-                <h1 className="text-xl font-bold text-foreground text-center mb-1">Verifique seu e-mail</h1>
+                <h1 className="text-xl font-bold text-foreground text-center mb-1">Código no e-mail</h1>
                 <p className="text-sm text-muted-foreground text-center mb-6">
-                  O e-mail traz um link que abre direto este aplicativo e confirma o acesso (não é um segundo e-mail de confirmação). Use o link em até alguns minutos. Destino:{" "}
-                  <span className="text-foreground font-medium">{otpEmail || "o e-mail que você informou"}</span>.
+                  Enviamos um código de <strong className="text-foreground">4 dígitos</strong> para{" "}
+                  <span className="text-foreground font-medium">{otpEmail || "seu e-mail"}</span>. Digite abaixo. O
+                  código vale alguns minutos.
                 </p>
-                <div className="space-y-4">
-                  {magicLinkError ? (
-                    <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
-                      {magicLinkError}
+                <div className="space-y-4 flex flex-col items-center">
+                  {otpError ? (
+                    <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm w-full">
+                      {otpError}
                     </div>
                   ) : null}
-                  <Button
-                    type="button"
+                  <InputOTP
+                    maxLength={4}
+                    value={otpCode}
                     disabled={authLoading}
-                    className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
-                    onClick={() => {
-                      if (typeof window !== "undefined") window.location.reload()
+                    onChange={(v) => {
+                      const next = v.replace(/\D/g, "").slice(0, 4)
+                      setOtpCode(next)
+                      setOtpError("")
+                      if (next.length === 4) void verifyOtpDigits(next)
                     }}
+                    containerClassName="justify-center"
                   >
-                    {authLoading ? "Aguardando..." : "Já cliquei no link"}
-                  </Button>
+                    <InputOTPGroup>
+                      <InputOTPSlot index={0} />
+                      <InputOTPSlot index={1} />
+                      <InputOTPSlot index={2} />
+                      <InputOTPSlot index={3} />
+                    </InputOTPGroup>
+                  </InputOTP>
                 </div>
-                <div className="flex flex-col gap-2 mt-4">
+                <div className="flex flex-col gap-2 mt-6">
                   <Button
                     type="button"
                     variant="outline"
                     className="w-full border-border"
                     disabled={authLoading}
-                    onClick={() => void handleResendMagicLink()}
+                    onClick={() => void handleResendOtp()}
                   >
-                    Reenviar link
+                    Reenviar código
                   </Button>
                   <button
                     type="button"
                     className="text-center text-sm text-muted-foreground hover:text-foreground underline-offset-2 hover:underline"
                     onClick={() => {
-                      setMagicLinkError("")
-                      setAuthPhase(magicLinkMode === "register" ? "cadastro" : "login")
+                      setOtpError("")
+                      setOtpCode("")
+                      setAuthPhase(otpIntent === "register" ? "cadastro" : "login")
                     }}
                   >
                     Voltar
@@ -1626,7 +1445,7 @@ export default function BarbeariaPage() {
               <p className="text-sm text-muted-foreground text-center mb-6">
                 {loginLegacy
                   ? "Para agendar é preciso estar logado. Conta antiga com e-mail e senha."
-                  : "Para agendar é preciso confirmar o acesso. Enviamos um link mágico no e-mail. Contas antigas com senha: opção abaixo."}
+                  : "Para agendar é preciso confirmar o acesso. Enviamos um código de 4 dígitos no e-mail. Contas antigas com senha: opção abaixo."}
               </p>
               <form onSubmit={handleLogin} className="space-y-4">
                 {erroLogin && (
@@ -1691,10 +1510,10 @@ export default function BarbeariaPage() {
                   {authLoading
                     ? loginLegacy
                       ? "Entrando..."
-                      : "Enviando link..."
+                      : "Enviando código..."
                     : loginLegacy
                     ? "Entrar"
-                    : "Receber link por e-mail"}
+                    : "Receber código por e-mail"}
                 </Button>
               </form>
               <button
@@ -1705,7 +1524,7 @@ export default function BarbeariaPage() {
                   setLoginLegacy((v) => !v)
                 }}
               >
-                {loginLegacy ? "Voltar para link por e-mail" : "Conta antiga com senha?"}
+                {loginLegacy ? "Voltar para código por e-mail" : "Conta antiga com senha?"}
               </button>
               <p className="text-center text-sm text-muted-foreground mt-4">
                 Não tem conta?{" "}
