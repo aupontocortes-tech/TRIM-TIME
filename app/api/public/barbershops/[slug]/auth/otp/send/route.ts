@@ -12,9 +12,20 @@ const OTP_AUDIT_PLACEHOLDER = "****"
 
 /** Alinhado ao e-mail no Supabase (ex.: “expira em 10 minutos”). Só afeta linha de auditoria/rate limit local. */
 const OTP_TTL_MS = 10 * 60 * 1000
-const OTP_RESEND_COOLDOWN_MS = 60 * 1000
-const MAX_SENDS_WINDOW_MS = 10 * 60 * 1000
-const MAX_SENDS_IN_WINDOW = 5
+
+function envInt(name: string, fallback: number) {
+  const v = process.env[name]?.trim()
+  if (!v) return fallback
+  const n = Number.parseInt(v, 10)
+  return Number.isFinite(n) && n > 0 ? n : fallback
+}
+
+/** Entre um envio e outro (“Reenviar código”). Padrão 30s. Override: OTP_RESEND_COOLDOWN_SECONDS */
+const OTP_RESEND_COOLDOWN_MS = envInt("OTP_RESEND_COOLDOWN_SECONDS", 30) * 1000
+/** Janela para contar envios. Padrão 15 min. Override: OTP_SEND_WINDOW_MINUTES */
+const MAX_SENDS_WINDOW_MS = envInt("OTP_SEND_WINDOW_MINUTES", 15) * 60 * 1000
+/** Máx. envios por e-mail+barbearia na janela acima. Padrão 15. Override: OTP_MAX_SENDS_PER_WINDOW */
+const MAX_SENDS_IN_WINDOW = envInt("OTP_MAX_SENDS_PER_WINDOW", 15)
 
 function normalizeEmail(s: string) {
   return s.trim().toLowerCase()
@@ -58,8 +69,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       },
     })
     if (sendsInWindow >= MAX_SENDS_IN_WINDOW) {
+      const winMin = Math.round(MAX_SENDS_WINDOW_MS / 60000)
       return NextResponse.json(
-        { error: "Muitas tentativas. Aguarde alguns minutos e tente novamente." },
+        {
+          error: `Muitos envios de código para este e-mail. Aguarde até ${winMin} minutos ou tente mais tarde.`,
+        },
         { status: 429 }
       )
     }
