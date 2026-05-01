@@ -1370,8 +1370,8 @@ export default function BarbeariaPage() {
                 <h1 className="text-xl font-bold text-foreground text-center mb-1">Código no e-mail</h1>
                 <p className="text-sm text-muted-foreground text-center mb-6">
                   Enviamos um código numérico (em geral <strong className="text-foreground">6 dígitos</strong>) para{" "}
-                  <span className="text-foreground font-medium">{otpEmail || "seu e-mail"}</span>. Digite abaixo. O
-                  código vale alguns minutos.
+                  <span className="text-foreground font-medium">{otpEmail || "seu e-mail"}</span>. Digite abaixo. Ele
+                  vale até <strong className="text-foreground">10 minutos</strong>, como no e-mail.
                 </p>
                 <div className="space-y-4 flex flex-col items-center">
                   {otpError ? (

@@ -10,7 +10,8 @@ export const dynamic = "force-dynamic"
 /** Linha só para rate limit; o código real vem no e-mail via Supabase Auth. */
 const OTP_AUDIT_PLACEHOLDER = "****"
 
-const OTP_TTL_MS = 5 * 60 * 1000
+/** Alinhado ao e-mail no Supabase (ex.: “expira em 10 minutos”). Só afeta linha de auditoria/rate limit local. */
+const OTP_TTL_MS = 10 * 60 * 1000
 const OTP_RESEND_COOLDOWN_MS = 60 * 1000
 const MAX_SENDS_WINDOW_MS = 10 * 60 * 1000
 const MAX_SENDS_IN_WINDOW = 5
