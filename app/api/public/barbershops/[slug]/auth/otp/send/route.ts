@@ -27,12 +27,12 @@ function envInt(name: string, fallback: number) {
   return Number.isFinite(n) && n > 0 ? n : fallback
 }
 
-/** Entre um envio e outro (“Reenviar código”). Padrão 30s. Override: OTP_RESEND_COOLDOWN_SECONDS */
-const OTP_RESEND_COOLDOWN_MS = envInt("OTP_RESEND_COOLDOWN_SECONDS", 30) * 1000
-/** Janela para contar envios. Padrão 15 min. Override: OTP_SEND_WINDOW_MINUTES */
-const MAX_SENDS_WINDOW_MS = envInt("OTP_SEND_WINDOW_MINUTES", 15) * 60 * 1000
-/** Máx. envios por e-mail+barbearia na janela acima. Padrão 15. Override: OTP_MAX_SENDS_PER_WINDOW */
-const MAX_SENDS_IN_WINDOW = envInt("OTP_MAX_SENDS_PER_WINDOW", 15)
+/** Entre um envio e outro (“Reenviar código”). Padrão 20s. Override: OTP_RESEND_COOLDOWN_SECONDS */
+const OTP_RESEND_COOLDOWN_MS = envInt("OTP_RESEND_COOLDOWN_SECONDS", 20) * 1000
+/** Janela para contar envios. Padrão 60 min. Override: OTP_SEND_WINDOW_MINUTES */
+const MAX_SENDS_WINDOW_MS = envInt("OTP_SEND_WINDOW_MINUTES", 60) * 60 * 1000
+/** Máx. envios por e-mail+barbearia na janela acima. Padrão 50. Override: OTP_MAX_SENDS_PER_WINDOW */
+const MAX_SENDS_IN_WINDOW = envInt("OTP_MAX_SENDS_PER_WINDOW", 50)
 
 function normalizeEmail(s: string) {
   return s.trim().toLowerCase()

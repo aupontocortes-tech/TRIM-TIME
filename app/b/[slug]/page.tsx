@@ -155,9 +155,10 @@ function messageFromUnknownError(err: unknown): string {
 }
 
 /** Só conta falhas em que o Supabase rejeita o OTP (401). Outros erros não gastam tentativa. */
-const OTP_UI_MAX_INVALID = 25
+const OTP_UI_MAX_INVALID = 60
 const OTP_UI_LOCKOUT_MS = 60_000
-const OTP_UI_RESEND_COOLDOWN_MS = 60_000
+/** Cooldown do botão “Reenviar código”; um pouco acima do mínimo da API (OTP_RESEND_COOLDOWN_SECONDS). */
+const OTP_UI_RESEND_COOLDOWN_MS = 25_000
 const OTP_UI_LOCKOUT_SEC = Math.ceil(OTP_UI_LOCKOUT_MS / 1000)
 
 function pushRemindersOkSessionKey(slug: string) {
