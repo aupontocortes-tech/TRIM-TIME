@@ -27,8 +27,12 @@ function envInt(name: string, fallback: number) {
   return Number.isFinite(n) && n > 0 ? n : fallback
 }
 
-/** Entre um envio e outro (“Reenviar código”). Padrão 20s. Override: OTP_RESEND_COOLDOWN_SECONDS */
-const OTP_RESEND_COOLDOWN_MS = envInt("OTP_RESEND_COOLDOWN_SECONDS", 20) * 1000
+/**
+ * Entre um envio e outro. O Supabase costuma impor ~60s entre e-mails OTP; se for menor aqui,
+ * o usuário recebe erro genérico do Auth. Padrão 60s — reduza só se aumentar Rate limits no painel.
+ * Override: OTP_RESEND_COOLDOWN_SECONDS
+ */
+const OTP_RESEND_COOLDOWN_MS = envInt("OTP_RESEND_COOLDOWN_SECONDS", 60) * 1000
 /** Janela para contar envios. Padrão 60 min. Override: OTP_SEND_WINDOW_MINUTES */
 const MAX_SENDS_WINDOW_MS = envInt("OTP_SEND_WINDOW_MINUTES", 60) * 60 * 1000
 /** Máx. envios por e-mail+barbearia na janela acima. Padrão 50. Override: OTP_MAX_SENDS_PER_WINDOW */
@@ -40,6 +44,30 @@ function normalizeEmail(s: string) {
 
 function isValidEmail(s: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s)
+}
+
+/** Erros do GoTrue/Supabase que indicam “espere antes de pedir de novo” (não apagamos o registro de auditoria). */
+function isSupabaseOtpThrottleMessage(message: string | undefined): boolean {
+  const m = (message ?? "").toLowerCase()
+  return (
+    m.includes("rate limit") ||
+    m.includes("too many") ||
+    m.includes("exceeded") ||
+    m.includes("only request") ||
+    (m.includes("after ") && m.includes("second")) ||
+    m.includes("for security purposes") ||
+    m.includes("e-mail rate") ||
+    m.includes("email rate") ||
+    m.includes("frequency")
+  )
+}
+
+function friendlyOtpSendError(message: string | undefined): string {
+  if (isSupabaseOtpThrottleMessage(message)) {
+    const sec = Math.ceil(OTP_RESEND_COOLDOWN_MS / 1000)
+    return `Muitas solicitações de código. Aguarde cerca de ${sec} segundos entre um envio e outro. Se precisar de mais envios por hora, aumente em Supabase → Authentication → Rate limits.`
+  }
+  return (message ?? "").trim() || "Não foi possível enviar o código por e-mail."
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ slug: string }> }) {
@@ -192,16 +220,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     const { error: authErr } = await supabase.auth.signInWithOtp({
       email,
       options: {
-        shouldCreateUser: true,
+        shouldCreateUser: intent === "register",
         data: metadata,
       },
     })
 
     if (authErr) {
-      await prisma.clientOtpCode.delete({ where: { id: audit.id } }).catch(() => {})
+      const throttled = isSupabaseOtpThrottleMessage(authErr.message)
+      if (!throttled) {
+        await prisma.clientOtpCode.delete({ where: { id: audit.id } }).catch(() => {})
+      }
       return NextResponse.json(
-        { error: authErr.message || "Não foi possível enviar o código por e-mail." },
-        { status: 400 }
+        { error: friendlyOtpSendError(authErr.message) },
+        { status: throttled ? 429 : 400 }
       )
     }
 
