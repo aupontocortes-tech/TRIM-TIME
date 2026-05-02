@@ -154,9 +154,11 @@ function messageFromUnknownError(err: unknown): string {
   return "Algo deu errado. Tente novamente."
 }
 
-const OTP_UI_MAX_INVALID = 10
+/** Só conta falhas em que o Supabase rejeita o OTP (401). Outros erros não gastam tentativa. */
+const OTP_UI_MAX_INVALID = 25
 const OTP_UI_LOCKOUT_MS = 60_000
 const OTP_UI_RESEND_COOLDOWN_MS = 60_000
+const OTP_UI_LOCKOUT_SEC = Math.ceil(OTP_UI_LOCKOUT_MS / 1000)
 
 function pushRemindersOkSessionKey(slug: string) {
   return `trimtime_push_reminders_ok_v1_${slug}`
@@ -660,18 +662,23 @@ export default function BarbeariaPage() {
       })
       const data = (await res.json().catch(() => ({}))) as { error?: string; client?: ClienteAgendamento }
       if (!res.ok || !data.client) {
-        setOtpInvalidCount((prev) => {
-          const next = prev + 1
-          if (next >= OTP_UI_MAX_INVALID) {
-            setOtpLockUntil(Date.now() + OTP_UI_LOCKOUT_MS)
-            setOtpError(
-              `Código inválido (tentativa ${next} de ${OTP_UI_MAX_INVALID}). Aguarde 60 segundos para tentar de novo.`
-            )
-          } else {
-            setOtpError(`Código inválido (tentativa ${next} de ${OTP_UI_MAX_INVALID}).`)
-          }
-          return next
-        })
+        const msg = data.error?.trim() || "Não foi possível confirmar. Tente de novo."
+        if (res.status === 401) {
+          setOtpInvalidCount((prev) => {
+            const next = prev + 1
+            if (next >= OTP_UI_MAX_INVALID) {
+              setOtpLockUntil(Date.now() + OTP_UI_LOCKOUT_MS)
+              setOtpError(
+                `Código inválido (tentativa ${next} de ${OTP_UI_MAX_INVALID}). Aguarde ${OTP_UI_LOCKOUT_SEC} segundos para tentar de novo.`
+              )
+            } else {
+              setOtpError(`Código inválido (tentativa ${next} de ${OTP_UI_MAX_INVALID}).`)
+            }
+            return next
+          })
+        } else {
+          setOtpError(msg)
+        }
         return
       }
       setOtpInvalidCount(0)
@@ -1340,7 +1347,7 @@ export default function BarbeariaPage() {
               <h1 className="text-xl font-bold text-foreground text-center mb-1">Cadastre-se</h1>
               <p className="text-sm text-muted-foreground text-center mb-6">
                 {displayNome} — para agendar é obrigatório confirmar o acesso. Informe nome, WhatsApp e e-mail;
-                enviamos um código numérico por e-mail (Supabase, em geral 6 dígitos).
+                enviamos um código numérico por e-mail (6 dígitos).
               </p>
               <form onSubmit={handleCadastro} className="space-y-4">
                 {erroCadastro && (

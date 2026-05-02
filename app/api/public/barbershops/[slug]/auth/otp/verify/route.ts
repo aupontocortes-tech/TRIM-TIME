@@ -14,7 +14,7 @@ function normalizeEmail(s: string) {
   return s.trim().toLowerCase()
 }
 
-/** Supabase Auth envia OTP numérico (em geral 6 dígitos; alguns projetos usam 8). */
+/** OTP numérico de 6 dígitos (alinhar com Authentication → Providers → Email no Supabase). */
 function normalizeOtpToken(raw: string) {
   return String(raw ?? "").replace(/\D/g, "").slice(0, 12)
 }
@@ -40,11 +40,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     const email = normalizeEmail(String(body.email ?? ""))
     const token = normalizeOtpToken(String(body.code ?? ""))
 
-    if (!email || token.length < 6 || token.length > 10) {
+    if (!email || token.length !== 6) {
       return NextResponse.json(
         {
           error:
-            "Informe o e-mail e o código exatamente como no e-mail (só números, em geral 6 dígitos).",
+            "Informe o e-mail e os 6 dígitos do código exatamente como no e-mail (só números).",
         },
         { status: 400 }
       )
