@@ -7,7 +7,14 @@ import { createAnonServerAuthClient } from "@/lib/supabase/server"
 
 export const dynamic = "force-dynamic"
 
-/** Linha só para rate limit; o código real vem no e-mail via Supabase Auth. */
+/**
+ * O código numérico no e-mail é gerado pelo Supabase Auth. O app espera 6 dígitos.
+ * Se o e-mail mostrar 8 dígitos, ajuste o projeto: Dashboard → Authentication →
+ * Providers → Email (OTP length / mailer), ou Management API PATCH /v1/projects/{ref}/config/auth
+ * com `"mailer_otp_length": 6` (e opcionalmente `mailer_otp_exp`).
+ *
+ * Placeholder na tabela de auditoria / rate limit; o código real vem no e-mail.
+ */
 const OTP_AUDIT_PLACEHOLDER = "****"
 
 /** Alinhado ao e-mail no Supabase (ex.: “expira em 10 minutos”). Só afeta linha de auditoria/rate limit local. */

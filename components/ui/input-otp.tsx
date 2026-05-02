@@ -17,7 +17,7 @@ function InputOTP({
     <OTPInput
       data-slot="input-otp"
       containerClassName={cn(
-        'flex items-center gap-2 has-disabled:opacity-60',
+        'flex items-center gap-1 has-disabled:opacity-60',
         containerClassName,
       )}
       className={cn('disabled:cursor-not-allowed', className)}
@@ -30,7 +30,7 @@ function InputOTPGroup({ className, ...props }: React.ComponentProps<'div'>) {
   return (
     <div
       data-slot="input-otp-group"
-      className={cn('flex items-center gap-2', className)}
+      className={cn('flex flex-nowrap items-center gap-1', className)}
       {...props}
     />
   )
@@ -51,7 +51,7 @@ function InputOTPSlot({
       data-slot="input-otp-slot"
       data-active={isActive}
       className={cn(
-        'relative flex h-12 w-10 min-[400px]:w-11 items-center justify-center rounded-lg border-2 border-muted-foreground/35 bg-muted text-center text-lg font-semibold tabular-nums text-foreground shadow-sm transition-all outline-none',
+        'relative flex h-11 w-8 shrink-0 items-center justify-center rounded-md border-2 border-muted-foreground/35 bg-muted text-center text-base font-semibold tabular-nums text-foreground shadow-sm transition-all outline-none sm:h-12 sm:w-10 sm:rounded-lg sm:text-lg min-[400px]:w-[2.375rem]',
         'dark:border-primary/45 dark:bg-zinc-800/95 dark:text-zinc-50',
         'data-[active=true]:z-10 data-[active=true]:border-primary data-[active=true]:bg-background data-[active=true]:text-foreground data-[active=true]:ring-2 data-[active=true]:ring-primary/35',
         'data-[active=true]:dark:bg-zinc-950 data-[active=true]:dark:ring-primary/50',

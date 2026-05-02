@@ -1456,10 +1456,11 @@ export default function BarbeariaPage() {
                       {otpError}
                     </div>
                   ) : null}
-                  <div className="w-full max-w-[min(100%,20rem)] rounded-xl border-2 border-primary/25 bg-primary/5 dark:bg-primary/10 p-4 sm:p-5 shadow-inner">
+                  <div className="w-full max-w-sm rounded-xl border-2 border-primary/25 bg-primary/5 dark:bg-primary/10 px-3 py-4 sm:p-5 shadow-inner">
                     <p className="text-xs text-center text-muted-foreground mb-3 font-medium uppercase tracking-wide">
                       Digite o código
                     </p>
+                    <div className="flex w-full justify-center overflow-x-auto">
                     <InputOTP
                       maxLength={6}
                       value={otpCode}
@@ -1469,9 +1470,9 @@ export default function BarbeariaPage() {
                         setOtpCode(next)
                         setOtpError("")
                       }}
-                      containerClassName="justify-center w-full"
+                      containerClassName="justify-center w-max max-w-full"
                     >
-                      <InputOTPGroup className="justify-center w-full flex-wrap sm:flex-nowrap">
+                      <InputOTPGroup className="justify-center flex-nowrap gap-1">
                         <InputOTPSlot index={0} />
                         <InputOTPSlot index={1} />
                         <InputOTPSlot index={2} />
@@ -1480,6 +1481,7 @@ export default function BarbeariaPage() {
                         <InputOTPSlot index={5} />
                       </InputOTPGroup>
                     </InputOTP>
+                    </div>
                   </div>
                   <Button
                     type="button"
