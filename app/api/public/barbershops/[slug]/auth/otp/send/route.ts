@@ -8,9 +8,9 @@ import { createAnonServerAuthClient } from "@/lib/supabase/server"
 export const dynamic = "force-dynamic"
 
 /**
- * O código no e-mail é gerado pelo Supabase Auth (só números ou alfanumérico, conforme o projeto).
- * O app aceita 6 a 10 caracteres. A UI pública usa até 8 posições; alinhe mailer_otp_length no painel.
- * Se o e-mail mostrar tamanho diferente, ajuste: Dashboard → Authentication →
+ * O código no e-mail é gerado pelo Supabase Auth (em geral 6 dígitos; pode ser alfanumérico ou mais longo no painel).
+ * A tela pública do cliente usa 6 dígitos; a API de verificação aceita até 10 caracteres.
+ * Ajuste no painel: Dashboard → Authentication →
  * Providers → Email (OTP length / mailer), ou Management API PATCH /v1/projects/{ref}/config/auth
  * com `"mailer_otp_length": 6` (e opcionalmente `mailer_otp_exp`).
  *

@@ -40,7 +40,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       return NextResponse.json(
         {
           error:
-            "Informe o e-mail e o código completo como no e-mail (em geral 6 a 8 caracteres: números e, se aparecer, letras maiúsculas).",
+            "Informe o e-mail e o código como no e-mail (em geral 6 dígitos; em projetos com OTP longo ou alfanumérico, até 10 caracteres).",
         },
         { status: 400 }
       )
@@ -62,7 +62,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     if (authErr || !authData.user) {
       const raw = authErr?.message?.toLowerCase() ?? ""
       let error =
-        "Código inválido ou expirado. Confira letras e números exatamente como no e-mail, peça um novo código ou use outro navegador (antivírus às vezes consome o link)."
+        "Código inválido ou expirado. Confira os dígitos, peça um novo código ou use outro navegador (antivírus às vezes consome o link)."
       if (raw.includes("expired") || raw.includes("otp_expired")) {
         error = "Código expirado. Peça um novo em «Receber código»."
       }
@@ -83,8 +83,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       return NextResponse.json({ error: "E-mail não confere com o código." }, { status: 400 })
     }
 
+    const audit = await prisma.clientOtpCode.findFirst({
+      where: { barbershopId: shop.id, email },
+      orderBy: { createdAt: "desc" },
+      select: { intent: true, nome: true, telefone: true },
+    })
+
     const meta = (user.user_metadata || {}) as Record<string, unknown>
-    const metaSlug = asStr(meta.barbershop_slug)
+    const metaSlugFromUser = asStr(meta.barbershop_slug)
+    const metaSlug = metaSlugFromUser || (audit ? slug : "")
     if (!metaSlug) {
       return NextResponse.json(
         {
@@ -97,7 +104,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     if (metaSlug !== slug) {
       return NextResponse.json({ error: "Este código não é válido para esta barbearia." }, { status: 403 })
     }
-    const metaIntent = meta.intent === "login" ? "login" : "register"
+    const metaIntent: "login" | "register" =
+      meta.intent === "login" ? "login" : meta.intent === "register" ? "register" : audit?.intent === "login" ? "login" : "register"
     if (metaIntent !== intent) {
       return NextResponse.json(
         { error: "Use a mesma tela (cadastro ou entrar) em que pediu o código." },
@@ -132,8 +140,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       return NextResponse.json({ ok: true, client: toPublicClientSession(client) })
     }
 
-    const nome = asStr(meta.nome)
-    const telefone = asStr(meta.telefone)
+    const nome = asStr(meta.nome) || (audit?.nome?.trim() ?? "")
+    const telefone = asStr(meta.telefone) || (audit?.telefone?.trim() ?? "")
     if (!nome || !telefone) {
       return NextResponse.json(
         { error: "Dados do cadastro incompletos. Volte ao cadastro e peça um novo código." },
