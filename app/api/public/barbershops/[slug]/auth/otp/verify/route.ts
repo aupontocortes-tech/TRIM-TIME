@@ -7,16 +7,12 @@ import { buildClientNotes, parseClientNotes } from "@/lib/client-auth-notes"
 import { getClientPasswordHash, getActiveBarbershopBySlug, toPublicClientSession } from "@/lib/public-booking"
 import { publicClientCookieName, signPublicClientSession } from "@/lib/public-client-session"
 import { createAnonServerAuthClient } from "@/lib/supabase/server"
+import { isPublicOtpLengthValid, normalizePublicOtpCode } from "@/lib/public-otp-code"
 
 export const dynamic = "force-dynamic"
 
 function normalizeEmail(s: string) {
   return s.trim().toLowerCase()
-}
-
-/** OTP numérico de 6 dígitos (alinhar com Authentication → Providers → Email no Supabase). */
-function normalizeOtpToken(raw: string) {
-  return String(raw ?? "").replace(/\D/g, "").slice(0, 12)
 }
 
 function asStr(v: unknown) {
@@ -38,13 +34,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     }
     const intent = body.intent === "login" ? "login" : "register"
     const email = normalizeEmail(String(body.email ?? ""))
-    const token = normalizeOtpToken(String(body.code ?? ""))
+    const token = normalizePublicOtpCode(String(body.code ?? ""))
 
-    if (!email || token.length !== 6) {
+    if (!email || !isPublicOtpLengthValid(token.length)) {
       return NextResponse.json(
         {
           error:
-            "Informe o e-mail e os 6 dígitos do código exatamente como no e-mail (só números).",
+            "Informe o e-mail e o código completo como no e-mail (em geral 6 a 8 caracteres: números e, se aparecer, letras maiúsculas).",
         },
         { status: 400 }
       )
@@ -66,7 +62,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     if (authErr || !authData.user) {
       const raw = authErr?.message?.toLowerCase() ?? ""
       let error =
-        "Código inválido ou expirado. Confira os 6 dígitos, peça um novo código ou use outro navegador (antivírus às vezes consome o link)."
+        "Código inválido ou expirado. Confira letras e números exatamente como no e-mail, peça um novo código ou use outro navegador (antivírus às vezes consome o link)."
       if (raw.includes("expired") || raw.includes("otp_expired")) {
         error = "Código expirado. Peça um novo em «Receber código»."
       }

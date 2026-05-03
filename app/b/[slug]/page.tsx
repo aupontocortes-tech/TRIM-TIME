@@ -5,7 +5,12 @@ import { useParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp"
+import {
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSlot,
+  REGEXP_ONLY_DIGITS_AND_CHARS,
+} from "@/components/ui/input-otp"
 import { Label } from "@/components/ui/label"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
@@ -54,6 +59,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { isSlotPastGraceFromYmd } from "@/lib/appointment-reminder-time"
+import { normalizePublicOtpCode, PUBLIC_OTP_LEN_MIN } from "@/lib/public-otp-code"
 
 // Dados mockados da barbearia (viriam do banco de dados pelo slug)
 const barbeariaData = {
@@ -160,6 +166,8 @@ const OTP_UI_LOCKOUT_MS = 60_000
 /** Cooldown do botão “Reenviar código”; alinhado ao OTP_RESEND_COOLDOWN_SECONDS da API (padrão 60s). */
 const OTP_UI_RESEND_COOLDOWN_MS = 62_000
 const OTP_UI_LOCKOUT_SEC = Math.ceil(OTP_UI_LOCKOUT_MS / 1000)
+/** Máx. caracteres no campo; o Supabase costuma usar 6–8 (só números ou alfanumérico). */
+const OTP_INPUT_MAX_LEN = 8
 
 function pushRemindersOkSessionKey(slug: string) {
   return `trimtime_push_reminders_ok_v1_${slug}`
@@ -640,9 +648,11 @@ export default function BarbeariaPage() {
 
   const handleConfirmOtp = async () => {
     if (otpLockUntil && otpUiNow < otpLockUntil) return
-    const code = otpCode.replace(/\D/g, "").slice(0, 6)
-    if (code.length !== 6) {
-      setOtpError("Digite os 6 dígitos e toque em Confirmar.")
+    const code = normalizePublicOtpCode(otpCode)
+    if (code.length < PUBLIC_OTP_LEN_MIN || code.length > OTP_INPUT_MAX_LEN) {
+      setOtpError(
+        `Digite o código completo (${PUBLIC_OTP_LEN_MIN} a ${OTP_INPUT_MAX_LEN} caracteres: números e letras, como no e-mail) e toque em Confirmar.`
+      )
       return
     }
     if (otpVerifyBusyRef.current || authLoading) return
@@ -1348,7 +1358,7 @@ export default function BarbeariaPage() {
               <h1 className="text-xl font-bold text-foreground text-center mb-1">Cadastre-se</h1>
               <p className="text-sm text-muted-foreground text-center mb-6">
                 {displayNome} — para agendar é obrigatório confirmar o acesso. Informe nome, WhatsApp e e-mail;
-                enviamos um código numérico por e-mail (6 dígitos).
+                enviamos um código por e-mail (em geral 6 a 8 caracteres: números ou números com letras).
               </p>
               <form onSubmit={handleCadastro} className="space-y-4">
                 {erroCadastro && (
@@ -1424,8 +1434,12 @@ export default function BarbeariaPage() {
       otpResendNotBefore != null && otpUiNow < otpResendNotBefore
         ? Math.max(0, Math.ceil((otpResendNotBefore - otpUiNow) / 1000))
         : 0
-    const codeDigits = otpCode.replace(/\D/g, "")
-    const canConfirm = codeDigits.length === 6 && !otpLocked && !authLoading
+    const codeNorm = normalizePublicOtpCode(otpCode)
+    const canConfirm =
+      codeNorm.length >= PUBLIC_OTP_LEN_MIN &&
+      codeNorm.length <= OTP_INPUT_MAX_LEN &&
+      !otpLocked &&
+      !authLoading
 
     return (
       <>
@@ -1440,11 +1454,12 @@ export default function BarbeariaPage() {
                 </div>
                 <h1 className="text-xl font-bold text-foreground text-center mb-1">Código no e-mail</h1>
                 <p className="text-sm text-muted-foreground text-center mb-6">
-                  Enviamos um código numérico (em geral <strong className="text-foreground">6 dígitos</strong>) para{" "}
-                  <span className="text-foreground font-medium">{otpEmail || "seu e-mail"}</span>. Digite o código e
-                  toque em <strong className="text-foreground">Confirmar</strong>. O mesmo código vale até{" "}
-                  <strong className="text-foreground">10 minutos</strong> — você pode corrigir e confirmar de novo sem
-                  pedir outro e-mail.
+                  Enviamos um código por e-mail (em geral <strong className="text-foreground">6 a 8 caracteres</strong>:
+                  só números ou números com letras, conforme o modelo do provedor) para{" "}
+                  <span className="text-foreground font-medium">{otpEmail || "seu e-mail"}</span>. Digite exatamente
+                  como no e-mail e toque em <strong className="text-foreground">Confirmar</strong>. O mesmo código vale
+                  até <strong className="text-foreground">10 minutos</strong> — você pode corrigir e confirmar de novo
+                  sem pedir outro e-mail.
                 </p>
                 <div className="space-y-4 flex flex-col items-center w-full">
                   {otpLocked ? (
@@ -1463,11 +1478,14 @@ export default function BarbeariaPage() {
                     </p>
                     <div className="flex w-full justify-center overflow-x-auto">
                     <InputOTP
-                      maxLength={6}
+                      maxLength={OTP_INPUT_MAX_LEN}
+                      pattern={REGEXP_ONLY_DIGITS_AND_CHARS}
+                      inputMode="text"
+                      autoComplete="one-time-code"
                       value={otpCode}
                       disabled={authLoading || otpLocked}
                       onChange={(v) => {
-                        const next = v.replace(/\D/g, "").slice(0, 6)
+                        const next = normalizePublicOtpCode(v).slice(0, OTP_INPUT_MAX_LEN)
                         setOtpCode(next)
                         setOtpError("")
                       }}
@@ -1480,6 +1498,8 @@ export default function BarbeariaPage() {
                         <InputOTPSlot index={3} />
                         <InputOTPSlot index={4} />
                         <InputOTPSlot index={5} />
+                        <InputOTPSlot index={6} />
+                        <InputOTPSlot index={7} />
                       </InputOTPGroup>
                     </InputOTP>
                     </div>
