@@ -58,6 +58,7 @@ import {
   Plug,
   Camera,
   Trophy,
+  Download,
 } from "lucide-react"
 import {
   Dialog,
@@ -236,6 +237,8 @@ export default function ConfiguracoesPage() {
   const [saveOk, setSaveOk] = useState(false)
   const [linkCopiado, setLinkCopiado] = useState(false)
   const [linkCompartilhado, setLinkCompartilhado] = useState(false)
+  const [qrDialogOpen, setQrDialogOpen] = useState(false)
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null)
 
   const [waLoading, setWaLoading] = useState(false)
   const [waError, setWaError] = useState<string | null>(null)
@@ -496,6 +499,34 @@ export default function ConfiguracoesPage() {
     if (!barbershopLoading && barbershop?.id) void loadTrimPlayRanking()
   }, [barbershopLoading, barbershop?.id, loadTrimPlayRanking])
 
+  const resolveFullBookingUrl = useCallback(() => {
+    const o = typeof window !== "undefined" ? window.location.origin : origin
+    return o && barbershop?.slug ? `${o}/b/${barbershop.slug}` : ""
+  }, [origin, barbershop?.slug])
+
+  useEffect(() => {
+    if (!qrDialogOpen) return
+    const full = resolveFullBookingUrl()
+    if (!full) {
+      setQrDataUrl(null)
+      return
+    }
+    let cancelled = false
+    setQrDataUrl(null)
+    void import("qrcode").then(({ default: QRCode }) => {
+      QRCode.toDataURL(full, { width: 280, margin: 2, errorCorrectionLevel: "M" })
+        .then((dataUrl) => {
+          if (!cancelled) setQrDataUrl(dataUrl)
+        })
+        .catch(() => {
+          if (!cancelled) setQrDataUrl(null)
+        })
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [qrDialogOpen, resolveFullBookingUrl])
+
   const linkAgendamento =
     origin && barbershop?.slug ? `${origin}/b/${barbershop.slug}` : barbershop?.slug ? `/b/${barbershop.slug}` : "—"
 
@@ -521,32 +552,62 @@ export default function ConfiguracoesPage() {
       : `https://api.whatsapp.com/send?text=${encodeURIComponent(fallbackWaMessage)}`
 
   const copiarLink = () => {
-    const o = typeof window !== "undefined" ? window.location.origin : origin
-    const full = o && barbershop?.slug ? `${o}/b/${barbershop.slug}` : ""
+    const full = resolveFullBookingUrl()
     if (full) void navigator.clipboard.writeText(full)
     setLinkCopiado(true)
     setTimeout(() => setLinkCopiado(false), 2000)
   }
 
   const compartilharLink = async () => {
-    const o = typeof window !== "undefined" ? window.location.origin : origin
-    const full = o && barbershop?.slug ? `${o}/b/${barbershop.slug}` : ""
+    const full = resolveFullBookingUrl()
     if (!full) return
+    const nav = typeof navigator !== "undefined" ? navigator : undefined
+    const marcarCompartilhado = () => {
+      setLinkCompartilhado(true)
+      setTimeout(() => setLinkCompartilhado(false), 2000)
+    }
     try {
-      const nav = typeof navigator !== "undefined" ? navigator : undefined
       if (nav && "share" in nav && typeof nav.share === "function") {
         await nav.share({
           title: `Agendamento - ${barbershop?.name ?? "Barbearia"}`,
           text: "Um único link: agendar pelo navegador e, no celular, adicionar o app à tela inicial (Chrome/Safari).",
           url: full,
         })
-      } else if (nav?.clipboard) {
-        await nav.clipboard.writeText(full)
+        marcarCompartilhado()
+        return
       }
-      setLinkCompartilhado(true)
-      setTimeout(() => setLinkCompartilhado(false), 2000)
+      if (nav?.clipboard?.writeText) {
+        await nav.clipboard.writeText(full)
+        marcarCompartilhado()
+      }
+    } catch (e) {
+      if (e instanceof Error && e.name === "AbortError") return
+      try {
+        await navigator.clipboard.writeText(full)
+        marcarCompartilhado()
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
+  const baixarQrPng = () => {
+    if (!qrDataUrl || typeof document === "undefined") return
+    const a = document.createElement("a")
+    a.href = qrDataUrl
+    a.download = `qr-agendamento-${barbershop?.slug ?? "barbearia"}.png`
+    a.rel = "noopener"
+    a.click()
+  }
+
+  const copiarQrComoImagem = async () => {
+    if (!qrDataUrl || typeof navigator === "undefined") return
+    try {
+      const res = await fetch(qrDataUrl)
+      const blob = await res.blob()
+      await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })])
     } catch {
-      // Usuário pode cancelar o compartilhamento.
+      /* permissões / navegador */
     }
   }
 
@@ -1342,7 +1403,13 @@ export default function ConfiguracoesPage() {
               </div>
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" className="border-border" type="button" disabled>
+              <Button
+                variant="outline"
+                className="border-border"
+                type="button"
+                disabled={!barbershop?.slug}
+                onClick={() => setQrDialogOpen(true)}
+              >
                 <QrCode className="w-4 h-4 mr-2" />
                 QR Code
               </Button>
@@ -1354,6 +1421,50 @@ export default function ConfiguracoesPage() {
           </div>
         </CardContent>
       </Card>
+
+      <Dialog
+        open={qrDialogOpen}
+        onOpenChange={(open) => {
+          setQrDialogOpen(open)
+          if (!open) setQrDataUrl(null)
+        }}
+      >
+        <DialogContent className="bg-card border-border sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-foreground">QR Code do agendamento</DialogTitle>
+            <DialogDescription className="text-muted-foreground">
+              O cliente escaneia e abre o mesmo link da página pública: marcar horário e, no celular, fixar o atalho na tela
+              inicial.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col items-center gap-4 py-2">
+            {!resolveFullBookingUrl() ? (
+              <p className="text-sm text-muted-foreground text-center">Salve os dados da barbearia para gerar o link.</p>
+            ) : !qrDataUrl ? (
+              <p className="text-sm text-muted-foreground">Gerando QR Code…</p>
+            ) : (
+              <img
+                src={qrDataUrl}
+                alt="QR Code do link de agendamento"
+                className="rounded-lg border border-border max-w-[280px] w-full h-auto bg-white p-2"
+              />
+            )}
+            <div className="flex flex-col sm:flex-row flex-wrap gap-2 w-full justify-center">
+              <Button type="button" size="sm" variant="outline" onClick={() => copiarLink()} disabled={!resolveFullBookingUrl()}>
+                <Copy className="w-4 h-4 mr-1" />
+                Copiar link
+              </Button>
+              <Button type="button" size="sm" variant="outline" onClick={baixarQrPng} disabled={!qrDataUrl}>
+                <Download className="w-4 h-4 mr-1" />
+                Baixar imagem
+              </Button>
+              <Button type="button" size="sm" variant="outline" onClick={() => void copiarQrComoImagem()} disabled={!qrDataUrl}>
+                Copiar imagem
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Tabs defaultValue="barbearia" className="space-y-6">
         <TabsList className={CONFIG_TABS_LIST_CLASS}>
