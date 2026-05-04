@@ -61,6 +61,28 @@ function monthRangeYMD(ref: Date): { from: string; to: string } {
   return { from, to }
 }
 
+/** Segunda a domingo da semana que contém `ref`. */
+function weekRangeYMD(ref: Date): { from: string; to: string } {
+  const d = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate())
+  const dow = d.getDay()
+  const diffToMonday = dow === 0 ? -6 : 1 - dow
+  const monday = new Date(d)
+  monday.setDate(d.getDate() + diffToMonday)
+  const sunday = new Date(monday)
+  sunday.setDate(monday.getDate() + 6)
+  return { from: toYMD(monday), to: toYMD(sunday) }
+}
+
+function formatarIntervaloSemana(weekRef: Date): string {
+  const { from, to } = weekRangeYMD(weekRef)
+  const a = new Date(`${from}T12:00:00`)
+  const b = new Date(`${to}T12:00:00`)
+  if (a.getMonth() === b.getMonth() && a.getFullYear() === b.getFullYear()) {
+    return `${a.getDate()} – ${b.getDate()} de ${a.toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}`
+  }
+  return `${a.toLocaleDateString("pt-BR", { day: "numeric", month: "short" })} – ${b.toLocaleDateString("pt-BR", { day: "numeric", month: "short", year: "numeric" })}`
+}
+
 function formatarData(data: Date) {
   const hoje = new Date()
   const amanha = new Date(hoje)
@@ -99,7 +121,7 @@ function mapAgendaItem(appointment: Appointment): AgendaItem {
 
 export default function AgendaPage() {
   const { units, selectedUnitId, changeUnit, loading: unitsLoading } = useUnits()
-  const [visao, setVisao] = useState<"dia" | "mes">("dia")
+  const [visao, setVisao] = useState<"dia" | "semana" | "mes">("dia")
   const [dataSelecionada, setDataSelecionada] = useState(new Date())
   const [filtroProf, setFiltroProf] = useState("Todos")
   const [agendamentos, setAgendamentos] = useState<AgendaItem[]>([])
@@ -153,6 +175,10 @@ export default function AgendaPage() {
       const params = new URLSearchParams()
       if (visao === "dia") {
         params.set("date", toYMD(dataSelecionada))
+      } else if (visao === "semana") {
+        const { from, to } = weekRangeYMD(dataSelecionada)
+        params.set("from", from)
+        params.set("to", to)
       } else {
         const { from, to } = monthRangeYMD(dataSelecionada)
         params.set("from", from)
@@ -210,6 +236,12 @@ export default function AgendaPage() {
 
   const mudarMes = (delta: number) => {
     const novaData = new Date(dataSelecionada.getFullYear(), dataSelecionada.getMonth() + delta, 1)
+    setDataSelecionada(novaData)
+  }
+
+  const mudarSemana = (delta: number) => {
+    const novaData = new Date(dataSelecionada)
+    novaData.setDate(novaData.getDate() + delta * 7)
     setDataSelecionada(novaData)
   }
 
@@ -384,19 +416,28 @@ export default function AgendaPage() {
           type="button"
           size="sm"
           variant={visao === "dia" ? "default" : "outline"}
-          className={visao === "dia" ? "bg-primary text-primary-foreground" : "border-border"}
+          className={`text-left h-auto min-h-9 py-1.5 whitespace-normal ${visao === "dia" ? "bg-primary text-primary-foreground" : "border-border"}`}
           onClick={() => setVisao("dia")}
         >
-          Dia
+          Agendamento do dia
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant={visao === "semana" ? "default" : "outline"}
+          className={`text-left h-auto min-h-9 py-1.5 whitespace-normal ${visao === "semana" ? "bg-primary text-primary-foreground" : "border-border"}`}
+          onClick={() => setVisao("semana")}
+        >
+          Agendamento da semana
         </Button>
         <Button
           type="button"
           size="sm"
           variant={visao === "mes" ? "default" : "outline"}
-          className={visao === "mes" ? "bg-primary text-primary-foreground" : "border-border"}
+          className={`text-left h-auto min-h-9 py-1.5 whitespace-normal ${visao === "mes" ? "bg-primary text-primary-foreground" : "border-border"}`}
           onClick={() => setVisao("mes")}
         >
-          Mês
+          Agendamento mensal
         </Button>
       </div>
 
@@ -406,19 +447,28 @@ export default function AgendaPage() {
             <Button
               variant="outline"
               size="icon"
-              onClick={() => (visao === "dia" ? mudarDia(-1) : mudarMes(-1))}
+              onClick={() => {
+                if (visao === "dia") mudarDia(-1)
+                else if (visao === "semana") mudarSemana(-1)
+                else mudarMes(-1)
+              }}
               className="border-border text-foreground hover:bg-secondary"
             >
               <ChevronLeft className="w-4 h-4" />
             </Button>
 
-            <div className="text-center">
+            <div className="text-center px-1">
               {visao === "dia" ? (
                 <>
                   <p className="text-lg font-semibold text-foreground">{formatarData(dataSelecionada)}</p>
                   <p className="text-sm text-muted-foreground">
                     {dataSelecionada.toLocaleDateString("pt-BR", { day: "numeric", month: "long", year: "numeric" })}
                   </p>
+                </>
+              ) : visao === "semana" ? (
+                <>
+                  <p className="text-lg font-semibold text-foreground">{formatarIntervaloSemana(dataSelecionada)}</p>
+                  <p className="text-sm text-muted-foreground">Segunda a domingo</p>
                 </>
               ) : (
                 <>
@@ -433,7 +483,11 @@ export default function AgendaPage() {
             <Button
               variant="outline"
               size="icon"
-              onClick={() => (visao === "dia" ? mudarDia(1) : mudarMes(1))}
+              onClick={() => {
+                if (visao === "dia") mudarDia(1)
+                else if (visao === "semana") mudarSemana(1)
+                else mudarMes(1)
+              }}
               className="border-border text-foreground hover:bg-secondary"
             >
               <ChevronRight className="w-4 h-4" />
@@ -503,10 +557,14 @@ export default function AgendaPage() {
             ) : agendamentosFiltrados.length === 0 ? (
               <div className="text-center py-8">
                 <p className="text-muted-foreground">
-                  {visao === "dia" ? "Nenhum agendamento para este dia" : "Nenhum agendamento neste mês"}
+                  {visao === "dia"
+                    ? "Nenhum agendamento para este dia"
+                    : visao === "semana"
+                      ? "Nenhum agendamento nesta semana"
+                      : "Nenhum agendamento neste mês"}
                 </p>
               </div>
-            ) : visao === "mes" ? (
+            ) : visao === "mes" || visao === "semana" ? (
               <div className="space-y-6">
                 {agendamentosPorDia.map(([diaYmd, lista]) => (
                   <div key={diaYmd}>
