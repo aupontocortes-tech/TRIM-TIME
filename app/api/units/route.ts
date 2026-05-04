@@ -6,6 +6,11 @@ import { BARBERSHOP_UNIT_COOKIE, requireBarbershopId } from "@/lib/tenant"
 import { resolveEffectivePlanForActiveSession } from "@/lib/barbershop-effective-plan-server"
 import { hasFeature } from "@/lib/plans"
 import type { BarbershopUnit } from "@/lib/db/types"
+import {
+  migrateLegacyNullAppointmentsToPrincipalUnit,
+  repairMissingPrincipalWhenSingleMismatchedUnit,
+  seedPrimaryUnitIfNoUnits,
+} from "@/lib/barbershop-units-seed"
 
 function optStr(v: unknown): string | null {
   if (v === undefined || v === null) return null
@@ -16,6 +21,10 @@ function optStr(v: unknown): string | null {
 export async function GET() {
   try {
     const barbershopId = await requireBarbershopId()
+    await seedPrimaryUnitIfNoUnits(barbershopId)
+    await repairMissingPrincipalWhenSingleMismatchedUnit(barbershopId)
+    await migrateLegacyNullAppointmentsToPrincipalUnit(barbershopId)
+
     const supabase = createServiceRoleClient()
     const { data, error } = await supabase
       .from("barbershop_units")
@@ -67,6 +76,25 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Nome da unidade é obrigatório" }, { status: 400 })
     }
 
+    /** Primeira unidade cadastrada na UI: garante a unidade principal (nome da rede) antes da nova filial. */
+    const existingCount = await prisma.barbershopUnit.count({ where: { barbershopId } })
+    const bs = await prisma.barbershop.findUnique({
+      where: { id: barbershopId },
+      select: { name: true, createdAt: true },
+    })
+    const principalName = bs?.name?.trim() ?? ""
+
+    if (existingCount === 0 && principalName && name !== principalName) {
+      await prisma.barbershopUnit.create({
+        data: {
+          barbershopId,
+          name: principalName,
+          active: true,
+          createdAt: bs!.createdAt,
+        },
+      })
+    }
+
     /** Prisma aplica `created_at` / `updated_at`; insert direto no Supabase omitia timestamps e quebrava NOT NULL no Postgres. */
     const row = await prisma.barbershopUnit.create({
       data: {
@@ -78,6 +106,9 @@ export async function POST(request: Request) {
         state: optStr(body.state),
         cep: optStr(body.cep),
         active: true,
+        ...(existingCount === 0 && principalName && name === principalName
+          ? { createdAt: bs!.createdAt }
+          : {}),
       },
     })
 

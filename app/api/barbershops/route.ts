@@ -98,6 +98,14 @@ export async function POST(request: Request) {
         trialEnd,
       },
     })
+    await prisma.barbershopUnit.create({
+      data: {
+        barbershopId: barbershop.id,
+        name: barbershop.name.trim(),
+        active: true,
+        createdAt: barbershop.createdAt,
+      },
+    })
     return NextResponse.json(toBarbershopApi(barbershop))
   } catch (e) {
     console.error("[barbershops POST]", e)
