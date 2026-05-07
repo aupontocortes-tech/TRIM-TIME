@@ -1600,7 +1600,9 @@ export default function ConfiguracoesPage() {
             <CardHeader>
               <CardTitle className="text-foreground">Horário de Funcionamento</CardTitle>
               <CardDescription className="text-muted-foreground">
-                Defina os dias e horários de atendimento (salvos com &quot;Salvar dados e horários&quot;)
+                Defina os dias, horários e regras de agendamento. Use &quot;Salvar alterações&quot; abaixo para
+                publicar no link do cliente — o mesmo que o botão no topo da página &quot;Salvar dados e
+                horários&quot;.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -1732,6 +1734,21 @@ export default function ConfiguracoesPage() {
                     )
                   })}
                 </div>
+              </div>
+
+              <div className="mt-8 flex flex-col gap-3 rounded-lg border border-border bg-secondary/15 p-4 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm text-muted-foreground">
+                  Alterações ficam apenas neste painel até salvar — aí aparecem no agendamento do cliente.
+                </p>
+                <Button
+                  type="button"
+                  onClick={() => void handleSave()}
+                  disabled={isSaving}
+                  className="shrink-0 bg-primary text-primary-foreground hover:bg-primary/90"
+                >
+                  <Save className="mr-2 h-4 w-4" />
+                  {isSaving ? "Salvando..." : "Salvar alterações"}
+                </Button>
               </div>
             </CardContent>
           </Card>
