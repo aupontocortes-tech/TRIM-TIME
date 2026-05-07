@@ -7,17 +7,28 @@ import { canUseBarberCommission } from "@/lib/plans"
 import { aggregateCommissionsForRange } from "@/lib/commissions"
 import { resolveSelectedUnitId } from "@/lib/unit-context"
 import { expireStaleAppointmentsForBarbershop } from "@/lib/appointment-expiry"
+import { isYMDDateString } from "@/lib/date-local"
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const barbershopId = await requireBarbershopId()
     await expireStaleAppointmentsForBarbershop(barbershopId)
     const supabase = createServiceRoleClient()
     const selectedUnitId = await resolveSelectedUnitId(barbershopId)
-    const today = new Date().toISOString().slice(0, 10)
-    const startOfMonth = new Date()
-    startOfMonth.setDate(1)
-    const startOfMonthStr = startOfMonth.toISOString().slice(0, 10)
+    const url = new URL(request.url)
+    const dateQ = url.searchParams.get("date")
+    const monthQ = url.searchParams.get("monthStart")
+    const today =
+      dateQ && isYMDDateString(dateQ) ? dateQ : new Date().toISOString().slice(0, 10)
+    const startOfMonthStr =
+      monthQ && isYMDDateString(monthQ)
+        ? monthQ
+        : (() => {
+            const s = new Date()
+            s.setDate(1)
+            return s.toISOString().slice(0, 10)
+          })()
+    const createdAtMonthGte = `${startOfMonthStr}T00:00:00.000Z`
 
     let appointmentsTodayQuery = supabase
       .from("appointments")
@@ -60,7 +71,7 @@ export async function GET() {
         .from("clients")
         .select("id", { count: "exact", head: true })
         .eq("barbershop_id", barbershopId)
-        .gte("created_at", startOfMonth.toISOString()),
+        .gte("created_at", createdAtMonthGte),
     ])
 
     const appointmentsToday = appointmentsTodayRes.count ?? 0

@@ -20,6 +20,7 @@ import { useUnits } from "@/hooks/use-units"
 import type { DashboardStats } from "@/lib/db/types"
 import type { Appointment } from "@/lib/db/types"
 import { isSlotPastGraceFromYmd } from "@/lib/appointment-reminder-time"
+import { startOfMonthYMDLocal, toYMDLocal } from "@/lib/date-local"
 
 export default function PainelDashboard() {
   const { barbershop, loading: barbershopLoading } = useBarbershop()
@@ -31,9 +32,12 @@ export default function PainelDashboard() {
   useEffect(() => {
     if (barbershopLoading || unitsLoading) return
     setLoading(true)
-    const today = new Date().toISOString().slice(0, 10)
+    const now = new Date()
+    const today = toYMDLocal(now)
+    const monthStart = startOfMonthYMDLocal(now)
+    const dashParams = new URLSearchParams({ date: today, monthStart })
     Promise.all([
-      fetch("/api/dashboard", { credentials: "include" }).then((r) => (r.ok ? r.json() : null)),
+      fetch(`/api/dashboard?${dashParams}`, { credentials: "include" }).then((r) => (r.ok ? r.json() : null)),
       fetch(`/api/appointments?date=${today}`, { credentials: "include" }).then((r) => (r.ok ? r.json() : [])),
     ]).then(([dashboardData, appointments]) => {
       setStats(dashboardData)

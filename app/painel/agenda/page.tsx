@@ -23,6 +23,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import type { Appointment, Barber, Client, Service } from "@/lib/db/types"
 import { useUnits } from "@/hooks/use-units"
 import { isSlotPastGraceFromYmd } from "@/lib/appointment-reminder-time"
@@ -132,6 +141,10 @@ export default function AgendaPage() {
   const [feedback, setFeedback] = useState("")
   const [error, setError] = useState("")
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null)
+  /** Confirmação antes de aplicar alteração de status no modal de detalhes. */
+  const [acaoDetalhesDialog, setAcaoDetalhesDialog] = useState<
+    null | "confirmar" | "concluir" | "cancelar"
+  >(null)
   const [agendamentoSelecionado, setAgendamentoSelecionado] = useState<AgendaItem | null>(null)
   const [novoAgendamentoOpen, setNovoAgendamentoOpen] = useState(false)
   const [savingNovo, setSavingNovo] = useState(false)
@@ -273,7 +286,7 @@ export default function AgendaPage() {
     barber_id: string
     service_id: string
     total_price: number
-  }>) => {
+  }>): Promise<boolean> => {
     setActionLoadingId(appointmentId)
     setError("")
     setFeedback("")
@@ -287,15 +300,20 @@ export default function AgendaPage() {
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
         setError(typeof data.error === "string" ? data.error : "Não foi possível atualizar o agendamento.")
-        return
+        return false
       }
-      setFeedback("Agendamento atualizado com sucesso.")
+      if (payload.status === "confirmed") setFeedback("Agendamento confirmado.")
+      else if (payload.status === "completed") setFeedback("Atendimento marcado como concluído.")
+      else if (payload.status === "canceled") setFeedback("Agendamento cancelado.")
+      else setFeedback("Agendamento atualizado com sucesso.")
       await carregarAgendamentos()
       if (agendamentoSelecionado?.id === appointmentId) {
         setAgendamentoSelecionado(mapAgendaItem(data as Appointment))
       }
+      return true
     } catch {
       setError("Erro ao atualizar o agendamento.")
+      return false
     } finally {
       setActionLoadingId(null)
     }
@@ -729,7 +747,15 @@ export default function AgendaPage() {
         </CardContent>
       </Card>
 
-      <Dialog open={!!agendamentoSelecionado} onOpenChange={() => setAgendamentoSelecionado(null)}>
+      <Dialog
+        open={!!agendamentoSelecionado}
+        onOpenChange={(open) => {
+          if (!open) {
+            setAcaoDetalhesDialog(null)
+            setAgendamentoSelecionado(null)
+          }
+        }}
+      >
         <DialogContent className="bg-card border-border">
           <DialogHeader>
             <DialogTitle className="text-foreground">Detalhes do Agendamento</DialogTitle>
@@ -805,16 +831,16 @@ export default function AgendaPage() {
                     <Button
                       className="flex-1 bg-green-500 text-white hover:bg-green-600"
                       disabled={actionLoadingId === agendamentoSelecionado.id}
-                      onClick={() => void aplicarAcao(agendamentoSelecionado.id, { status: "confirmed" })}
+                      onClick={() => setAcaoDetalhesDialog("confirmar")}
                     >
                       <Check className="w-4 h-4 mr-2" />
-                      Confirmar
+                      Finalizar
                     </Button>
                     <Button
                       variant="outline"
                       className="flex-1 border-destructive/30 text-destructive hover:bg-destructive/10"
                       disabled={actionLoadingId === agendamentoSelecionado.id}
-                      onClick={() => void aplicarAcao(agendamentoSelecionado.id, { status: "canceled" })}
+                      onClick={() => setAcaoDetalhesDialog("cancelar")}
                     >
                       Cancelar
                     </Button>
@@ -825,15 +851,15 @@ export default function AgendaPage() {
                     <Button
                       className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
                       disabled={actionLoadingId === agendamentoSelecionado.id}
-                      onClick={() => void aplicarAcao(agendamentoSelecionado.id, { status: "completed" })}
+                      onClick={() => setAcaoDetalhesDialog("concluir")}
                     >
-                      Finalizar Atendimento
+                      Finalizar atendimento
                     </Button>
                     <Button
                       variant="outline"
                       className="flex-1 border-destructive/30 text-destructive hover:bg-destructive/10"
                       disabled={actionLoadingId === agendamentoSelecionado.id}
-                      onClick={() => void aplicarAcao(agendamentoSelecionado.id, { status: "canceled" })}
+                      onClick={() => setAcaoDetalhesDialog("cancelar")}
                     >
                       Cancelar
                     </Button>
@@ -844,6 +870,79 @@ export default function AgendaPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      <AlertDialog
+        open={Boolean(agendamentoSelecionado && acaoDetalhesDialog)}
+        onOpenChange={(open) => {
+          if (!open && actionLoadingId !== agendamentoSelecionado?.id) setAcaoDetalhesDialog(null)
+        }}
+      >
+        <AlertDialogContent className="border-border bg-card text-foreground sm:max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-foreground">
+              {acaoDetalhesDialog === "confirmar"
+                ? "Deseja finalizar?"
+                : acaoDetalhesDialog === "concluir"
+                  ? "Deseja finalizar o atendimento?"
+                  : acaoDetalhesDialog === "cancelar"
+                    ? "Deseja cancelar?"
+                    : ""}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-muted-foreground text-sm leading-relaxed">
+              {acaoDetalhesDialog === "confirmar"
+                ? "Ao finalizar, o horário ficará confirmado para o cliente (status Confirmado). Ele verá esta atualização no link de agendamento."
+                : acaoDetalhesDialog === "concluir"
+                  ? "Ao finalizar, o horário ficará como concluído na agenda. Faça isso apenas depois que o serviço tiver sido feito."
+                  : acaoDetalhesDialog === "cancelar"
+                    ? "Deseja cancelar este agendamento? O cliente verá esta alteração no link quando o sistema atualizar o status para Cancelado."
+                    : null}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2 sm:flex-row sm:justify-end">
+            <AlertDialogCancel
+              className="border-border text-foreground hover:bg-secondary"
+              disabled={actionLoadingId === agendamentoSelecionado?.id}
+            >
+              Não
+            </AlertDialogCancel>
+            <Button
+              type="button"
+              disabled={
+                actionLoadingId === agendamentoSelecionado?.id || !agendamentoSelecionado || !acaoDetalhesDialog
+              }
+              className={
+                acaoDetalhesDialog === "cancelar"
+                  ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  : acaoDetalhesDialog === "confirmar"
+                    ? "bg-green-500 text-white hover:bg-green-600"
+                    : "bg-primary text-primary-foreground hover:bg-primary/90"
+              }
+              onClick={() => {
+                const sel = agendamentoSelecionado
+                if (!sel || !acaoDetalhesDialog) return
+                const kind = acaoDetalhesDialog
+                void (async () => {
+                  let ok = false
+                  if (kind === "confirmar") ok = await aplicarAcao(sel.id, { status: "confirmed" })
+                  else if (kind === "concluir") ok = await aplicarAcao(sel.id, { status: "completed" })
+                  else ok = await aplicarAcao(sel.id, { status: "canceled" })
+                  if (ok) setAcaoDetalhesDialog(null)
+                })()
+              }}
+            >
+              {actionLoadingId === agendamentoSelecionado?.id
+                ? "Aguardando..."
+                : acaoDetalhesDialog === "confirmar"
+                  ? "Sim, finalizar"
+                  : acaoDetalhesDialog === "concluir"
+                    ? "Sim, finalizar"
+                    : acaoDetalhesDialog === "cancelar"
+                      ? "Sim, cancelar"
+                      : ""}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Dialog open={novoAgendamentoOpen} onOpenChange={setNovoAgendamentoOpen}>
         <DialogContent className="bg-card border-border max-w-lg">
