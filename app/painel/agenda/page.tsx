@@ -14,6 +14,7 @@ import {
   Clock,
   User,
   Filter,
+  Package,
 } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
@@ -145,6 +146,9 @@ export default function AgendaPage() {
   const [acaoDetalhesDialog, setAcaoDetalhesDialog] = useState<
     null | "confirmar" | "concluir" | "cancelar"
   >(null)
+  const [painelServicoValorOpen, setPainelServicoValorOpen] = useState(false)
+  const [painelServicoId, setPainelServicoId] = useState("")
+  const [painelValorInput, setPainelValorInput] = useState("")
   const [agendamentoSelecionado, setAgendamentoSelecionado] = useState<AgendaItem | null>(null)
   const [novoAgendamentoOpen, setNovoAgendamentoOpen] = useState(false)
   const [savingNovo, setSavingNovo] = useState(false)
@@ -317,6 +321,50 @@ export default function AgendaPage() {
     } finally {
       setActionLoadingId(null)
     }
+  }
+
+  const servicosParaEditarPainel = useMemo(() => {
+    const active = services
+      .filter((s) => s.active)
+      .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"))
+    const cid = agendamentoSelecionado?.raw.service_id
+    if (!cid) return active
+    if (active.some((s) => s.id === cid)) return active
+    const current = services.find((s) => s.id === cid)
+    return current ? [current, ...active] : active
+  }, [services, agendamentoSelecionado?.raw.service_id])
+
+  const podeEditarServicoValorPainel =
+    agendamentoSelecionado?.status === "pending" || agendamentoSelecionado?.status === "confirmed"
+
+  const sincronizarPainelServicoValorComSelecao = () => {
+    const sel = agendamentoSelecionado
+    if (!sel) return
+    setPainelServicoId(sel.raw.service_id)
+    setPainelValorInput(Number(sel.valor).toFixed(2))
+  }
+
+  const togglePainelServicoValor = () => {
+    if (!painelServicoValorOpen) {
+      sincronizarPainelServicoValorComSelecao()
+      setPainelServicoValorOpen(true)
+      return
+    }
+    sincronizarPainelServicoValorComSelecao()
+    setPainelServicoValorOpen(false)
+  }
+
+  const salvarServicoEValorPainel = async () => {
+    const sel = agendamentoSelecionado
+    if (!sel || !painelServicoId) return
+    const v = Number(painelValorInput)
+    if (!Number.isFinite(v) || v < 0) {
+      setError("Informe um valor total válido.")
+      return
+    }
+    const total = Math.round(v * 100) / 100
+    const ok = await aplicarAcao(sel.id, { service_id: painelServicoId, total_price: total })
+    if (ok) setPainelServicoValorOpen(false)
   }
 
   const criarNovoAgendamento = async (e: React.FormEvent) => {
@@ -751,6 +799,7 @@ export default function AgendaPage() {
         open={!!agendamentoSelecionado}
         onOpenChange={(open) => {
           if (!open) {
+            setPainelServicoValorOpen(false)
             setAcaoDetalhesDialog(null)
             setAgendamentoSelecionado(null)
           }
@@ -805,6 +854,34 @@ export default function AgendaPage() {
                     </p>
                   ) : null}
                 </div>
+                {(agendamentoSelecionado.raw.retail_lines?.length ?? 0) > 0 ? (
+                  <div className="col-span-2 rounded-lg border border-border bg-secondary/40 p-3">
+                    <p className="text-xs text-muted-foreground mb-2 flex items-center gap-1">
+                      <Package className="w-3.5 h-3.5 shrink-0" />
+                      Produtos no pedido
+                    </p>
+                    <ul className="space-y-1 text-sm text-foreground">
+                      {(agendamentoSelecionado.raw.retail_lines ?? []).map((line) => {
+                        const nome = line.product?.name ?? "Produto"
+                        const linhaValor = Number(line.quantity) * Number(line.unit_price)
+                        return (
+                          <li key={line.id} className="flex justify-between gap-2">
+                            <span className="min-w-0">
+                              <span className="font-medium">{nome}</span>
+                              <span className="text-muted-foreground">
+                                {" "}
+                                × {line.quantity}
+                              </span>
+                            </span>
+                            <span className="shrink-0 tabular-nums">
+                              R${linhaValor.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  </div>
+                ) : null}
                 <div className="col-span-2">
                   <p className="text-xs text-muted-foreground mb-1">Profissional</p>
                   <p className="font-medium text-foreground">{agendamentoSelecionado.profissional}</p>
@@ -817,6 +894,109 @@ export default function AgendaPage() {
                   R${agendamentoSelecionado.valor.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
               </div>
+
+              {podeEditarServicoValorPainel && (
+                <div className="space-y-3">
+                  {servicosParaEditarPainel.length === 0 ? (
+                    <p className="text-xs text-destructive">
+                      Cadastre ao menos um serviço ativo em Configurações → Serviços para poder trocar o item deste
+                      agendamento.
+                    </p>
+                  ) : null}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full border-primary/35 text-foreground hover:bg-primary/10"
+                    disabled={actionLoadingId === agendamentoSelecionado.id || servicosParaEditarPainel.length === 0}
+                    onClick={togglePainelServicoValor}
+                  >
+                    <Package className="mr-2 h-4 w-4 shrink-0 text-primary" />
+                    Serviços, produtos e valor
+                  </Button>
+                  {painelServicoValorOpen ? (
+                    <div className="space-y-3 rounded-lg border border-border bg-secondary/25 p-4">
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        Você só pode registrar <span className="text-foreground font-medium">um serviço principal</span> por
+                        agendamento. Troque pela lista cadastrada em Configurações → Serviços e ajuste o{" "}
+                        <span className="text-foreground font-medium">valor total</span> para refletir produtos extras,
+                        pacotes ou descontos aplicados na hora.
+                      </p>
+                      <div>
+                        <Label htmlFor="painel-servico" className="text-foreground">
+                          Serviço / produto (catálogo)
+                        </Label>
+                        <select
+                          id="painel-servico"
+                          value={painelServicoId}
+                          onChange={(e) => {
+                            const sid = e.target.value
+                            setPainelServicoId(sid)
+                            const svc = services.find((s) => s.id === sid)
+                            if (svc) setPainelValorInput(Number(svc.price).toFixed(2))
+                          }}
+                          className="mt-1.5 w-full rounded-md border border-border bg-input px-3 py-2 text-sm text-foreground"
+                        >
+                          {servicosParaEditarPainel.map((svc) => (
+                            <option key={svc.id} value={svc.id}>
+                              {svc.name}
+                              {!svc.active ? " (inativo no catálogo)" : ""}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <Label htmlFor="painel-valor" className="text-foreground">
+                          Valor total (R$)
+                        </Label>
+                        <Input
+                          id="painel-valor"
+                          type="number"
+                          inputMode="decimal"
+                          min={0}
+                          step={0.01}
+                          value={painelValorInput}
+                          onChange={(e) => setPainelValorInput(e.target.value)}
+                          disabled={actionLoadingId === agendamentoSelecionado.id}
+                          className="mt-1.5 bg-input border-border text-foreground"
+                        />
+                      </div>
+                      <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="border-border sm:order-first"
+                          disabled={actionLoadingId === agendamentoSelecionado.id}
+                          onClick={() => {
+                            sincronizarPainelServicoValorComSelecao()
+                          }}
+                        >
+                          Restaurar do agendamento
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          className="text-muted-foreground"
+                          disabled={actionLoadingId === agendamentoSelecionado.id}
+                          onClick={() => {
+                            sincronizarPainelServicoValorComSelecao()
+                            setPainelServicoValorOpen(false)
+                          }}
+                        >
+                          Fechar painel
+                        </Button>
+                        <Button
+                          type="button"
+                          className="bg-primary text-primary-foreground hover:bg-primary/90"
+                          disabled={actionLoadingId === agendamentoSelecionado.id || !painelServicoId}
+                          onClick={() => void salvarServicoEValorPainel()}
+                        >
+                          Salvar alterações
+                        </Button>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              )}
 
               <div className="flex gap-3">
                 <Button

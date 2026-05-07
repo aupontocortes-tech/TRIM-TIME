@@ -156,6 +156,26 @@ export interface Service {
   updated_at: string
 }
 
+/** Produto de venda na loja (gel, pomada, etc.) — catálogo separado dos serviços. */
+export interface RetailProduct {
+  id: string
+  barbershop_id: string
+  name: string
+  description: string
+  price: number
+  active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export type AppointmentRetailLineApi = {
+  id: string
+  retail_product_id: string
+  quantity: number
+  unit_price: number
+  product?: Pick<RetailProduct, "id" | "name" | "description" | "price">
+}
+
 export interface Appointment {
   id: string
   barbershop_id: string
@@ -171,6 +191,8 @@ export interface Appointment {
   unit_id?: string | null
   created_at: string
   updated_at: string
+  /** Linhas de produtos de venda ligadas ao agendamento (ex.: primeiro horário do pacote). */
+  retail_lines?: AppointmentRetailLineApi[]
   // joins opcionais
   client?: Client
   barber?: Barber

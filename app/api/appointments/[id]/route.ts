@@ -45,6 +45,31 @@ export async function PATCH(
       return NextResponse.json({ error: "Agendamento não encontrado" }, { status: 404 })
     }
 
+    if (body.service_id !== undefined) {
+      const mustBeActiveInCatalog = body.service_id !== before.serviceId
+      const svc = await prisma.service.findFirst({
+        where: {
+          id: body.service_id,
+          barbershopId,
+          ...(mustBeActiveInCatalog ? { active: true } : {}),
+        },
+        select: { id: true },
+      })
+      if (!svc) {
+        return NextResponse.json(
+          { error: "Serviço inválido, inativo ou de outra barbearia." },
+          { status: 400 }
+        )
+      }
+    }
+
+    if (body.total_price !== undefined) {
+      const p = Number(body.total_price)
+      if (!Number.isFinite(p) || p < 0) {
+        return NextResponse.json({ error: "Valor total inválido." }, { status: 400 })
+      }
+    }
+
     const beforeApi = mapAppointmentRowToApi(before)
     const nextDate = body.date ?? beforeApi.date
     const nextTime = body.time ?? beforeApi.time

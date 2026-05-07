@@ -14,6 +14,8 @@ export type PersistedClientBookingV1 = {
   profissionalId: string
   profissionalNome: string
   servicos: { id: string; nome: string; preco: number; duracao: number }[]
+  /** Produtos opcionais (gel, pomada, etc.) no mesmo pedido. */
+  produtos?: { id: string; nome: string; preco: number; quantidade: number; subtotal: number }[]
   nomeExibicao: string
   totalPreco: number
   totalDuracao: number

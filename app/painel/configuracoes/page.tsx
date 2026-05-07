@@ -10,6 +10,7 @@ import type {
   Service,
   BarbershopUnit,
   SubscriptionPlan,
+  RetailProduct,
 } from "@/lib/db/types"
 import {
   bookingRulesFromSettings,
@@ -40,6 +41,7 @@ import {
   Clock,
   Users,
   Scissors,
+  ShoppingBag,
   Save,
   Plus,
   Trash2,
@@ -205,6 +207,24 @@ export default function ConfiguracoesPage() {
   const [editServDuracao, setEditServDuracao] = useState("")
   const [editServPreco, setEditServPreco] = useState("")
   const [editServAtivo, setEditServAtivo] = useState(true)
+
+  const [catalogLojaTab, setCatalogLojaTab] = useState<"svc-catalog" | "prd-catalog">("svc-catalog")
+  const [listaProdutosRetail, setListaProdutosRetail] = useState<RetailProduct[]>([])
+  const [produtosRetailLoading, setProdutosRetailLoading] = useState(true)
+  const [produtosRetailError, setProdutosRetailError] = useState<string | null>(null)
+  const [produtoRetailBusy, setProdutoRetailBusy] = useState(false)
+
+  const [addProdRetailOpen, setAddProdRetailOpen] = useState(false)
+  const [newProdNome, setNewProdNome] = useState("")
+  const [newProdDesc, setNewProdDesc] = useState("")
+  const [newProdPreco, setNewProdPreco] = useState("")
+
+  const [editProdRetailOpen, setEditProdRetailOpen] = useState(false)
+  const [editingRetailProduct, setEditingRetailProduct] = useState<RetailProduct | null>(null)
+  const [editProdNome, setEditProdNome] = useState("")
+  const [editProdDesc, setEditProdDesc] = useState("")
+  const [editProdPreco, setEditProdPreco] = useState("")
+  const [editProdAtivo, setEditProdAtivo] = useState(true)
 
   const [barbers, setBarbers] = useState<Barber[]>([])
   const [barbersLoading, setBarbersLoading] = useState(true)
@@ -417,6 +437,27 @@ export default function ConfiguracoesPage() {
     }
   }, [])
 
+  const loadRetailProducts = useCallback(async () => {
+    setProdutosRetailLoading(true)
+    setProdutosRetailError(null)
+    try {
+      const r = await fetch("/api/retail-products", { credentials: "include" })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        setProdutosRetailError(typeof j.error === "string" ? j.error : "Erro ao carregar produtos")
+        setListaProdutosRetail([])
+        return
+      }
+      const data = await r.json()
+      setListaProdutosRetail(Array.isArray(data) ? data : [])
+    } catch {
+      setProdutosRetailError("Erro de rede")
+      setListaProdutosRetail([])
+    } finally {
+      setProdutosRetailLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
     loadBarbers()
   }, [loadBarbers])
@@ -424,6 +465,10 @@ export default function ConfiguracoesPage() {
   useEffect(() => {
     if (!barbershopLoading && barbershop) loadServices()
   }, [barbershopLoading, barbershop?.id, loadServices])
+
+  useEffect(() => {
+    if (!barbershopLoading && barbershop) void loadRetailProducts()
+  }, [barbershopLoading, barbershop?.id, loadRetailProducts])
 
   const loadWhatsapp = useCallback(async () => {
     setWaLoading(true)
@@ -798,6 +843,110 @@ export default function ConfiguracoesPage() {
       setServicosError("Erro de rede")
     } finally {
       setServicoBusy(false)
+    }
+  }
+
+  const handleAddRetailProduct = async () => {
+    if (!newProdNome.trim()) return
+    const price = Number(newProdPreco)
+    if (!Number.isFinite(price) || price < 0) {
+      setProdutosRetailError("Preço inválido")
+      return
+    }
+    setProdutoRetailBusy(true)
+    setProdutosRetailError(null)
+    try {
+      const r = await fetch("/api/retail-products", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newProdNome.trim(),
+          description: newProdDesc.trim(),
+          price,
+        }),
+      })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) {
+        setProdutosRetailError(typeof j.error === "string" ? j.error : "Erro ao criar produto")
+        return
+      }
+      setAddProdRetailOpen(false)
+      setNewProdNome("")
+      setNewProdDesc("")
+      setNewProdPreco("")
+      await loadRetailProducts()
+    } catch {
+      setProdutosRetailError("Erro de rede")
+    } finally {
+      setProdutoRetailBusy(false)
+    }
+  }
+
+  const openEditRetail = (p: RetailProduct) => {
+    setEditingRetailProduct(p)
+    setEditProdNome(p.name)
+    setEditProdDesc(p.description ?? "")
+    setEditProdPreco(String(p.price))
+    setEditProdAtivo(p.active)
+    setEditProdRetailOpen(true)
+  }
+
+  const handleSaveRetailProduct = async () => {
+    if (!editingRetailProduct || !editProdNome.trim()) return
+    const price = Number(editProdPreco)
+    if (!Number.isFinite(price) || price < 0) {
+      setProdutosRetailError("Preço inválido")
+      return
+    }
+    setProdutoRetailBusy(true)
+    setProdutosRetailError(null)
+    try {
+      const r = await fetch(`/api/retail-products/${editingRetailProduct.id}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: editProdNome.trim(),
+          description: editProdDesc.trim(),
+          price,
+          active: editProdAtivo,
+        }),
+      })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) {
+        setProdutosRetailError(typeof j.error === "string" ? j.error : "Erro ao salvar")
+        return
+      }
+      setEditProdRetailOpen(false)
+      setEditingRetailProduct(null)
+      await loadRetailProducts()
+    } catch {
+      setProdutosRetailError("Erro de rede")
+    } finally {
+      setProdutoRetailBusy(false)
+    }
+  }
+
+  const handleDeleteRetailProduct = async (p: RetailProduct) => {
+    if (!confirm(`Excluir o produto "${p.name}"?`)) return
+    setProdutoRetailBusy(true)
+    setProdutosRetailError(null)
+    try {
+      const r = await fetch(`/api/retail-products/${p.id}`, {
+        method: "DELETE",
+        credentials: "include",
+      })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        setProdutosRetailError(typeof j.error === "string" ? j.error : "Erro ao excluir")
+        return
+      }
+      await loadRetailProducts()
+    } catch {
+      setProdutosRetailError("Erro de rede")
+    } finally {
+      setProdutoRetailBusy(false)
     }
   }
 
@@ -1755,7 +1904,30 @@ export default function ConfiguracoesPage() {
         </TabsContent>
 
         <TabsContent value="servicos">
-          <Card className="bg-card border-border">
+          <Tabs
+            value={catalogLojaTab}
+            onValueChange={(v) => setCatalogLojaTab(v as "svc-catalog" | "prd-catalog")}
+            className="space-y-4"
+          >
+            <TabsList className="grid w-full max-w-md grid-cols-2 gap-1 p-1 h-auto rounded-xl bg-secondary/50 border border-border">
+              <TabsTrigger
+                value="svc-catalog"
+                className="rounded-lg px-3 py-2.5 text-sm font-semibold inline-flex items-center justify-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+              >
+                <Scissors className="h-4 w-4 shrink-0" />
+                Serviços
+              </TabsTrigger>
+              <TabsTrigger
+                value="prd-catalog"
+                className="rounded-lg px-3 py-2.5 text-sm font-semibold inline-flex items-center justify-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+              >
+                <ShoppingBag className="h-4 w-4 shrink-0" />
+                Produtos
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="svc-catalog" className="mt-0 space-y-0">
+              <Card className="bg-card border-border">
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
                 <CardTitle className="text-foreground">Serviços</CardTitle>
@@ -1920,6 +2092,162 @@ export default function ConfiguracoesPage() {
               )}
             </CardContent>
           </Card>
+            </TabsContent>
+
+            <TabsContent value="prd-catalog" className="mt-0 space-y-0">
+              <Card className="bg-card border-border">
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <div>
+                    <CardTitle className="text-foreground">Produtos para venda</CardTitle>
+                    <CardDescription className="text-muted-foreground">
+                      Gel, pomada e outros itens aparecem no agendamento do cliente (opcional).
+                    </CardDescription>
+                  </div>
+                  <Dialog open={addProdRetailOpen} onOpenChange={setAddProdRetailOpen}>
+                    <DialogTrigger asChild>
+                      <Button className="bg-primary text-primary-foreground hover:bg-primary/90">
+                        <Plus className="w-4 h-4 mr-2" />
+                        Novo produto
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="bg-card border-border">
+                      <DialogHeader>
+                        <DialogTitle className="text-foreground">Adicionar produto</DialogTitle>
+                      </DialogHeader>
+                      <FieldGroup>
+                        <Field>
+                          <FieldLabel>Nome</FieldLabel>
+                          <Input
+                            className="bg-input border-border text-foreground"
+                            value={newProdNome}
+                            onChange={(e) => setNewProdNome(e.target.value)}
+                            placeholder="Ex: Pomada matte"
+                          />
+                        </Field>
+                        <Field>
+                          <FieldLabel>Descrição (opcional)</FieldLabel>
+                          <Textarea
+                            className="bg-input border-border text-foreground min-h-[88px] resize-y"
+                            value={newProdDesc}
+                            onChange={(e) => setNewProdDesc(e.target.value)}
+                            placeholder="Opcional — ajuda na identificação"
+                            maxLength={2000}
+                          />
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Aparece para o cliente na página de agendamento.
+                          </p>
+                        </Field>
+                        <Field>
+                          <FieldLabel>Preço (R$)</FieldLabel>
+                          <Input
+                            type="number"
+                            min={0}
+                            step={0.01}
+                            className="bg-input border-border text-foreground"
+                            value={newProdPreco}
+                            onChange={(e) => setNewProdPreco(e.target.value)}
+                          />
+                        </Field>
+                        <Button
+                          className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+                          disabled={produtoRetailBusy}
+                          onClick={() => void handleAddRetailProduct()}
+                        >
+                          {produtoRetailBusy ? "Salvando…" : "Adicionar"}
+                        </Button>
+                      </FieldGroup>
+                    </DialogContent>
+                  </Dialog>
+                </CardHeader>
+                <CardContent>
+                  {produtosRetailError ? (
+                    <div className="mb-4 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+                      {produtosRetailError}
+                    </div>
+                  ) : null}
+                  {produtosRetailLoading ? (
+                    <p className="text-sm text-muted-foreground py-8 text-center">Carregando produtos…</p>
+                  ) : listaProdutosRetail.length === 0 ? (
+                    <p className="text-sm text-muted-foreground py-8 text-center">Nenhum produto cadastrado.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {listaProdutosRetail.map((produto) => (
+                        <div
+                          key={produto.id}
+                          className={`flex items-start gap-4 p-4 rounded-lg border transition-colors ${
+                            produto.active ? "border-border bg-secondary/30" : "border-border/50 bg-secondary/10"
+                          }`}
+                        >
+                          <Switch
+                            className="mt-1"
+                            checked={produto.active}
+                            disabled={produtoRetailBusy}
+                            onCheckedChange={async (on) => {
+                              setProdutoRetailBusy(true)
+                              try {
+                                await fetch(`/api/retail-products/${produto.id}`, {
+                                  method: "PATCH",
+                                  credentials: "include",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ active: on }),
+                                })
+                                await loadRetailProducts()
+                              } finally {
+                                setProdutoRetailBusy(false)
+                              }
+                            }}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className={`font-medium ${produto.active ? "text-foreground" : "text-muted-foreground"}`}>
+                              {produto.name}
+                            </p>
+                            <p className="text-sm text-muted-foreground">À venda no agendamento</p>
+                            <p className="text-xs text-muted-foreground/80 mt-2 font-medium uppercase tracking-wide">
+                              Descrição (você e o cliente)
+                            </p>
+                            {(produto.description ?? "").trim() ? (
+                              <p className="text-sm text-foreground/90 mt-0.5 whitespace-pre-wrap">
+                                {(produto.description ?? "").trim()}
+                              </p>
+                            ) : (
+                              <p className="text-sm text-muted-foreground/70 mt-0.5 italic">
+                                Sem descrição — o cliente só vê o nome e o preço ao reservar.
+                              </p>
+                            )}
+                          </div>
+                          <span className="text-lg font-semibold text-primary shrink-0 pt-0.5">
+                            R${Number(produto.price).toFixed(2)}
+                          </span>
+                          <div className="flex gap-2 shrink-0 pt-0.5">
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                              disabled={produtoRetailBusy}
+                              onClick={() => openEditRetail(produto)}
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                              disabled={produtoRetailBusy}
+                              onClick={() => void handleDeleteRetailProduct(produto)}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
 
           <Dialog open={editServOpen} onOpenChange={setEditServOpen}>
             <DialogContent className="bg-card border-border">
@@ -1981,6 +2309,59 @@ export default function ConfiguracoesPage() {
                     onClick={() => void handleSaveServ()}
                   >
                     {servicoBusy ? "Salvando…" : "Salvar"}
+                  </Button>
+                </FieldGroup>
+              )}
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={editProdRetailOpen} onOpenChange={setEditProdRetailOpen}>
+            <DialogContent className="bg-card border-border">
+              <DialogHeader>
+                <DialogTitle className="text-foreground">Editar produto</DialogTitle>
+              </DialogHeader>
+              {editingRetailProduct && (
+                <FieldGroup>
+                  <Field>
+                    <FieldLabel>Nome</FieldLabel>
+                    <Input
+                      className="bg-input border-border text-foreground"
+                      value={editProdNome}
+                      onChange={(e) => setEditProdNome(e.target.value)}
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel>Descrição (opcional)</FieldLabel>
+                    <Textarea
+                      className="bg-input border-border text-foreground min-h-[88px] resize-y"
+                      value={editProdDesc}
+                      onChange={(e) => setEditProdDesc(e.target.value)}
+                      maxLength={2000}
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel>Preço (R$)</FieldLabel>
+                    <Input
+                      type="number"
+                      min={0}
+                      step={0.01}
+                      className="bg-input border-border text-foreground"
+                      value={editProdPreco}
+                      onChange={(e) => setEditProdPreco(e.target.value)}
+                    />
+                  </Field>
+                  <div className="flex items-center gap-2">
+                    <Switch checked={editProdAtivo} onCheckedChange={setEditProdAtivo} id="prod-retail-ativo" />
+                    <FieldLabel htmlFor="prod-retail-ativo" className="cursor-pointer">
+                      Ativo
+                    </FieldLabel>
+                  </div>
+                  <Button
+                    className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+                    disabled={produtoRetailBusy}
+                    onClick={() => void handleSaveRetailProduct()}
+                  >
+                    {produtoRetailBusy ? "Salvando…" : "Salvar"}
                   </Button>
                 </FieldGroup>
               )}

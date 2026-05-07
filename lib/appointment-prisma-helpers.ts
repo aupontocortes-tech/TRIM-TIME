@@ -2,18 +2,39 @@
  * Serialização Prisma → formato snake_case usado pelas rotas / UI (legado Supabase).
  */
 import type { Prisma } from "@prisma/client"
-import type { Appointment, Barber, Client, Service } from "@/lib/db/types"
+import type { Appointment, Barber, Client, Service, AppointmentRetailLineApi } from "@/lib/db/types"
 import type { AppointmentStatus } from "@/lib/db/types"
 
 export const appointmentApiInclude = {
   client: true,
   barber: true,
   service: true,
+  appointmentRetailLines: { include: { retailProduct: true } },
 } satisfies Prisma.AppointmentInclude
 
 export type AppointmentWithRelations = Prisma.AppointmentGetPayload<{
   include: typeof appointmentApiInclude
 }>
+
+function mapRetailLines(
+  lines: AppointmentWithRelations["appointmentRetailLines"] | undefined
+): AppointmentRetailLineApi[] | undefined {
+  if (!lines?.length) return undefined
+  return lines.map((l) => ({
+    id: l.id,
+    retail_product_id: l.retailProductId,
+    quantity: l.quantity,
+    unit_price: Number(l.unitPrice),
+    product: l.retailProduct
+      ? {
+          id: l.retailProduct.id,
+          name: l.retailProduct.name,
+          description: (l.retailProduct.description ?? "").trim(),
+          price: Number(l.retailProduct.price),
+        }
+      : undefined,
+  }))
+}
 
 export function parseAppointmentDate(ymd: string): Date {
   const [y, m, d] = ymd.split("-").map(Number)
@@ -103,6 +124,7 @@ export function mapAppointmentRowToApi(row: AppointmentWithRelations): Appointme
     unit_id: row.unitId,
     created_at: row.createdAt.toISOString(),
     updated_at: row.updatedAt.toISOString(),
+    retail_lines: mapRetailLines(row.appointmentRetailLines),
     client: row.client ? mapClient(row.client) : undefined,
     barber: row.barber ? mapBarber(row.barber) : undefined,
     service: row.service ? mapService(row.service) : undefined,

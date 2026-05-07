@@ -1721,7 +1721,11 @@ export default function BarbeariaPage() {
                     <p className="text-white/50 text-xs">Serviços</p>
                     <p className="text-white font-medium">{bookingSummary.servicos.map((s) => s.nome).join(", ")}</p>
                     <p className="text-[#FFD700]/80 text-xs mt-1">
-                      {bookingSummary.totalDuracao} min · R$ {bookingSummary.totalPreco}
+                      {bookingSummary.totalDuracao} min · R${" "}
+                      {Number(bookingSummary.totalPreco).toLocaleString("pt-BR", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
                     </p>
                   </div>
                 </div>
@@ -2248,7 +2252,7 @@ export default function BarbeariaPage() {
                     </p>
                   </div>
                 </div>
-                
+
                 <div className="flex items-center gap-3">
                   <Avatar className="w-10 h-10">
                     <AvatarFallback className="bg-primary/10 text-primary text-sm">
@@ -2404,7 +2408,13 @@ export default function BarbeariaPage() {
                 <span className="text-muted-foreground">•</span>
                 <span className="text-muted-foreground">{totalDuracao} min</span>
               </div>
-              <span className="text-primary font-bold text-lg">R$ {totalPreco}</span>
+              <span className="text-primary font-bold text-lg tabular-nums shrink-0">
+                R${" "}
+                {totalPreco.toLocaleString("pt-BR", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
+              </span>
             </div>
           )}
           
