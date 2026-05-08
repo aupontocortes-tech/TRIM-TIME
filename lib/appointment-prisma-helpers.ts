@@ -2,7 +2,14 @@
  * Serialização Prisma → formato snake_case usado pelas rotas / UI (legado Supabase).
  */
 import type { Prisma } from "@prisma/client"
-import type { Appointment, Barber, Client, Service, AppointmentRetailLineApi } from "@/lib/db/types"
+import type {
+  Appointment,
+  Barber,
+  Client,
+  Service,
+  AppointmentRetailLineApi,
+  AppointmentServiceLineApi,
+} from "@/lib/db/types"
 import type { AppointmentStatus } from "@/lib/db/types"
 
 export const appointmentApiInclude = {
@@ -10,6 +17,7 @@ export const appointmentApiInclude = {
   barber: true,
   service: true,
   appointmentRetailLines: { include: { retailProduct: true } },
+  appointmentServiceLines: { include: { service: true } },
 } satisfies Prisma.AppointmentInclude
 
 export type AppointmentWithRelations = Prisma.AppointmentGetPayload<{
@@ -34,6 +42,52 @@ function mapRetailLines(
         }
       : undefined,
   }))
+}
+
+function mapStoredServiceLines(
+  lines: AppointmentWithRelations["appointmentServiceLines"]
+): AppointmentServiceLineApi[] | undefined {
+  if (!lines?.length) return undefined
+  return lines.map((l) => ({
+    id: l.id,
+    service_id: l.serviceId,
+    quantity: l.quantity,
+    unit_price: Number(l.unitPrice),
+    service: l.service
+      ? {
+          id: l.service.id,
+          name: l.service.name,
+          description: (l.service.description ?? "").trim(),
+          price: Number(l.service.price),
+          duration: l.service.duration,
+        }
+      : undefined,
+  }))
+}
+
+export function deriveServiceLinesFromAppointment(
+  row: AppointmentWithRelations
+): AppointmentServiceLineApi[] {
+  const stored = mapStoredServiceLines(row.appointmentServiceLines)
+  if (stored?.length) return stored
+  if (row.service) {
+    return [
+      {
+        id: "__legacy__",
+        service_id: row.serviceId,
+        quantity: 1,
+        unit_price: Number(row.service.price),
+        service: {
+          id: row.service.id,
+          name: row.service.name,
+          description: (row.service.description ?? "").trim(),
+          price: Number(row.service.price),
+          duration: row.service.duration,
+        },
+      },
+    ]
+  }
+  return []
 }
 
 export function parseAppointmentDate(ymd: string): Date {
@@ -109,6 +163,7 @@ function mapService(s: NonNullable<AppointmentWithRelations["service"]>): Servic
 }
 
 export function mapAppointmentRowToApi(row: AppointmentWithRelations): Appointment {
+  const sl = deriveServiceLinesFromAppointment(row)
   return {
     id: row.id,
     barbershop_id: row.barbershopId,
@@ -124,6 +179,7 @@ export function mapAppointmentRowToApi(row: AppointmentWithRelations): Appointme
     unit_id: row.unitId,
     created_at: row.createdAt.toISOString(),
     updated_at: row.updatedAt.toISOString(),
+    service_lines: sl.length ? sl : undefined,
     retail_lines: mapRetailLines(row.appointmentRetailLines),
     client: row.client ? mapClient(row.client) : undefined,
     barber: row.barber ? mapBarber(row.barber) : undefined,

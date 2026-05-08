@@ -132,6 +132,19 @@ export async function POST(request: Request) {
         time: normalizeAppointmentTime(body.time),
         status: "pending",
         totalPrice,
+        ...(service
+          ? {
+              appointmentServiceLines: {
+                create: [
+                  {
+                    serviceId: body.service_id,
+                    quantity: 1,
+                    unitPrice: Number(service.price),
+                  },
+                ],
+              },
+            }
+          : {}),
       },
       include: appointmentApiInclude,
     })

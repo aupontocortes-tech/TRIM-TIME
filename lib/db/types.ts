@@ -176,6 +176,15 @@ export type AppointmentRetailLineApi = {
   product?: Pick<RetailProduct, "id" | "name" | "description" | "price">
 }
 
+/** Serviços combinados no mesmo horário (painel / API). */
+export type AppointmentServiceLineApi = {
+  id: string
+  service_id: string
+  quantity: number
+  unit_price: number
+  service?: Pick<Service, "id" | "name" | "description" | "price" | "duration">
+}
+
 export interface Appointment {
   id: string
   barbershop_id: string
@@ -191,6 +200,8 @@ export interface Appointment {
   unit_id?: string | null
   created_at: string
   updated_at: string
+  /** Linhas de serviço (derivadas do banco ou do `service_id` legado). */
+  service_lines?: AppointmentServiceLineApi[]
   /** Linhas de produtos de venda ligadas ao agendamento (ex.: primeiro horário do pacote). */
   retail_lines?: AppointmentRetailLineApi[]
   // joins opcionais

@@ -1,7 +1,7 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -15,6 +15,11 @@ import {
   User,
   Filter,
   Package,
+  Scissors,
+  ShoppingBag,
+  Plus,
+  Trash2,
+  Loader2,
 } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
@@ -33,7 +38,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import type { Appointment, Barber, Client, Service } from "@/lib/db/types"
+
+
+import { Separator } from "@/components/ui/separator"
+import type { Appointment, Barber, Client, RetailProduct, Service } from "@/lib/db/types"
 import { useUnits } from "@/hooks/use-units"
 import { isSlotPastGraceFromYmd } from "@/lib/appointment-reminder-time"
 
@@ -52,6 +60,10 @@ type AgendaItem = {
   profissional: string
   raw: Appointment
 }
+
+type PainelServicoLinha = { uid: string; service_id: string; quantity: number }
+
+type PainelProdutoLinha = { uid: string; retail_product_id: string; quantity: number }
 
 const diasSemana = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"]
 
@@ -111,18 +123,78 @@ function labelServicoNoSelect(s: Service): string {
   return `${s.name} — ${short}`
 }
 
+function newPainelLinhaUid(seed?: string): string {
+  if (seed && seed !== "__legacy__") return seed
+  return typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `r_${Date.now()}_${Math.random().toString(16).slice(2)}`
+}
+
+function agendaValorExibicao(appointment: Appointment): number {
+  const retail = appointment.retail_lines ?? []
+  if (retail.length === 0) {
+    return Number(appointment.total_price ?? appointment.service?.price ?? 0)
+  }
+  let svcSum = 0
+  const svcLines = appointment.service_lines ?? []
+  if (svcLines.length > 0) {
+    for (const l of svcLines) {
+      svcSum += Number(l.quantity) * Number(l.unit_price)
+    }
+  } else {
+    svcSum = Number(
+      appointment.service?.price ??
+        appointment.total_price ??
+        0
+    )
+  }
+  let retailSum = 0
+  for (const l of retail) {
+    retailSum += Number(l.quantity) * Number(l.unit_price)
+  }
+  return Math.round((svcSum + retailSum) * 100) / 100
+}
+
 function mapAgendaItem(appointment: Appointment): AgendaItem {
-  const desc = (appointment.service?.description ?? "").trim()
+  const lines = appointment.service_lines ?? []
+  let servicoNome: string
+  let desc: string
+  let duracao: number
+
+  if (lines.length === 0) {
+    desc = (appointment.service?.description ?? "").trim()
+    servicoNome = appointment.service?.name ?? "Serviço"
+    duracao = appointment.service?.duration ?? 0
+  } else {
+    servicoNome = lines.map((l) => l.service?.name ?? "Serviço").join(", ")
+    const firstDesc = (lines[0].service?.description ?? "").trim()
+    desc =
+      lines.length === 1
+        ? firstDesc
+        : lines
+            .map((l) => {
+              const n = (l.service?.name ?? "").trim()
+              const d = (l.service?.description ?? "").trim()
+              return d ? `${n}: ${d}` : n
+            })
+            .filter(Boolean)
+            .join("\n\n")
+    duracao = lines.reduce(
+      (acc, l) => acc + (l.service?.duration ?? 0) * Math.max(1, Math.round(l.quantity ?? 1) || 1),
+      0
+    )
+  }
+
   return {
     id: appointment.id,
     hora: typeof appointment.time === "string" ? appointment.time.slice(0, 5) : String(appointment.time),
     cliente: appointment.client?.name ?? "Cliente",
     telefone: appointment.client?.phone ?? "",
     clienteFoto: appointment.client?.photo_url ?? null,
-    servico: appointment.service?.name ?? "Serviço",
+    servico: servicoNome,
     servicoDescricao: desc || undefined,
-    duracao: appointment.service?.duration ?? 0,
-    valor: Number(appointment.total_price ?? appointment.service?.price ?? 0),
+    duracao,
+    valor: agendaValorExibicao(appointment),
     status: appointment.status,
     profissional: appointment.barber?.name ?? "Profissional",
     raw: appointment,
@@ -137,6 +209,7 @@ export default function AgendaPage() {
   const [agendamentos, setAgendamentos] = useState<AgendaItem[]>([])
   const [barbers, setBarbers] = useState<Barber[]>([])
   const [services, setServices] = useState<Service[]>([])
+  const [retailProducts, setRetailProducts] = useState<RetailProduct[]>([])
   const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
   const [feedback, setFeedback] = useState("")
@@ -147,8 +220,11 @@ export default function AgendaPage() {
     null | "confirmar" | "concluir" | "cancelar"
   >(null)
   const [painelServicoValorOpen, setPainelServicoValorOpen] = useState(false)
-  const [painelServicoId, setPainelServicoId] = useState("")
+  const [painelLinhasServicos, setPainelLinhasServicos] = useState<PainelServicoLinha[]>([])
   const [painelValorInput, setPainelValorInput] = useState("")
+  const [painelLinhasProdutos, setPainelLinhasProdutos] = useState<PainelProdutoLinha[]>([])
+  /** Recarrega serviços e produtos ao abrir o painel (lista ao vivo com o catálogo atual). */
+  const [catalogoPainelBusy, setCatalogoPainelBusy] = useState(false)
   const [agendamentoSelecionado, setAgendamentoSelecionado] = useState<AgendaItem | null>(null)
   const [novoAgendamentoOpen, setNovoAgendamentoOpen] = useState(false)
   const [savingNovo, setSavingNovo] = useState(false)
@@ -168,22 +244,50 @@ export default function AgendaPage() {
   )
 
   const carregarDependencias = async () => {
-    const [barbersRes, servicesRes, clientsRes] = await Promise.all([
+    const [barbersRes, servicesRes, clientsRes, retailRes] = await Promise.all([
       fetch("/api/barbers", { credentials: "include" }),
-      fetch("/api/services", { credentials: "include" }),
+      fetch("/api/services", { credentials: "include", cache: "no-store" }),
       fetch("/api/clients", { credentials: "include" }),
+      fetch("/api/retail-products", { credentials: "include", cache: "no-store" }),
     ])
 
-    const [barbersData, servicesData, clientsData] = await Promise.all([
+    const [barbersData, servicesData, clientsData, retailData] = await Promise.all([
       barbersRes.ok ? barbersRes.json() : [],
       servicesRes.ok ? servicesRes.json() : [],
       clientsRes.ok ? clientsRes.json() : [],
+      retailRes.ok ? retailRes.json() : [],
     ])
 
     setBarbers(Array.isArray(barbersData) ? (barbersData as Barber[]) : [])
     setServices(Array.isArray(servicesData) ? (servicesData as Service[]) : [])
     setClients(Array.isArray(clientsData) ? (clientsData as Client[]) : [])
+    setRetailProducts(Array.isArray(retailData) ? (retailData as RetailProduct[]) : [])
   }
+
+  const atualizarCatalogoPainelAgenda = useCallback(async () => {
+    setCatalogoPainelBusy(true)
+    try {
+      const [servicesRes, retailRes] = await Promise.all([
+        fetch("/api/services", { credentials: "include", cache: "no-store" }),
+        fetch("/api/retail-products", { credentials: "include", cache: "no-store" }),
+      ])
+      const servicesData = await servicesRes.json().catch(() => null)
+      const retailData = await retailRes.json().catch(() => null)
+      if (servicesRes.ok && Array.isArray(servicesData)) {
+        setServices(servicesData as Service[])
+      }
+      if (retailRes.ok && Array.isArray(retailData)) {
+        setRetailProducts(retailData as RetailProduct[])
+      }
+      if (!servicesRes.ok || !retailRes.ok) {
+        setError("Não foi possível atualizar o catálogo de serviços ou produtos.")
+      }
+    } catch {
+      setError("Erro ao atualizar o catálogo de serviços e produtos.")
+    } finally {
+      setCatalogoPainelBusy(false)
+    }
+  }, [])
 
   const carregarAgendamentos = async () => {
     setLoading(true)
@@ -289,7 +393,9 @@ export default function AgendaPage() {
     date: string
     barber_id: string
     service_id: string
+    service_lines?: { service_id: string; quantity: number }[]
     total_price: number
+    retail_lines: { retail_product_id: string; quantity: number }[]
   }>): Promise<boolean> => {
     setActionLoadingId(appointmentId)
     setError("")
@@ -323,16 +429,57 @@ export default function AgendaPage() {
     }
   }
 
-  const servicosParaEditarPainel = useMemo(() => {
-    const active = services
-      .filter((s) => s.active)
-      .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"))
-    const cid = agendamentoSelecionado?.raw.service_id
-    if (!cid) return active
-    if (active.some((s) => s.id === cid)) return active
-    const current = services.find((s) => s.id === cid)
-    return current ? [current, ...active] : active
-  }, [services, agendamentoSelecionado?.raw.service_id])
+  const servicosPainelOrdenados = useMemo(
+    () => [...services].sort((a, b) => a.name.localeCompare(b.name, "pt-BR")),
+    [services]
+  )
+
+  const primeiroServicoAtivoPainelId = useMemo(
+    () => services.find((s) => s.active)?.id ?? "",
+    [services]
+  )
+
+  const servicosAtivosCount = useMemo(
+    () => services.filter((s) => s.active).length,
+    [services]
+  )
+
+  const produtosPainelOrdenados = useMemo(
+    () => [...retailProducts].sort((a, b) => a.name.localeCompare(b.name, "pt-BR")),
+    [retailProducts]
+  )
+
+  const primeiroProdutoAtivoPainelId = useMemo(
+    () => retailProducts.find((p) => p.active)?.id ?? "",
+    [retailProducts]
+  )
+
+  const produtosAtivosCount = useMemo(
+    () => retailProducts.filter((p) => p.active).length,
+    [retailProducts]
+  )
+
+  const sugerirValorPainelPeloCatalogo = useCallback(() => {
+    let base = 0
+    for (const row of painelLinhasServicos) {
+      const sid = row.service_id.trim()
+      if (!sid) continue
+      const svc = services.find((s) => s.id === sid)
+      if (!svc) continue
+      const q = Math.min(99, Math.max(1, Math.round(Number(row.quantity) || 1)))
+      base += Number(svc.price) * q
+    }
+    let extra = 0
+    for (const row of painelLinhasProdutos) {
+      const pid = row.retail_product_id.trim()
+      if (!pid) continue
+      const p = retailProducts.find((r) => r.id === pid)
+      if (!p) continue
+      const q = Math.min(99, Math.max(1, Math.round(Number(row.quantity) || 1)))
+      extra += Number(p.price) * q
+    }
+    setPainelValorInput((Math.round((base + extra) * 100) / 100).toFixed(2))
+  }, [services, painelLinhasServicos, painelLinhasProdutos, retailProducts])
 
   const podeEditarServicoValorPainel =
     agendamentoSelecionado?.status === "pending" || agendamentoSelecionado?.status === "confirmed"
@@ -340,13 +487,40 @@ export default function AgendaPage() {
   const sincronizarPainelServicoValorComSelecao = () => {
     const sel = agendamentoSelecionado
     if (!sel) return
-    setPainelServicoId(sel.raw.service_id)
+    const svcLines = sel.raw.service_lines ?? []
+    if (svcLines.length > 0) {
+      setPainelLinhasServicos(
+        svcLines.map((l) => ({
+          uid: newPainelLinhaUid(l.id),
+          service_id: l.service_id,
+          quantity: Math.min(99, Math.max(1, Math.round(Number(l.quantity) || 1))),
+        }))
+      )
+    } else if (sel.raw.service_id) {
+      setPainelLinhasServicos([
+        {
+          uid: newPainelLinhaUid(),
+          service_id: sel.raw.service_id,
+          quantity: 1,
+        },
+      ])
+    } else {
+      setPainelLinhasServicos([])
+    }
     setPainelValorInput(Number(sel.valor).toFixed(2))
+    setPainelLinhasProdutos(
+      (sel.raw.retail_lines ?? []).map((l) => ({
+        uid: l.id,
+        retail_product_id: l.retail_product_id,
+        quantity: Math.min(99, Math.max(1, Math.round(Number(l.quantity) || 1))),
+      }))
+    )
   }
 
-  const togglePainelServicoValor = () => {
+  async function togglePainelServicoValor() {
     if (!painelServicoValorOpen) {
       sincronizarPainelServicoValorComSelecao()
+      await atualizarCatalogoPainelAgenda()
       setPainelServicoValorOpen(true)
       return
     }
@@ -356,14 +530,48 @@ export default function AgendaPage() {
 
   const salvarServicoEValorPainel = async () => {
     const sel = agendamentoSelecionado
-    if (!sel || !painelServicoId) return
+    const svcPayload = painelLinhasServicos
+      .filter((r) => r.service_id.trim())
+      .map((r) => ({
+        service_id: r.service_id.trim(),
+        quantity: Math.min(99, Math.max(1, Math.round(Number(r.quantity) || 1))),
+      }))
+    if (!sel) return
+    if (svcPayload.length === 0) {
+      setError("Adicione ao menos um serviço válido.")
+      return
+    }
     const v = Number(painelValorInput)
     if (!Number.isFinite(v) || v < 0) {
       setError("Informe um valor total válido.")
       return
     }
-    const total = Math.round(v * 100) / 100
-    const ok = await aplicarAcao(sel.id, { service_id: painelServicoId, total_price: total })
+    const linesPayload = painelLinhasProdutos
+      .filter((r) => r.retail_product_id.trim())
+      .map((r) => ({
+        retail_product_id: r.retail_product_id.trim(),
+        quantity: Math.min(99, Math.max(1, Math.round(Number(r.quantity) || 1))),
+      }))
+    let sumSvc = 0
+    for (const row of svcPayload) {
+      const svc = services.find((s) => s.id === row.service_id)
+      if (!svc) continue
+      sumSvc += Number(svc.price) * row.quantity
+    }
+    let sumProd = 0
+    for (const row of linesPayload) {
+      const p = retailProducts.find((r) => r.id === row.retail_product_id)
+      if (!p) continue
+      sumProd += Number(p.price) * row.quantity
+    }
+    const catalogTotalPainel =
+      Math.round((Math.round(sumSvc * 100) / 100 + Math.round(sumProd * 100) / 100) * 100) / 100
+    setPainelValorInput(catalogTotalPainel.toFixed(2))
+    const ok = await aplicarAcao(sel.id, {
+      service_lines: svcPayload,
+      total_price: catalogTotalPainel,
+      retail_lines: linesPayload,
+    })
     if (ok) setPainelServicoValorOpen(false)
   }
 
@@ -805,192 +1013,510 @@ export default function AgendaPage() {
           }
         }}
       >
-        <DialogContent className="bg-card border-border">
-          <DialogHeader>
-            <DialogTitle className="text-foreground">Detalhes do Agendamento</DialogTitle>
-            <DialogDescription className="text-muted-foreground">
-              Informações completas do agendamento
-            </DialogDescription>
-          </DialogHeader>
-
+        <DialogContent className="fixed inset-0 left-0 top-0 z-50 flex h-[100dvh] w-screen max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-0 bg-card p-0 shadow-lg sm:max-w-none data-[state=closed]:zoom-out-0 data-[state=open]:zoom-in-100">
           {agendamentoSelecionado && (
-            <div className="space-y-4">
-              <div className="flex items-center gap-4 p-4 bg-secondary/50 rounded-lg">
-                <Avatar className="w-14 h-14 border-2 border-primary/25">
-                  <AvatarImage src={agendamentoSelecionado.clienteFoto ?? undefined} alt="" />
-                  <AvatarFallback className="bg-primary/20 text-primary">
-                    <User className="w-7 h-7" />
-                  </AvatarFallback>
-                </Avatar>
-                <div>
-                  <p className="font-semibold text-foreground">{agendamentoSelecionado.cliente}</p>
-                  {agendamentoSelecionado.telefone ? (
-                    <a href={`tel:${agendamentoSelecionado.telefone}`} className="text-sm text-primary flex items-center gap-1">
-                      <Phone className="w-3 h-3" />
-                      {agendamentoSelecionado.telefone}
-                    </a>
-                  ) : null}
-                </div>
+            <>
+              <div className="shrink-0 space-y-0.5 border-b border-border px-4 py-3 pr-14 sm:px-8 lg:px-10">
+                <DialogTitle className="text-left text-lg font-semibold text-foreground">
+                  Detalhes do agendamento
+                </DialogTitle>
+                <DialogDescription className="text-left text-sm text-muted-foreground">
+                  Confira cliente, valores e dados do horário. Use <span className="font-medium text-foreground">Alterar valores</span> só se precisar mudar algo.
+                </DialogDescription>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-xs text-muted-foreground mb-1">Horário</p>
-                  <p className="font-medium text-foreground flex items-center gap-1">
-                    <Clock className="w-4 h-4 text-primary" />
-                    {agendamentoSelecionado.hora}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground mb-1">Duração</p>
-                  <p className="font-medium text-foreground">{agendamentoSelecionado.duracao} minutos</p>
-                </div>
-                <div className="col-span-2">
-                  <p className="text-xs text-muted-foreground mb-1">Serviço</p>
-                  <p className="font-medium text-foreground">{agendamentoSelecionado.servico}</p>
-                  {agendamentoSelecionado.servicoDescricao ? (
-                    <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap">
-                      {agendamentoSelecionado.servicoDescricao}
-                    </p>
-                  ) : null}
-                </div>
-                {(agendamentoSelecionado.raw.retail_lines?.length ?? 0) > 0 ? (
-                  <div className="col-span-2 rounded-lg border border-border bg-secondary/40 p-3">
-                    <p className="text-xs text-muted-foreground mb-2 flex items-center gap-1">
-                      <Package className="w-3.5 h-3.5 shrink-0" />
-                      Produtos no pedido
-                    </p>
-                    <ul className="space-y-1 text-sm text-foreground">
-                      {(agendamentoSelecionado.raw.retail_lines ?? []).map((line) => {
-                        const nome = line.product?.name ?? "Produto"
-                        const linhaValor = Number(line.quantity) * Number(line.unit_price)
-                        return (
-                          <li key={line.id} className="flex justify-between gap-2">
-                            <span className="min-w-0">
-                              <span className="font-medium">{nome}</span>
-                              <span className="text-muted-foreground">
-                                {" "}
-                                × {line.quantity}
-                              </span>
-                            </span>
-                            <span className="shrink-0 tabular-nums">
-                              R${linhaValor.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </span>
-                          </li>
-                        )
-                      })}
-                    </ul>
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-6 sm:px-6 lg:px-10">
+                <div className="mx-auto w-full max-w-[min(100vw,90rem)] space-y-6">
+
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:items-start lg:gap-8">
+                <div className="space-y-4 lg:col-span-4 xl:col-span-3">
+                  <div className="flex items-center gap-4 rounded-xl border border-border/60 bg-muted/30 p-4">
+                    <Avatar className="h-14 w-14 shrink-0 border-2 border-primary/25">
+                      <AvatarImage src={agendamentoSelecionado.clienteFoto ?? undefined} alt="" />
+                      <AvatarFallback className="bg-primary/20 text-primary">
+                        <User className="h-7 w-7" />
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold text-foreground">{agendamentoSelecionado.cliente}</p>
+                      {agendamentoSelecionado.telefone ? (
+                        <a
+                          href={`tel:${agendamentoSelecionado.telefone}`}
+                          className="mt-0.5 flex items-center gap-1 text-sm text-primary"
+                        >
+                          <Phone className="h-3 w-3 shrink-0" />
+                          <span className="truncate">{agendamentoSelecionado.telefone}</span>
+                        </a>
+                      ) : null}
+                    </div>
                   </div>
-                ) : null}
-                <div className="col-span-2">
-                  <p className="text-xs text-muted-foreground mb-1">Profissional</p>
-                  <p className="font-medium text-foreground">{agendamentoSelecionado.profissional}</p>
-                </div>
-              </div>
 
-              <div className="flex items-center justify-between p-4 bg-primary/10 rounded-lg">
-                <span className="text-foreground">Valor</span>
-                <span className="text-xl font-bold text-primary">
-                  R${agendamentoSelecionado.valor.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </span>
+                  <div className="flex items-center justify-between rounded-xl border border-border/60 bg-muted/30 p-4">
+                    <span className="text-sm font-medium text-foreground">Total do agendamento</span>
+                    <span className="text-xl font-bold tabular-nums text-primary">
+                      R${agendamentoSelecionado.valor.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="space-y-5 lg:col-span-8 xl:col-span-9">
+                  <Card className="border-border/60 shadow-none">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-lg font-semibold text-foreground">Resumo deste horário</CardTitle>
+                      <CardDescription>
+                        Informações já salvas do agendamento (leitura). Edição fica mais abaixo.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-5 pt-2">
+                      <div className="flex flex-wrap gap-x-10 gap-y-3 text-base leading-snug text-foreground sm:text-[1.0625rem]">
+                        <span className="flex items-center gap-2.5 tabular-nums font-medium">
+                          <Clock className="h-[1.125rem] w-[1.125rem] shrink-0 text-primary sm:h-5 sm:w-5" />
+                          {agendamentoSelecionado.hora}
+                        </span>
+                        <span>
+                          <span className="text-muted-foreground">Duração: </span>
+                          {agendamentoSelecionado.duracao} min
+                        </span>
+                        <span className="min-w-0">
+                          <span className="text-muted-foreground">Profissional: </span>
+                          {agendamentoSelecionado.profissional}
+                        </span>
+                      </div>
+                      <Separator className="opacity-70" />
+
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground">Serviços</p>
+                        <ul className="mt-2 divide-y divide-border/70 rounded-lg border border-border/50 bg-background/40">
+                          {(agendamentoSelecionado.raw.service_lines ?? []).length === 0 ? (
+                            <li className="px-3 py-3 text-sm text-muted-foreground">Nenhum serviço registrado.</li>
+                          ) : (
+                            (agendamentoSelecionado.raw.service_lines ?? []).map((line, idx) => {
+                              const nome = line.service?.name ?? "Serviço"
+                              const linhaValor = Number(line.quantity) * Number(line.unit_price)
+                              return (
+                                <li
+                                  key={`${line.id}-${line.service_id}-${idx}`}
+                                  className="flex items-center justify-between gap-4 px-3 py-3 text-sm"
+                                >
+                                  <span className="min-w-0">
+                                    <span className="font-medium text-foreground">{nome}</span>
+                                    <span className="text-muted-foreground"> × {line.quantity}</span>
+                                  </span>
+                                  <span className="shrink-0 tabular-nums text-muted-foreground">
+                                    R$
+                                    {linhaValor.toLocaleString("pt-BR", {
+                                      minimumFractionDigits: 2,
+                                      maximumFractionDigits: 2,
+                                    })}
+                                  </span>
+                                </li>
+                              )
+                            })
+                          )}
+                        </ul>
+                        {agendamentoSelecionado.servicoDescricao ? (
+                          <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
+                            {agendamentoSelecionado.servicoDescricao}
+                          </p>
+                        ) : null}
+                      </div>
+
+                      <Separator className="opacity-70" />
+
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground">Produtos</p>
+                        {(agendamentoSelecionado.raw.retail_lines?.length ?? 0) === 0 ? (
+                          <p className="mt-2 text-sm text-muted-foreground">
+                            Nenhum produto registrado neste pedido (opcional).
+                          </p>
+                        ) : (
+                          <ul className="mt-2 divide-y divide-border/70 rounded-lg border border-border/50 bg-background/40">
+                            {(agendamentoSelecionado.raw.retail_lines ?? []).map((line) => {
+                              const nome = line.product?.name ?? "Produto"
+                              const linhaValor = Number(line.quantity) * Number(line.unit_price)
+                              return (
+                                <li
+                                  key={line.id}
+                                  className="flex items-center justify-between gap-4 px-3 py-3 text-sm"
+                                >
+                                  <span className="min-w-0">
+                                    <span className="font-medium text-foreground">{nome}</span>
+                                    <span className="text-muted-foreground"> × {line.quantity}</span>
+                                  </span>
+                                  <span className="shrink-0 tabular-nums text-muted-foreground">
+                                    R$
+                                    {linhaValor.toLocaleString("pt-BR", {
+                                      minimumFractionDigits: 2,
+                                      maximumFractionDigits: 2,
+                                    })}
+                                  </span>
+                                </li>
+                              )
+                            })}
+                          </ul>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
               </div>
 
               {podeEditarServicoValorPainel && (
-                <div className="space-y-3">
-                  {servicosParaEditarPainel.length === 0 ? (
-                    <p className="text-xs text-destructive">
-                      Cadastre ao menos um serviço ativo em Configurações → Serviços para poder trocar o item deste
-                      agendamento.
+                <div className="rounded-lg border border-border/60 bg-muted/20 p-4 sm:p-5">
+                  {servicosAtivosCount === 0 ? (
+                    <p className="text-sm text-destructive">
+                      Cadastre um serviço ativo em Configurações → Serviços para editar este agendamento.
                     </p>
                   ) : null}
                   <Button
                     type="button"
                     variant="outline"
-                    className="w-full border-primary/35 text-foreground hover:bg-primary/10"
-                    disabled={actionLoadingId === agendamentoSelecionado.id || servicosParaEditarPainel.length === 0}
-                    onClick={togglePainelServicoValor}
+                    className="mt-3 min-h-12 w-full border-primary/40 text-base text-foreground hover:bg-primary/10 sm:max-w-md md:text-lg [&_svg]:size-5 py-3"
+                    disabled={
+                      actionLoadingId === agendamentoSelecionado.id ||
+                      servicosAtivosCount === 0 ||
+                      catalogoPainelBusy
+                    }
+                    onClick={() => void togglePainelServicoValor()}
                   >
-                    <Package className="mr-2 h-4 w-4 shrink-0 text-primary" />
-                    Serviços, produtos e valor
+                    {catalogoPainelBusy ? (
+                      <Loader2 className="mr-2 size-5 shrink-0 animate-spin text-primary" />
+                    ) : (
+                      <Package className="mr-2 size-5 shrink-0 text-primary" />
+                    )}
+                    Alterar valores
                   </Button>
                   {painelServicoValorOpen ? (
-                    <div className="space-y-3 rounded-lg border border-border bg-secondary/25 p-4">
-                      <p className="text-xs text-muted-foreground leading-relaxed">
-                        Você só pode registrar <span className="text-foreground font-medium">um serviço principal</span> por
-                        agendamento. Troque pela lista cadastrada em Configurações → Serviços e ajuste o{" "}
-                        <span className="text-foreground font-medium">valor total</span> para refletir produtos extras,
-                        pacotes ou descontos aplicados na hora.
-                      </p>
-                      <div>
-                        <Label htmlFor="painel-servico" className="text-foreground">
-                          Serviço / produto (catálogo)
-                        </Label>
-                        <select
-                          id="painel-servico"
-                          value={painelServicoId}
-                          onChange={(e) => {
-                            const sid = e.target.value
-                            setPainelServicoId(sid)
-                            const svc = services.find((s) => s.id === sid)
-                            if (svc) setPainelValorInput(Number(svc.price).toFixed(2))
-                          }}
-                          className="mt-1.5 w-full rounded-md border border-border bg-input px-3 py-2 text-sm text-foreground"
-                        >
-                          {servicosParaEditarPainel.map((svc) => (
-                            <option key={svc.id} value={svc.id}>
-                              {svc.name}
-                              {!svc.active ? " (inativo no catálogo)" : ""}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <Label htmlFor="painel-valor" className="text-foreground">
-                          Valor total (R$)
-                        </Label>
-                        <Input
-                          id="painel-valor"
-                          type="number"
-                          inputMode="decimal"
-                          min={0}
-                          step={0.01}
-                          value={painelValorInput}
-                          onChange={(e) => setPainelValorInput(e.target.value)}
-                          disabled={actionLoadingId === agendamentoSelecionado.id}
-                          className="mt-1.5 bg-input border-border text-foreground"
-                        />
-                      </div>
-                      <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                    <div className="mt-6 space-y-8 rounded-lg border border-border/70 bg-background/80 p-4 sm:p-5">
+                      <div className="flex flex-col gap-3 border-b border-border/60 pb-5 sm:flex-row sm:items-center sm:justify-between">
+                        <p className="text-sm text-muted-foreground">
+                          Se você acabou de cadastrar algo em Configurações, atualize o catálogo antes de escolher.
+                        </p>
                         <Button
                           type="button"
                           variant="outline"
-                          className="border-border sm:order-first"
-                          disabled={actionLoadingId === agendamentoSelecionado.id}
-                          onClick={() => {
-                            sincronizarPainelServicoValorComSelecao()
-                          }}
+                          className="h-11 shrink-0 gap-2 border-border px-5 text-base text-foreground"
+                          disabled={
+                            catalogoPainelBusy || actionLoadingId === agendamentoSelecionado.id
+                          }
+                          onClick={() => void atualizarCatalogoPainelAgenda()}
                         >
-                          Restaurar do agendamento
+                          {catalogoPainelBusy ? (
+                            <Loader2 className="size-4 animate-spin" aria-hidden />
+                          ) : null}
+                          Atualizar catálogo
+                        </Button>
+                      </div>
+
+                      {servicosAtivosCount === 0 ? (
+                        <div className="rounded-md bg-amber-500/10 px-3 py-2 text-sm text-amber-950 dark:text-amber-100">
+                          Nenhum serviço ativo no catálogo. Cadastre em Configurações → Serviços.
+                        </div>
+                      ) : null}
+
+                      <section className="space-y-3">
+                        <div className="flex flex-wrap items-baseline gap-2">
+                          <Scissors className="h-4 w-4 text-primary shrink-0" aria-hidden />
+                          <h3 className="text-sm font-semibold text-foreground">Serviços</h3>
+                          <Separator orientation="vertical" className="hidden h-4 sm:inline bg-border/80" />
+                          <p className="text-xs text-muted-foreground">
+                            O que será feito neste horário; use &quot;Adicionar serviço&quot; para combinar vários (ex.: corte +
+                            barba).
+                          </p>
+                        </div>
+                        <div className="divide-y divide-border rounded-md border border-border/60 bg-muted/30">
+                          {painelLinhasServicos.map((row) => {
+                            const opcoes = servicosPainelOrdenados.filter(
+                              (s) => s.active || s.id === row.service_id
+                            )
+                            return (
+                              <div
+                                key={row.uid}
+                                className="flex flex-wrap items-end gap-3 p-3 sm:flex-nowrap"
+                              >
+                                <div className="min-w-[160px] flex-1">
+                                  <Label className="text-xs text-muted-foreground">Serviço</Label>
+                                  <select
+                                    value={row.service_id}
+                                    onChange={(e) => {
+                                      const v = e.target.value
+                                      setPainelLinhasServicos((prev) =>
+                                        prev.map((x) =>
+                                          x.uid === row.uid ? { ...x, service_id: v } : x
+                                        )
+                                      )
+                                      sugerirValorPainelPeloCatalogo()
+                                    }}
+                                    disabled={actionLoadingId === agendamentoSelecionado.id}
+                                    className="mt-1 w-full rounded-md border border-border bg-input px-2 py-2 text-sm text-foreground"
+                                  >
+                                    <option value="">Selecionar…</option>
+                                    {opcoes.map((s) => (
+                                      <option key={s.id} value={s.id}>
+                                        {labelServicoNoSelect(s)}
+                                        {!s.active ? " (inativo)" : ""}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <div className="w-20 sm:w-24">
+                                  <Label className="text-xs text-muted-foreground">Qtd</Label>
+                                  <Input
+                                    type="number"
+                                    inputMode="numeric"
+                                    min={1}
+                                    max={99}
+                                    value={row.quantity}
+                                    onChange={(e) => {
+                                      const raw = Number(e.target.value)
+                                      const q = Number.isFinite(raw)
+                                        ? Math.min(99, Math.max(1, Math.round(raw)))
+                                        : 1
+                                      setPainelLinhasServicos((prev) =>
+                                        prev.map((x) =>
+                                          x.uid === row.uid ? { ...x, quantity: q } : x
+                                        )
+                                      )
+                                      sugerirValorPainelPeloCatalogo()
+                                    }}
+                                    disabled={actionLoadingId === agendamentoSelecionado.id}
+                                    className="mt-1 h-9 bg-input border-border px-2 text-foreground"
+                                  />
+                                </div>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="mb-px h-9 w-9 shrink-0 text-destructive hover:bg-destructive/10"
+                                  disabled={actionLoadingId === agendamentoSelecionado.id}
+                                  onClick={() =>
+                                    setPainelLinhasServicos((prev) =>
+                                      prev.filter((x) => x.uid !== row.uid)
+                                    )
+                                  }
+                                  title="Remover linha"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            )
+                          })}
+                        </div>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          className="h-11 w-full border-border/60 text-base sm:w-auto"
+                          disabled={
+                            actionLoadingId === agendamentoSelecionado.id ||
+                            !primeiroServicoAtivoPainelId
+                          }
+                          onClick={() =>
+                            setPainelLinhasServicos((rows) => [
+                              ...rows,
+                              {
+                                uid: newPainelLinhaUid(),
+                                service_id: primeiroServicoAtivoPainelId,
+                                quantity: 1,
+                              },
+                            ])
+                          }
+                        >
+                          <Plus className="mr-2 size-[1.125rem] shrink-0" />
+                          Adicionar serviço
+                        </Button>
+                      </section>
+
+                      <Separator className="bg-border/70" />
+
+                      <section className="space-y-3">
+                        <div className="flex flex-wrap items-baseline gap-2">
+                          <ShoppingBag className="h-4 w-4 text-primary shrink-0" aria-hidden />
+                          <h3 className="text-sm font-semibold text-foreground">Produtos</h3>
+                          <Separator orientation="vertical" className="hidden h-4 sm:inline bg-border/80" />
+                          <p className="text-xs text-muted-foreground">
+                            Opcional — extras vendidos no salão (gel, pomada etc.).
+                          </p>
+                        </div>
+                        {produtosAtivosCount === 0 ? (
+                          <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+                            Catálogo de produtos vazio. Cadastre em Configurações (aba Produtos) ou ignore esta parte.
+                          </p>
+                        ) : null}
+                        <div className="divide-y divide-border rounded-md border border-border/60 bg-muted/30">
+                          {painelLinhasProdutos.map((row) => {
+                            const opcoes = produtosPainelOrdenados.filter(
+                              (p) => p.active || p.id === row.retail_product_id
+                            )
+                            return (
+                              <div
+                                key={row.uid}
+                                className="flex flex-wrap items-end gap-3 p-3 sm:flex-nowrap"
+                              >
+                                <div className="min-w-[160px] flex-1">
+                                  <Label className="text-xs text-muted-foreground">Produto</Label>
+                                  <select
+                                    value={row.retail_product_id}
+                                    onChange={(e) => {
+                                      const v = e.target.value
+                                      setPainelLinhasProdutos((prev) =>
+                                        prev.map((x) =>
+                                          x.uid === row.uid ? { ...x, retail_product_id: v } : x
+                                        )
+                                      )
+                                    }}
+                                    disabled={actionLoadingId === agendamentoSelecionado.id}
+                                    className="mt-1 w-full rounded-md border border-border bg-input px-2 py-2 text-sm text-foreground"
+                                  >
+                                    <option value="">Selecionar…</option>
+                                    {opcoes.map((p) => (
+                                      <option key={p.id} value={p.id}>
+                                        {p.name}
+                                        {!p.active ? " (inativo)" : ""}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <div className="w-20 sm:w-24">
+                                  <Label className="text-xs text-muted-foreground">Qtd</Label>
+                                  <Input
+                                    type="number"
+                                    inputMode="numeric"
+                                    min={1}
+                                    max={99}
+                                    value={row.quantity}
+                                    onChange={(e) => {
+                                      const raw = Number(e.target.value)
+                                      const q = Number.isFinite(raw)
+                                        ? Math.min(99, Math.max(1, Math.round(raw)))
+                                        : 1
+                                      setPainelLinhasProdutos((prev) =>
+                                        prev.map((x) =>
+                                          x.uid === row.uid ? { ...x, quantity: q } : x
+                                        )
+                                      )
+                                    }}
+                                    disabled={actionLoadingId === agendamentoSelecionado.id}
+                                    className="mt-1 h-9 bg-input border-border px-2 text-foreground"
+                                  />
+                                </div>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="mb-px h-9 w-9 shrink-0 text-destructive hover:bg-destructive/10"
+                                  disabled={actionLoadingId === agendamentoSelecionado.id}
+                                  onClick={() =>
+                                    setPainelLinhasProdutos((prev) =>
+                                      prev.filter((x) => x.uid !== row.uid)
+                                    )
+                                  }
+                                  title="Remover linha"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            )
+                          })}
+                        </div>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          className="h-11 w-full border-border/60 text-base sm:w-auto"
+                          disabled={
+                            actionLoadingId === agendamentoSelecionado.id ||
+                            !primeiroProdutoAtivoPainelId
+                          }
+                          onClick={() =>
+                            setPainelLinhasProdutos((rows) => [
+                              ...rows,
+                              {
+                                uid: newPainelLinhaUid(),
+                                retail_product_id: primeiroProdutoAtivoPainelId,
+                                quantity: 1,
+                              },
+                            ])
+                          }
+                        >
+                          <Plus className="mr-2 size-[1.125rem] shrink-0" />
+                          Adicionar produto
+                        </Button>
+                      </section>
+
+                      <Separator className="bg-border/70" />
+
+                      <section className="space-y-4">
+                        <div>
+                          <h3 className="text-sm font-semibold text-foreground">Valor cobrado</h3>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            Digite o total ou calcule pela soma de serviços e produtos do catálogo.
+                          </p>
+                        </div>
+                        <div className="space-y-3">
+                          <div>
+                            <Label htmlFor="painel-valor" className="text-foreground">
+                              Valor total (R$)
+                            </Label>
+                            <Input
+                              id="painel-valor"
+                              type="number"
+                              inputMode="decimal"
+                              min={0}
+                              step={0.01}
+                              value={painelValorInput}
+                              onChange={(e) => setPainelValorInput(e.target.value)}
+                              disabled={actionLoadingId === agendamentoSelecionado.id}
+                              className="mt-2 max-w-xs border-border bg-input text-foreground"
+                            />
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-11 w-full gap-2 border-border px-5 text-base text-foreground sm:w-auto"
+                            disabled={
+                              actionLoadingId === agendamentoSelecionado.id ||
+                              !painelLinhasServicos.some((r) => r.service_id.trim())
+                            }
+                            onClick={() => sugerirValorPainelPeloCatalogo()}
+                          >
+                            Calcular pelo catálogo (serviços + produtos)
+                          </Button>
+                        </div>
+                      </section>
+
+                      <Separator className="bg-border/70" />
+
+                      <div className="flex flex-col gap-2 sm:flex-row sm:justify-end sm:gap-3">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="min-h-12 border-border px-5 text-base order-3 sm:order-none"
+                          disabled={actionLoadingId === agendamentoSelecionado.id}
+                          onClick={() => sincronizarPainelServicoValorComSelecao()}
+                        >
+                          Desfazer alterações aqui
                         </Button>
                         <Button
                           type="button"
                           variant="ghost"
-                          className="text-muted-foreground"
+                          className="min-h-12 px-5 text-base order-2 text-muted-foreground"
                           disabled={actionLoadingId === agendamentoSelecionado.id}
                           onClick={() => {
                             sincronizarPainelServicoValorComSelecao()
                             setPainelServicoValorOpen(false)
                           }}
                         >
-                          Fechar painel
+                          Fechar edição
                         </Button>
                         <Button
                           type="button"
-                          className="bg-primary text-primary-foreground hover:bg-primary/90"
-                          disabled={actionLoadingId === agendamentoSelecionado.id || !painelServicoId}
+                          className="min-h-12 px-5 text-base order-1 bg-primary text-primary-foreground hover:bg-primary/90 sm:order-none"
+                          disabled={
+                            actionLoadingId === agendamentoSelecionado.id ||
+                            !painelLinhasServicos.some((r) => r.service_id.trim())
+                          }
                           onClick={() => void salvarServicoEValorPainel()}
                         >
-                          Salvar alterações
+                          Salvar no agendamento
                         </Button>
                       </div>
                     </div>
@@ -998,38 +1524,41 @@ export default function AgendaPage() {
                 </div>
               )}
 
-              <div className="flex gap-3">
+            </div>
+            </div>
+
+              <div className="flex shrink-0 flex-wrap gap-3 border-t border-border bg-card px-4 py-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-8 lg:px-10">
                 <Button
                   variant="outline"
-                  className="flex-1 border-border text-foreground hover:bg-secondary"
+                  className="min-h-12 flex-1 border-border px-5 text-base text-foreground hover:bg-secondary"
                   onClick={() => setAgendamentoSelecionado(null)}
                 >
-                  Fechar
+                  Voltar
                 </Button>
                 {agendamentoSelecionado.status === "pending" && (
                   <>
                     <Button
-                      className="flex-1 bg-green-500 text-white hover:bg-green-600"
+                      className="min-h-12 flex-1 bg-green-500 px-5 text-base text-white hover:bg-green-600"
                       disabled={actionLoadingId === agendamentoSelecionado.id}
                       onClick={() => setAcaoDetalhesDialog("confirmar")}
                     >
-                      <Check className="w-4 h-4 mr-2" />
+                      <Check className="mr-2 size-5 shrink-0" />
                       Finalizar
                     </Button>
                     <Button
                       variant="outline"
-                      className="flex-1 border-destructive/30 text-destructive hover:bg-destructive/10"
+                      className="min-h-12 flex-1 border-destructive/30 px-5 text-base text-destructive hover:bg-destructive/10"
                       disabled={actionLoadingId === agendamentoSelecionado.id}
                       onClick={() => setAcaoDetalhesDialog("cancelar")}
                     >
-                      Cancelar
+                      Cancelar agendamento
                     </Button>
                   </>
                 )}
                 {agendamentoSelecionado.status === "confirmed" && (
                   <>
                     <Button
-                      className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
+                      className="min-h-12 flex-1 bg-primary px-5 text-base text-primary-foreground hover:bg-primary/90"
                       disabled={actionLoadingId === agendamentoSelecionado.id}
                       onClick={() => setAcaoDetalhesDialog("concluir")}
                     >
@@ -1037,16 +1566,16 @@ export default function AgendaPage() {
                     </Button>
                     <Button
                       variant="outline"
-                      className="flex-1 border-destructive/30 text-destructive hover:bg-destructive/10"
+                      className="min-h-12 flex-1 border-destructive/30 px-5 text-base text-destructive hover:bg-destructive/10"
                       disabled={actionLoadingId === agendamentoSelecionado.id}
                       onClick={() => setAcaoDetalhesDialog("cancelar")}
                     >
-                      Cancelar
+                      Cancelar agendamento
                     </Button>
                   </>
                 )}
               </div>
-            </div>
+            </>
           )}
         </DialogContent>
       </Dialog>
@@ -1080,7 +1609,7 @@ export default function AgendaPage() {
           </AlertDialogHeader>
           <AlertDialogFooter className="gap-2 sm:flex-row sm:justify-end">
             <AlertDialogCancel
-              className="border-border text-foreground hover:bg-secondary"
+              className="min-h-11 border-border px-5 text-base text-foreground hover:bg-secondary"
               disabled={actionLoadingId === agendamentoSelecionado?.id}
             >
               Não
@@ -1090,13 +1619,13 @@ export default function AgendaPage() {
               disabled={
                 actionLoadingId === agendamentoSelecionado?.id || !agendamentoSelecionado || !acaoDetalhesDialog
               }
-              className={
+              className={`min-h-11 px-5 text-base ${
                 acaoDetalhesDialog === "cancelar"
                   ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
                   : acaoDetalhesDialog === "confirmar"
                     ? "bg-green-500 text-white hover:bg-green-600"
                     : "bg-primary text-primary-foreground hover:bg-primary/90"
-              }
+              }`}
               onClick={() => {
                 const sel = agendamentoSelecionado
                 if (!sel || !acaoDetalhesDialog) return
