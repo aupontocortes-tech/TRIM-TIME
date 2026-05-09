@@ -1328,7 +1328,6 @@ export default function BarbeariaPage() {
   if (authPhase === "loading") {
     return (
       <>
-        {clientBookingInstallPrompt}
         <div className="min-h-screen bg-background flex items-center justify-center p-4">
           <div className="text-muted-foreground">Carregando...</div>
         </div>
@@ -1339,7 +1338,6 @@ export default function BarbeariaPage() {
   if (authPhase === "cadastro") {
     return (
       <>
-        {clientBookingInstallPrompt}
         <div className="min-h-screen bg-background">
         <div className="h-32 bg-gradient-to-r from-primary/30 to-primary/10" />
         <div className="max-w-md mx-auto px-4 -mt-8">
@@ -1432,7 +1430,6 @@ export default function BarbeariaPage() {
 
     return (
       <>
-        {clientBookingInstallPrompt}
         <div className="min-h-screen bg-background">
           <div className="h-32 bg-gradient-to-r from-primary/30 to-primary/10" />
           <div className="max-w-md mx-auto px-4 -mt-8">
@@ -1539,7 +1536,6 @@ export default function BarbeariaPage() {
   if (authPhase === "login") {
     return (
       <>
-        {clientBookingInstallPrompt}
         <div className="min-h-screen bg-background">
         <div className="h-32 bg-gradient-to-r from-primary/30 to-primary/10" />
         <div className="max-w-md mx-auto px-4 -mt-8">
@@ -1786,7 +1782,6 @@ export default function BarbeariaPage() {
   if (!clienteLogado) {
     return (
       <>
-        {clientBookingInstallPrompt}
         <div className="min-h-screen bg-background flex items-center justify-center p-4">
           <div className="text-muted-foreground">Carregando...</div>
         </div>

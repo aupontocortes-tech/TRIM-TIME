@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { createPortal } from "react-dom"
+import { usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import {
@@ -18,7 +19,7 @@ import {
 const STORAGE_HIDE_KEY = "trimtime_install_prompt_hide_v5"
 const STORAGE_HIDE_DAYS = 14
 /** Sufixo: só esconde na mesma aba até fechar o navegador — link de agendamento volta a mostrar em aba nova. */
-const SESSION_DISMISS_SUFFIX = "_session_dismiss_v1"
+const SESSION_DISMISS_SUFFIX = "_session_dismiss_v2"
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>
@@ -67,6 +68,7 @@ export function AppInstallPrompt({
   storageSuffix = "",
   variant = "default",
 }: AppInstallPromptProps) {
+  const pathname = usePathname() || ""
   const hideKey = STORAGE_HIDE_KEY + storageSuffix
   const [show, setShow] = useState(false)
   const [mounted, setMounted] = useState(false)
@@ -90,6 +92,7 @@ export function AppInstallPrompt({
   useEffect(() => {
     if (typeof window === "undefined") return
     if (isStandaloneMode()) return
+    if (variant === "clientBooking" && !/^\/b\/[^/]+/.test(pathname)) return
 
     const forceShow = shouldForceFromUrl()
     const sessionDismissKey = hideKey + SESSION_DISMISS_SUFFIX
@@ -134,7 +137,7 @@ export function AppInstallPrompt({
     }
     window.addEventListener("beforeinstallprompt", onBip)
     return () => window.removeEventListener("beforeinstallprompt", onBip)
-  }, [hideKey, variant])
+  }, [hideKey, variant, pathname])
 
   const copyBookingInstallLink = useCallback(() => {
     if (typeof window === "undefined") return

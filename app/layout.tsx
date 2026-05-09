@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import { Inter, Playfair_Display, Cormorant_Garamond } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
-import { GlobalAppInstallPrompt } from '@/components/global-app-install-prompt'
 import { PwaServiceWorkerRegister } from '@/components/pwa-service-worker-register'
 import './globals.css'
 
@@ -27,12 +26,7 @@ export const metadata: Metadata = {
   title: 'Trim Time - Sistema de Agendamento para Barbearias',
   description: 'A plataforma completa para barbearias. Agendamentos online, gestão financeira e muito mais.',
   keywords: ['barbearia', 'agendamento', 'barber', 'corte', 'cabelo', 'barba', 'Trim Time'],
-  manifest: '/manifest.json',
-  appleWebApp: {
-    capable: true,
-    title: 'Trim Time - Painel',
-    statusBarStyle: 'black-translucent',
-  },
+  // Manifest PWA: só em /painel (painel/layout) e /b/[slug] (layout do link do cliente).
   // Ícones: use app/icon.png e app/apple-icon.png (convenção oficial do Next.js)
 }
 
@@ -52,7 +46,6 @@ export default function RootLayout({
       <body className={`${inter.variable} ${playfair.variable} ${trimTimeWordmark.variable} font-sans antialiased`}>
         {children}
         <PwaServiceWorkerRegister />
-        <GlobalAppInstallPrompt />
         <Analytics />
       </body>
     </html>
