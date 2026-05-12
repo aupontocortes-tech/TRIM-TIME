@@ -24,11 +24,23 @@ export function getEffectivePlan(subscription: Subscription | null): Subscriptio
   return null
 }
 
-/** Plano efetivo para limites e `hasFeature`: super_admin, conta teste, env, trial/assinatura. */
+/**
+ * Plano efetivo para limites e `hasFeature`.
+ *
+ * Barbearia com role `super_admin` ou `is_test`: **só** a assinatura no banco (e trial → Premium).
+ * Assim o dono do SaaS consegue alternar Básico / Pro / Premium no painel sem ser preso em
+ * TRIMTIME_UNLOCK, e-mail ou nome da allowlist interna.
+ *
+ * Demais contas: unlock .env → allowlist e-mail/nome → assinatura.
+ */
 export function getEffectivePlanForBarbershop(
   barbershop: { role?: string; is_test?: boolean; name?: string | null; email?: string | null } | null,
   subscription: Subscription | null
 ): SubscriptionPlan | null {
+  if (barbershop?.role === "super_admin" || barbershop?.is_test === true) {
+    return getEffectivePlan(subscription)
+  }
+
   const normalizedName = (barbershop?.name ?? "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
@@ -37,10 +49,9 @@ export function getEffectivePlanForBarbershop(
   const normalizedNameCompact = normalizedName.replace(/[^a-z0-9]+/g, " ").trim()
   const normalizedEmail = (barbershop?.email ?? "").trim().toLowerCase()
 
-  // Contas internas com acesso total (aceita variações de pontuação/plural/acento).
   const namedFullAccessPatterns = [
-    /^auto\s*cortes?$/i, // Auto Corte / Auto Cortes / Auto.Corte
-    /^bsb\s*t+h?iago\s*lins$/i, // BSB Tiago Lins / BSB Thiago Lins
+    /^auto\s*cortes?$/i,
+    /^bsb\s*t+h?iago\s*lins$/i,
   ]
   const isNamedFullAccess = namedFullAccessPatterns.some((re) =>
     re.test(normalizedNameCompact)
@@ -51,8 +62,6 @@ export function getEffectivePlanForBarbershop(
   const isFullAccessEmail = fullAccessEmails.has(normalizedEmail)
 
   if (isUnlockAllPlanFeaturesEnv()) return "premium"
-  if (barbershop?.role === "super_admin") return "premium"
-  if (barbershop?.is_test === true) return "premium"
   if (isFullAccessEmail) return "premium"
   if (isNamedFullAccess) return "premium"
   return getEffectivePlan(subscription)

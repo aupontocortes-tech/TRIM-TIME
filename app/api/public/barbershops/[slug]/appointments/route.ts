@@ -12,8 +12,11 @@ import { cpfDigits } from "@/lib/cpf"
 import { trySendWhatsAppAppointmentConfirmation } from "@/lib/whatsapp-appointment-events"
 import { parseAppointmentDate, utcDayRangeForYmd } from "@/lib/appointment-prisma-helpers"
 import { expireStaleAppointmentsForBarbershop } from "@/lib/appointment-expiry"
+import { clientHasBlockingAppointmentOnDay } from "@/lib/client-same-day-appointment"
 import { appointmentStartsAtUtcFromYmd } from "@/lib/appointment-reminder-time"
 import type { BarbershopSettings } from "@/lib/db/types"
+import { resolveEffectivePlanForBarbershop } from "@/lib/barbershop-effective-plan-server"
+import { hasFeature } from "@/lib/plans"
 
 function localYmd(d: Date): string {
   const y = d.getFullYear()
@@ -133,6 +136,9 @@ export async function POST(
     }
 
     await expireStaleAppointmentsForBarbershop(shop.id)
+
+    const planForWaitlist = await resolveEffectivePlanForBarbershop(shop.id)
+    const waitlistAvailable = !!(planForWaitlist && hasFeature(planForWaitlist, "waiting_list"))
 
     const body = (await request.json().catch(() => ({}))) as {
       barber_id?: string
@@ -357,23 +363,17 @@ export async function POST(
       }
     }
 
-    const existingSameDay = await prisma.appointment.findFirst({
-      where: {
-        barbershopId: shop.id,
-        clientId: client.id,
-        date: { gte: apptDayBounds.gte, lt: apptDayBounds.lt },
-        status: { not: "canceled" },
-        ...(remarcaAppointmentIds.length
-          ? { id: { notIn: remarcaAppointmentIds } }
-          : {}),
-      },
-      select: { id: true },
+    const existingSameDay = await clientHasBlockingAppointmentOnDay({
+      barbershopId: shop.id,
+      clientId: client.id,
+      dayBounds: apptDayBounds,
+      ignoreAppointmentIds: remarcaAppointmentIds.length ? remarcaAppointmentIds : undefined,
     })
     if (existingSameDay) {
       return NextResponse.json(
         {
           error:
-            "Você já possui um agendamento neste dia. Escolha outra data ou entre em contato com a barbearia.",
+            "Você já possui um agendamento ativo neste dia. Remarque pelo app, escolha outra data ou fale com a barbearia.",
         },
         { status: 409 }
       )
@@ -399,7 +399,11 @@ export async function POST(
     })
     if (conflicts.length > 0) {
       return NextResponse.json(
-        { error: "Este horário não está mais disponível. Escolha outro." },
+        {
+          error: "Este horário não está mais disponível. Escolha outro.",
+          code: "SLOT_UNAVAILABLE",
+          waitlist_available: waitlistAvailable,
+        },
         { status: 409 }
       )
     }

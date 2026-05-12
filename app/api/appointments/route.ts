@@ -14,6 +14,7 @@ import {
 import { withServiceDescriptionsFromDb } from "@/lib/service-queries"
 import { trySendWhatsAppAppointmentConfirmation } from "@/lib/whatsapp-appointment-events"
 import { expireStaleAppointmentsForBarbershop } from "@/lib/appointment-expiry"
+import { clientHasBlockingAppointmentOnDay } from "@/lib/client-same-day-appointment"
 
 export async function GET(request: Request) {
   try {
@@ -89,18 +90,14 @@ export async function POST(request: Request) {
     }
     const apptDate = parseAppointmentDate(body.date)
     const dayRange = utcDayRangeForYmd(body.date)
-    const existing = await prisma.appointment.findFirst({
-      where: {
-        barbershopId,
-        clientId: body.client_id,
-        date: { gte: dayRange.gte, lt: dayRange.lt },
-        status: { not: "canceled" },
-      },
-      select: { id: true },
+    const existing = await clientHasBlockingAppointmentOnDay({
+      barbershopId,
+      clientId: body.client_id,
+      dayBounds: dayRange,
     })
     if (existing) {
       return NextResponse.json(
-        { error: "Você já possui um agendamento neste dia. Cancele-o para poder fazer outro." },
+        { error: "Você já possui um agendamento ativo neste dia. Cancele-o ou aguarde o horário passar para marcar outro." },
         { status: 400 }
       )
     }

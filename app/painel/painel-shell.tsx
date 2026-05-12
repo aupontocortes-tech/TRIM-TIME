@@ -31,6 +31,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { BrandLogo } from "@/components/brand-logo"
+import { PLAN_SIMULATION_COOKIE_NAME } from "@/lib/plan-simulation-constants"
 
 /** Role para exibição do menu: super_admin e admin_barbershop veem tudo; user (barbeiro) só agenda e clientes. */
 type MenuRole = "super_admin" | "admin_barbershop" | "user"
@@ -299,6 +300,32 @@ function PainelLayoutInner({ children }: { children: React.ReactNode }) {
 export default function PainelLayout({ children }: { children: React.ReactNode }) {
   const { barbershop, loading: barbershopLoading } = useBarbershop()
   const router = useRouter()
+
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "development") return
+    const COOKIE = PLAN_SIMULATION_COOKIE_NAME
+    const w = window as unknown as {
+      trimtimeSimulatePlan?: (plan: string) => void
+    }
+    w.trimtimeSimulatePlan = (plan: string) => {
+      if (!plan || plan === "off" || plan === "clear") {
+        document.cookie = `${COOKIE}=; path=/; max-age=0`
+      } else if (plan === "basic" || plan === "pro" || plan === "premium") {
+        document.cookie = `${COOKIE}=${plan}; path=/; max-age=${86400 * 7}; SameSite=Lax`
+      } else {
+        console.warn('[TrimTime] trimtimeSimulatePlan: use "basic" | "pro" | "premium" | "clear"')
+        return
+      }
+      console.log("[TrimTime] Plano simulado:", plan || "(desligado). Recarregando…")
+      window.location.reload()
+    }
+    console.info(
+      '[TrimTime] Dev: trimtimeSimulatePlan("pro") — força plano nas APIs (ignora bypass super admin). trimtimeSimulatePlan("clear") desliga.'
+    )
+    return () => {
+      delete w.trimtimeSimulatePlan
+    }
+  }, [])
 
   useEffect(() => {
     if (barbershopLoading) return

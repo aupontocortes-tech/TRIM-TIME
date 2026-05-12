@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireBarbershopId } from "@/lib/tenant"
+import { resolveEffectivePlanForActiveSession } from "@/lib/barbershop-effective-plan-server"
+import { getUpgradeMessage, hasFeature } from "@/lib/plans"
 
 export const dynamic = "force-dynamic"
 
@@ -8,6 +10,10 @@ export const dynamic = "force-dynamic"
 export async function GET(request: Request) {
   try {
     const barbershopId = await requireBarbershopId()
+    const plan = await resolveEffectivePlanForActiveSession(barbershopId)
+    if (!plan || !hasFeature(plan, "advanced_reports")) {
+      return NextResponse.json({ error: getUpgradeMessage("advanced_reports") }, { status: 403 })
+    }
     const url = new URL(request.url)
     const unitRaw = url.searchParams.get("unit_id")
 

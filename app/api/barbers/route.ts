@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto"
 import { NextResponse } from "next/server"
 import { requireBarbershopId } from "@/lib/tenant"
 import { canAddBarber, canUseBarberCommission, getBarberLimitMessage, getUpgradeMessage } from "@/lib/plans"
@@ -11,10 +12,22 @@ import { assertValidProfilePhotoDataUrl } from "@/lib/photo-data-url"
 export async function GET() {
   try {
     const barbershopId = await requireBarbershopId()
-    const data = await prisma.barber.findMany({
+    let data = await prisma.barber.findMany({
       where: { barbershopId },
       orderBy: { name: "asc" },
     })
+    const missingPortal = data.filter((b) => !b.portalToken)
+    if (missingPortal.length > 0) {
+      await Promise.all(
+        missingPortal.map((b) =>
+          prisma.barber.update({ where: { id: b.id }, data: { portalToken: randomUUID() } })
+        )
+      )
+      data = await prisma.barber.findMany({
+        where: { barbershopId },
+        orderBy: { name: "asc" },
+      })
+    }
     let positions = new Map<string, number>()
     try {
       positions = await fetchBarberPhotoPositionsByBarbershopId(barbershopId)
@@ -22,21 +35,26 @@ export async function GET() {
       /* coluna/tabela inacessível via SQL: usa só o Prisma */
     }
     return NextResponse.json(
-      data.map((b) => ({
-        id: b.id,
-        barbershop_id: b.barbershopId,
-        name: b.name,
-        phone: b.phone,
-        email: b.email,
-        cpf: b.cpf,
-        photo_url: b.photoUrl,
-        photo_position: positions.get(b.id) ?? (b as { photoPosition?: number }).photoPosition ?? 50,
-        commission: Number(b.commission),
-        active: b.active,
-        role: b.role,
-        created_at: b.createdAt.toISOString(),
-        updated_at: b.updatedAt.toISOString(),
-      })) as Barber[]
+      data.map((b) => {
+        const pt = b.portalToken ?? null
+        return {
+          id: b.id,
+          barbershop_id: b.barbershopId,
+          name: b.name,
+          phone: b.phone,
+          email: b.email,
+          cpf: b.cpf,
+          photo_url: b.photoUrl,
+          photo_position: positions.get(b.id) ?? (b as { photoPosition?: number }).photoPosition ?? 50,
+          commission: Number(b.commission),
+          active: b.active,
+          role: b.role,
+          portal_token: pt,
+          app_profissional_path: pt ? `/profissional/${pt}` : null,
+          created_at: b.createdAt.toISOString(),
+          updated_at: b.updatedAt.toISOString(),
+        }
+      }) as Barber[]
     )
   } catch (e) {
     return NextResponse.json(
@@ -49,11 +67,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const barbershopId = await requireBarbershopId()
-    const [barbershop, plan, currentCount] = await Promise.all([
-      prisma.barbershop.findUnique({
-        where: { id: barbershopId },
-        select: { role: true, isTest: true },
-      }),
+    const [plan, currentCount] = await Promise.all([
       resolveEffectivePlanForActiveSession(barbershopId),
       prisma.barber.count({ where: { barbershopId } }),
     ])
@@ -100,11 +114,7 @@ export async function POST(request: Request) {
     const cpfNorm: string | null = cpfDigitsOnly.length >= 11 ? cpfDigitsOnly.slice(0, 11) : null
     const emailTrim = body.email?.trim().toLowerCase() || null
 
-    const commissionAllowed = canUseBarberCommission(
-      plan,
-      barbershop?.role ?? null,
-      barbershop?.isTest ?? false
-    )
+    const commissionAllowed = canUseBarberCommission(plan)
     let commission = body.commission ?? 0
     if (!commissionAllowed) {
       if (body.commission != null && Number(body.commission) !== 0) {
@@ -133,7 +143,9 @@ export async function POST(request: Request) {
       photoPosition,
       commission,
       active: true,
+      portalToken: randomUUID(),
     })
+    const pt = data.portalToken ?? null
     return NextResponse.json({
       id: data.id,
       barbershop_id: data.barbershopId,
@@ -146,6 +158,8 @@ export async function POST(request: Request) {
       commission: Number(data.commission),
       active: data.active,
       role: data.role,
+      portal_token: pt,
+      app_profissional_path: pt ? `/profissional/${pt}` : null,
       created_at: data.createdAt.toISOString(),
       updated_at: data.updatedAt.toISOString(),
     } as Barber)

@@ -41,7 +41,7 @@ import {
 
 
 import { Separator } from "@/components/ui/separator"
-import type { Appointment, Barber, Client, RetailProduct, Service } from "@/lib/db/types"
+import type { Appointment, Barber, Client, RetailProduct, Service, WaitingListItem } from "@/lib/db/types"
 import { useUnits } from "@/hooks/use-units"
 import { isSlotPastGraceFromYmd } from "@/lib/appointment-reminder-time"
 
@@ -203,6 +203,11 @@ function mapAgendaItem(appointment: Appointment): AgendaItem {
 
 export default function AgendaPage() {
   const { units, selectedUnitId, changeUnit, loading: unitsLoading } = useUnits()
+  const [secaoAgenda, setSecaoAgenda] = useState<"agenda" | "lista_espera">("agenda")
+  const [waitlistRows, setWaitlistRows] = useState<WaitingListItem[]>([])
+  const [waitlistLoading, setWaitlistLoading] = useState(false)
+  const [waitlistError, setWaitlistError] = useState("")
+  const [waitlistActionId, setWaitlistActionId] = useState<string | null>(null)
   const [visao, setVisao] = useState<"dia" | "semana" | "mes">("dia")
   const [dataSelecionada, setDataSelecionada] = useState(new Date())
   const [filtroProf, setFiltroProf] = useState("Todos")
@@ -242,6 +247,26 @@ export default function AgendaPage() {
     () => ["Todos", ...barbers.filter((b) => b.active).map((b) => b.name)],
     [barbers]
   )
+
+  const carregarListaEspera = async () => {
+    setWaitlistLoading(true)
+    setWaitlistError("")
+    try {
+      const res = await fetch("/api/waiting-list", { credentials: "include", cache: "no-store" })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setWaitlistRows([])
+        setWaitlistError(typeof data.error === "string" ? data.error : "Não foi possível carregar a lista de espera.")
+        return
+      }
+      setWaitlistRows(Array.isArray(data) ? (data as WaitingListItem[]) : [])
+    } catch {
+      setWaitlistRows([])
+      setWaitlistError("Erro de rede ao carregar a lista de espera.")
+    } finally {
+      setWaitlistLoading(false)
+    }
+  }
 
   const carregarDependencias = async () => {
     const [barbersRes, servicesRes, clientsRes, retailRes] = await Promise.all([
@@ -656,6 +681,168 @@ export default function AgendaPage() {
         </Button>
       </div>
 
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          size="sm"
+          variant={secaoAgenda === "agenda" ? "default" : "outline"}
+          onClick={() => setSecaoAgenda("agenda")}
+        >
+          Agenda
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant={secaoAgenda === "lista_espera" ? "default" : "outline"}
+          onClick={() => {
+            setSecaoAgenda("lista_espera")
+            void carregarListaEspera()
+          }}
+        >
+          Lista de espera
+        </Button>
+      </div>
+
+      {secaoAgenda === "lista_espera" ? (
+        <Card className="bg-card border-border">
+          <CardHeader>
+            <CardTitle className="text-foreground">Lista de espera</CardTitle>
+            <CardDescription>Fila por profissional e serviço. VIP aumenta a prioridade na mesma fila.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {waitlistLoading ? (
+              <p className="text-sm text-muted-foreground flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" /> Carregando…
+              </p>
+            ) : null}
+            {waitlistError ? (
+              <p className="text-sm text-destructive">{waitlistError}</p>
+            ) : null}
+            {!waitlistLoading && !waitlistError ? (
+              <div className="overflow-x-auto rounded-md border border-border">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50 text-left">
+                    <tr>
+                      <th className="p-2 font-medium">Cliente</th>
+                      <th className="p-2 font-medium">Serviço</th>
+                      <th className="p-2 font-medium">Profissional</th>
+                      <th className="p-2 font-medium">Data pref.</th>
+                      <th className="p-2 font-medium">Horário pref.</th>
+                      <th className="p-2 font-medium">Status</th>
+                      <th className="p-2 font-medium">VIP</th>
+                      <th className="p-2 font-medium">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {waitlistRows.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="p-4 text-muted-foreground text-center">
+                          Nenhum cliente na fila.
+                        </td>
+                      </tr>
+                    ) : (
+                      waitlistRows.map((row) => (
+                        <tr key={row.id} className="border-t border-border">
+                          <td className="p-2 align-top">{row.client?.name ?? "—"}</td>
+                          <td className="p-2 align-top">{row.service?.name ?? "—"}</td>
+                          <td className="p-2 align-top">{row.barber?.name ?? "—"}</td>
+                          <td className="p-2 align-top">{row.desired_date ?? "—"}</td>
+                          <td className="p-2 align-top">{row.desired_time?.slice(0, 5) ?? "—"}</td>
+                          <td className="p-2 align-top capitalize">{row.status}</td>
+                          <td className="p-2 align-top">{row.priority}</td>
+                          <td className="p-2 align-top">
+                            <div className="flex flex-wrap gap-1">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-8 text-xs"
+                                disabled={waitlistActionId === row.id}
+                                onClick={() => {
+                                  setWaitlistActionId(row.id)
+                                  void fetch(`/api/waiting-list/${row.id}/notify`, {
+                                    method: "POST",
+                                    credentials: "include",
+                                  })
+                                    .then(async (res) => {
+                                      if (!res.ok) {
+                                        const j = await res.json().catch(() => ({}))
+                                        setError(typeof j.error === "string" ? j.error : "Falha ao notificar")
+                                      } else {
+                                        setFeedback("Notificação registrada para o cliente.")
+                                      }
+                                      await carregarListaEspera()
+                                    })
+                                    .finally(() => setWaitlistActionId(null))
+                                }}
+                              >
+                                Notificar
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-8 text-xs"
+                                disabled={waitlistActionId === row.id}
+                                onClick={() => {
+                                  setWaitlistActionId(row.id)
+                                  void fetch(`/api/waiting-list/${row.id}`, {
+                                    method: "PATCH",
+                                    credentials: "include",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ priority: row.priority + 1 }),
+                                  })
+                                    .then(async (res) => {
+                                      if (!res.ok) {
+                                        const j = await res.json().catch(() => ({}))
+                                        setError(typeof j.error === "string" ? j.error : "Falha ao priorizar")
+                                      }
+                                      await carregarListaEspera()
+                                    })
+                                    .finally(() => setWaitlistActionId(null))
+                                }}
+                              >
+                                VIP +1
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="destructive"
+                                size="sm"
+                                className="h-8 text-xs"
+                                disabled={waitlistActionId === row.id}
+                                onClick={() => {
+                                  setWaitlistActionId(row.id)
+                                  void fetch(`/api/waiting-list/${row.id}`, {
+                                    method: "PATCH",
+                                    credentials: "include",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ status: "canceled" }),
+                                  })
+                                    .then(async (res) => {
+                                      if (!res.ok) {
+                                        const j = await res.json().catch(() => ({}))
+                                        setError(typeof j.error === "string" ? j.error : "Falha ao remover")
+                                      }
+                                      await carregarListaEspera()
+                                    })
+                                    .finally(() => setWaitlistActionId(null))
+                                }}
+                              >
+                                Remover
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+      ) : (
+        <>
       {error ? (
         <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">
           {error}
@@ -1783,6 +1970,8 @@ export default function AgendaPage() {
           </form>
         </DialogContent>
       </Dialog>
+        </>
+      )}
     </div>
   )
 }

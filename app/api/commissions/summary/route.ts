@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { createServiceRoleClient } from "@/lib/supabase/server"
 import { requireBarbershopId } from "@/lib/tenant"
 import { fetchBarbershopPlanContext } from "@/lib/barbershop-plan-server"
+import { mergePlanContextWithSimulation } from "@/lib/plan-simulation-server"
 import { canUseBarberCommission } from "@/lib/plans"
 import { aggregateCommissionsForRange, type CommissionsSummaryResponse } from "@/lib/commissions"
 import { resolveSelectedUnitId } from "@/lib/unit-context"
@@ -9,8 +10,9 @@ import { resolveSelectedUnitId } from "@/lib/unit-context"
 export async function GET(request: Request) {
   try {
     const barbershopId = await requireBarbershopId()
-    const { plan, barbershopRole } = await fetchBarbershopPlanContext(barbershopId)
-    const enabled = canUseBarberCommission(plan, barbershopRole)
+    const baseCtx = await fetchBarbershopPlanContext(barbershopId)
+    const { plan } = await mergePlanContextWithSimulation(baseCtx)
+    const enabled = canUseBarberCommission(plan)
 
     const { searchParams } = new URL(request.url)
     const now = new Date()

@@ -30,6 +30,7 @@ export type BarberCreateWithPositionInput = {
   photoPosition: number
   commission: number
   active: boolean
+  portalToken?: string | null
 }
 
 /**
@@ -53,8 +54,13 @@ export async function prismaBarberUpdateWithPhotoPositionFallback(
 }
 
 export async function prismaBarberCreateWithPhotoPositionFallback(input: BarberCreateWithPositionInput) {
-  const { photoPosition, ...rest } = input
-  const row = await prisma.barber.create({ data: rest })
+  const { photoPosition, portalToken, ...rest } = input
+  const row = await prisma.barber.create({
+    data: {
+      ...rest,
+      ...(portalToken ? { portalToken } : {}),
+    },
+  })
   await setBarberPhotoPositionRow(row.id, photoPosition)
   return prisma.barber.findUniqueOrThrow({ where: { id: row.id } })
 }

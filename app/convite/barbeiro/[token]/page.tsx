@@ -28,6 +28,7 @@ export default function ConviteBarbeiroPage() {
   const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [done, setDone] = useState(false)
+  const [portalToken, setPortalToken] = useState<string | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -66,6 +67,24 @@ export default function ConviteBarbeiroPage() {
     }
   }, [token])
 
+  useEffect(() => {
+    if (!token || typeof document === "undefined") return
+    const href = `/convite/barbeiro/${encodeURIComponent(token)}/manifest`
+    let link = document.querySelector(
+      'link[rel="manifest"][data-trimtime-invite="1"]'
+    ) as HTMLLinkElement | null
+    if (!link) {
+      link = document.createElement("link")
+      link.rel = "manifest"
+      link.setAttribute("data-trimtime-invite", "1")
+      document.head.appendChild(link)
+    }
+    link.href = href
+    return () => {
+      link?.remove()
+    }
+  }, [token])
+
   const onPickPhoto = useCallback(async (f: File | null) => {
     if (!f || !f.type.startsWith("image/")) {
       setFormError("Escolha um arquivo de imagem (JPG, PNG ou WebP).")
@@ -100,11 +119,12 @@ export default function ConviteBarbeiroPage() {
           photo_url: photoDataUrl,
         }),
       })
-      const j = (await res.json().catch(() => ({}))) as { error?: string }
+      const j = (await res.json().catch(() => ({}))) as { error?: string; portal_token?: string | null }
       if (!res.ok) {
         setFormError(typeof j.error === "string" ? j.error : "Não foi possível concluir o cadastro")
         return
       }
+      setPortalToken(typeof j.portal_token === "string" ? j.portal_token : null)
       setDone(true)
     } catch {
       setFormError("Erro de rede. Tente novamente.")
@@ -150,11 +170,40 @@ export default function ConviteBarbeiroPage() {
               Você já faz parte da equipe de <strong className="text-foreground">{meta.barbershop_name}</strong>.
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground text-center">
               O dono da barbearia verá seus dados e sua foto na equipe. Os clientes verão sua foto ao escolher o
               profissional no agendamento online.
             </p>
+            {portalToken ? (
+              <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-2">
+                <p className="text-sm font-medium text-foreground text-center">Seu app (agenda no celular)</p>
+                <p className="text-xs text-muted-foreground text-center">
+                  Guarde este link. Entre com e-mail, telefone, senha (definida no 1º acesso) e código de 6 dígitos por
+                  e-mail — igual ao cliente.
+                </p>
+                <div className="flex flex-col gap-2">
+                  <Button
+                    type="button"
+                    className="w-full"
+                    asChild
+                  >
+                    <a href={`/profissional/${encodeURIComponent(portalToken)}`}>Abrir app do profissional</a>
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full text-xs"
+                    onClick={() => {
+                      const u = `${typeof window !== "undefined" ? window.location.origin : ""}/profissional/${portalToken}`
+                      void navigator.clipboard.writeText(u)
+                    }}
+                  >
+                    Copiar link do app
+                  </Button>
+                </div>
+              </div>
+            ) : null}
           </CardContent>
         </Card>
       </div>

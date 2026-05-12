@@ -2,6 +2,8 @@ import { NextResponse } from "next/server"
 import type { AppointmentStatus, Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { requireBarbershopId } from "@/lib/tenant"
+import { resolveEffectivePlanForActiveSession } from "@/lib/barbershop-effective-plan-server"
+import { getUpgradeMessage, hasFeature } from "@/lib/plans"
 import { prismaAppointmentUnitFilter, resolveSelectedUnitId } from "@/lib/unit-context"
 import { parseAppointmentDate } from "@/lib/appointment-prisma-helpers"
 import { COMMISSION_APPOINTMENT_STATUSES } from "@/lib/commissions"
@@ -22,6 +24,10 @@ function addDaysUTC(d: Date, delta: number): Date {
 export async function GET(request: Request) {
   try {
     const barbershopId = await requireBarbershopId()
+    const plan = await resolveEffectivePlanForActiveSession(barbershopId)
+    if (!plan || !hasFeature(plan, "financial")) {
+      return NextResponse.json({ error: getUpgradeMessage("financial") }, { status: 403 })
+    }
     const { searchParams } = new URL(request.url)
     let from = searchParams.get("from")
     let to = searchParams.get("to")

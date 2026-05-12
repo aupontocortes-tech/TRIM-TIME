@@ -3,6 +3,7 @@ import { createServiceRoleClient } from "@/lib/supabase/server"
 import { requireBarbershopId } from "@/lib/tenant"
 import type { DashboardStats } from "@/lib/db/types"
 import { fetchBarbershopPlanContext } from "@/lib/barbershop-plan-server"
+import { mergePlanContextWithSimulation } from "@/lib/plan-simulation-server"
 import { canUseBarberCommission } from "@/lib/plans"
 import { aggregateCommissionsForRange } from "@/lib/commissions"
 import { resolveSelectedUnitId } from "@/lib/unit-context"
@@ -100,8 +101,9 @@ export async function GET(request: Request) {
       }
     }
 
-    const { plan, barbershopRole } = await fetchBarbershopPlanContext(barbershopId)
-    const commissionEnabled = canUseBarberCommission(plan, barbershopRole)
+    const baseCtx = await fetchBarbershopPlanContext(barbershopId)
+    const { plan } = await mergePlanContextWithSimulation(baseCtx)
+    const commissionEnabled = canUseBarberCommission(plan)
     let commissionMonth = 0
     if (commissionEnabled) {
       const { total } = await aggregateCommissionsForRange(

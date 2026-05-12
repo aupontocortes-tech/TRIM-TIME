@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto"
 import { NextResponse } from "next/server"
 import { requireBarbershopId } from "@/lib/tenant"
 import type { Barber } from "@/lib/db/types"
@@ -77,7 +78,7 @@ export async function PATCH(
     }
 
     if (body.commission !== undefined) {
-      const allowed = canUseBarberCommission(plan, barbershop?.role ?? null, barbershop?.isTest ?? false)
+      const allowed = canUseBarberCommission(plan)
       const c = Number(body.commission)
       if (!allowed) {
         if (c !== 0) {
@@ -97,9 +98,16 @@ export async function PATCH(
 
     const existing = await prisma.barber.findFirst({
       where: { id, barbershopId },
-      select: { id: true },
+      select: { id: true, portalToken: true },
     })
     if (!existing) return NextResponse.json({ error: "Barbeiro não encontrado" }, { status: 404 })
+
+    if (!existing.portalToken) {
+      await prisma.barber.update({
+        where: { id },
+        data: { portalToken: randomUUID() },
+      })
+    }
 
     const data = await prismaBarberUpdateWithPhotoPositionFallback(id, update)
     let photoPositionFromDb: number | null = null
@@ -113,6 +121,11 @@ export async function PATCH(
       (body.photo_position !== undefined
         ? Math.min(100, Math.max(0, Math.round(Number(body.photo_position))))
         : (data as { photoPosition?: number }).photoPosition ?? 50)
+    const refreshed = await prisma.barber.findFirst({
+      where: { id, barbershopId },
+      select: { portalToken: true },
+    })
+    const pt = refreshed?.portalToken ?? null
     return NextResponse.json({
       id: data.id,
       barbershop_id: data.barbershopId,
@@ -125,6 +138,8 @@ export async function PATCH(
       commission: Number(data.commission),
       active: data.active,
       role: data.role,
+      portal_token: pt,
+      app_profissional_path: pt ? `/profissional/${pt}` : null,
       created_at: data.createdAt.toISOString(),
       updated_at: data.updatedAt.toISOString(),
     } as Barber)

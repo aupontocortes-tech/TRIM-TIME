@@ -36,6 +36,7 @@ enum WaitingListStatus {
   notified
   accepted
   expired
+  canceled
 }
 
 enum NotificationType {
@@ -87,6 +88,7 @@ model Barbershop {
   trimPlayScores      TrimPlayScore[]
   barberInvites       BarberInvite[]
   clientOtpCodes      ClientOtpCode[]
+  barberOtpCodes      BarberOtpCode[]
 
   @@index([email])
   @@index([role])
@@ -108,6 +110,22 @@ model ClientOtpCode {
   @@index([barbershopId, email])
   @@index([expiresAt])
   @@map("client_otp_codes")
+}
+
+/// Auditoria / rate limit OTP do app do profissional (código real no e-mail via Supabase Auth).
+model BarberOtpCode {
+  id           String     @id @default(uuid()) @db.Uuid
+  barbershopId String     @map("barbershop_id") @db.Uuid
+  barbershop   Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  email        String
+  code         String     @db.VarChar(4)
+  expiresAt    DateTime   @map("expires_at") @db.Timestamptz
+  intent       String     @default("barber_portal") @db.VarChar(24)
+  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([barbershopId, email])
+  @@index([expiresAt])
+  @@map("barber_otp_codes")
 }
 
 /// Convite por link para o profissional completar o cadastro (nome, e-mail, telefone, CPF, foto).
@@ -267,10 +285,15 @@ model Barber {
   active       Boolean  @default(true)
   role         String   @default("user") // admin_barbershop | user
   authUserId   String?  @map("auth_user_id")
+  /// Token estável para o app do profissional (link /app/barbeiro/[token]).
+  portalToken  String?  @unique @map("portal_token") @db.Uuid
+  /// Senha do app (scrypt); definida no primeiro acesso após OTP.
+  passwordHash String?  @map("password_hash")
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
   appointments Appointment[]
+  waitingListItems WaitingListItem[]
 
   @@index([barbershopId])
   @@index([barbershopId, role])
@@ -411,17 +434,29 @@ model WaitingListItem {
   barbershop   Barbershop        @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
   clientId     String            @map("client_id") @db.Uuid
   client       Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  barberId     String            @map("barber_id") @db.Uuid
+  barber       Barber            @relation(fields: [barberId], references: [id], onDelete: Restrict)
   serviceId    String            @map("service_id") @db.Uuid
   service      Service           @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  /// IDs adicionais quando o cliente escolhe vários serviços (ordem preservada).
+  extraServiceIds Json?         @default("[]") @map("extra_service_ids")
   desiredDate  DateTime?         @map("desired_date") @db.Date
   desiredTime  String?           @map("desired_time") // HH:MM ou HH:MM:SS
+  /// Ex.: manha | tarde | noite | qualquer
+  preferredPeriod String?       @map("preferred_period")
+  priority     Int               @default(0)
   status       WaitingListStatus @default(waiting)
   notifiedAt   DateTime?        @map("notified_at") @db.Timestamptz
+  acceptedAt   DateTime?        @map("accepted_at") @db.Timestamptz
+  /// Quando uma vaga foi liberada, horário ofertado ao cliente.
+  offeredDate  DateTime?        @map("offered_date") @db.Date
+  offeredTime  String?          @map("offered_time")
   createdAt    DateTime         @default(now()) @map("created_at") @db.Timestamptz
   updatedAt    DateTime         @updatedAt @map("updated_at") @db.Timestamptz
 
   @@index([barbershopId])
   @@index([barbershopId, status])
+  @@index([barbershopId, barberId, status])
 }
 
 // ========== WHATSAPP INTEGRATIONS ==========

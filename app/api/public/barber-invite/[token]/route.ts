@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto"
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { canAddBarber, canUseBarberCommission, getBarberLimitMessage } from "@/lib/plans"
@@ -147,11 +148,7 @@ export async function POST(
         }
       }
 
-      const commissionAllowed = canUseBarberCommission(
-        plan,
-        invite.barbershop.role,
-        invite.barbershop.isTest
-      )
+      const commissionAllowed = canUseBarberCommission(plan)
       const commission = commissionAllowed ? 50 : 0
 
       const barber = await tx.barber.create({
@@ -165,6 +162,7 @@ export async function POST(
           commission,
           active: true,
           role: "user",
+          portalToken: randomUUID(),
         },
       })
 
@@ -188,6 +186,7 @@ export async function POST(
     }
     return NextResponse.json({
       ok: true,
+      portal_token: b.portalToken ?? null,
       barber: {
         id: b.id,
         barbershop_id: b.barbershopId,

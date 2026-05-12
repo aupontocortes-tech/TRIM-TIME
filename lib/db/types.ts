@@ -6,7 +6,7 @@
 export type SubscriptionPlan = "basic" | "pro" | "premium"
 export type SubscriptionStatus = "trial" | "active" | "past_due" | "canceled"
 export type AppointmentStatus = "pending" | "confirmed" | "completed" | "canceled" | "no_show"
-export type WaitingListStatus = "waiting" | "notified" | "accepted" | "expired"
+export type WaitingListStatus = "waiting" | "notified" | "accepted" | "expired" | "canceled"
 
 /** Conta da barbearia: super_admin = dono do sistema; admin_barbershop = dono da barbearia (padrão). */
 export type BarbershopRole = "super_admin" | "admin_barbershop"
@@ -61,6 +61,8 @@ export type BarbershopSettings = {
   opening_hours?: Record<string, BarbershopOpeningDay>
   booking_rules?: BarbershopBookingRules
   notification_settings?: BarbershopNotificationSettings
+  /** Minutos para aceitar vaga após notificação da lista de espera (padrão 15). */
+  waitlist_accept_deadline_minutes?: number
 }
 
 export interface Barbershop {
@@ -125,6 +127,9 @@ export interface Barber {
   commission: number
   active: boolean
   role?: BarberRole
+  /** Link estável do app do profissional (agenda + fila). */
+  portal_token?: string | null
+  app_profissional_path?: string | null
   created_at: string
   updated_at: string
 }
@@ -214,14 +219,22 @@ export interface WaitingListItem {
   id: string
   barbershop_id: string
   client_id: string
+  barber_id: string
   service_id: string
+  extra_service_ids: string[]
   desired_date: string | null
   desired_time: string | null
+  preferred_period: string | null
+  priority: number
   status: WaitingListStatus
   notified_at: string | null
+  accepted_at: string | null
+  offered_date: string | null
+  offered_time: string | null
   created_at: string
   updated_at: string
   client?: Client
+  barber?: Barber
   service?: Service
 }
 

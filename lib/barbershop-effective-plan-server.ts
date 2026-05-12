@@ -1,11 +1,11 @@
 /**
- * Plano efetivo da barbearia no servidor: tenta Supabase (fetchBarbershopPlanContext);
- * se falhar (ex.: SUPABASE_SERVICE_ROLE_KEY ausente no Vercel), usa só Prisma.
+ * Plano efetivo da barbearia no servidor.
+ * Usa **Prisma** (Postgres) como fonte da assinatura — igual ao POST /api/subscriptions — para não divergir
+ * do que o painel grava (evita lista de espera e outros gates errados quando só o cliente Supabase estava stale).
  */
 import { prisma } from "@/lib/prisma"
-import { fetchBarbershopPlanContext } from "@/lib/barbershop-plan-server"
+import { getPlanSimulationOverride } from "@/lib/plan-simulation-server"
 import { getEffectivePlanForBarbershop } from "@/lib/subscription"
-import { getRealBarbershopIdFromRequest } from "@/lib/tenant"
 import type {
   Subscription,
   SubscriptionPlan,
@@ -13,42 +13,21 @@ import type {
 } from "@/lib/db/types"
 
 /**
- * Plano efetivo para o painel/API autenticadas: se quem está logado for `super_admin`
- * (cookie real), trata como Premium mesmo quando impersona outra barbearia (sem assinatura).
+ * Plano efetivo para o painel/API autenticadas.
+ * Cookie de simulação (dev) tem prioridade; depois o plano da barbearia do tenant (assinatura + allowlists).
  */
 export async function resolveEffectivePlanForActiveSession(
   tenantBarbershopId: string
 ): Promise<SubscriptionPlan | null> {
-  try {
-    const realId = await getRealBarbershopIdFromRequest()
-    if (realId) {
-      const real = await prisma.barbershop.findUnique({
-        where: { id: realId },
-        select: { role: true, suspendedAt: true },
-      })
-      if (real && !real.suspendedAt && real.role === "super_admin") {
-        return "premium"
-      }
-    }
-  } catch {
-    /* segue com plano da barbearia do tenant */
-  }
+  const simulated = await getPlanSimulationOverride()
+  if (simulated) return simulated
+
   return resolveEffectivePlanForBarbershop(tenantBarbershopId)
 }
 
 export async function resolveEffectivePlanForBarbershop(
   barbershopId: string
 ): Promise<SubscriptionPlan | null> {
-  try {
-    const ctx = await fetchBarbershopPlanContext(barbershopId)
-    return ctx.plan
-  } catch (e) {
-    console.warn(
-      "[resolveEffectivePlanForBarbershop] fallback Prisma (Supabase indisponível ou não configurado):",
-      e instanceof Error ? e.message : e
-    )
-  }
-
   const [bs, sub] = await Promise.all([
     prisma.barbershop.findUnique({
       where: { id: barbershopId },

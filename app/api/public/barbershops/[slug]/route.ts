@@ -3,6 +3,9 @@ import { prisma } from "@/lib/prisma"
 import { fetchServicesForBarbershopRaw, serviceDbRowToApi } from "@/lib/service-queries"
 import { fetchBarberPhotoPositionsByBarbershopId } from "@/lib/barber-queries"
 import type { BarbershopSettings } from "@/lib/db/types"
+import { resolveEffectivePlanForBarbershop } from "@/lib/barbershop-effective-plan-server"
+import { hasFeature } from "@/lib/plans"
+import { getWaitlistAcceptDeadlineMinutes } from "@/lib/waitlist-service"
 
 /**
  * Dados públicos da barbearia (sem auth) — nome, contato/endereço da conta + unidades ativas.
@@ -59,6 +62,9 @@ export async function GET(
 
     const settings = (b.settings as BarbershopSettings | null) ?? null
 
+    const plan = await resolveEffectivePlanForBarbershop(b.id)
+    const waitlist_enabled = !!(plan && hasFeature(plan, "waiting_list"))
+
     const serviceRows = await fetchServicesForBarbershopRaw(b.id, {
       activeOnly: true,
       orderBy: "created_at",
@@ -82,6 +88,10 @@ export async function GET(
       cep: settings?.cep ?? null,
       opening_hours: settings?.opening_hours ?? null,
       booking_rules: settings?.booking_rules ?? null,
+      waitlist_enabled,
+      waitlist_accept_deadline_minutes: waitlist_enabled
+        ? getWaitlistAcceptDeadlineMinutes(settings)
+        : null,
       units: b.units,
       services: serviceRows.map((r) => {
         const s = serviceDbRowToApi(r)

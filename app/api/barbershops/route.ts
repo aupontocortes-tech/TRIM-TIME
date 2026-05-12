@@ -160,6 +160,9 @@ function mergeBarbershopSettings(
       ...(inc.notification_settings as Record<string, unknown>),
     }
   }
+  if (inc.waitlist_accept_deadline_minutes !== undefined) {
+    base.waitlist_accept_deadline_minutes = inc.waitlist_accept_deadline_minutes
+  }
   return base as Prisma.InputJsonValue
 }
 

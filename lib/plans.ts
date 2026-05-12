@@ -46,8 +46,7 @@ export const PLAN_FEATURES = {
     "Controle financeiro",
     "Relatórios mensais simples",
     "Comissão de barbeiros",
-    "Cadastro de serviços e preços",
-    "Notificações por email",
+    "Notificações por e-mail",
     "Backup de dados",
   ],
   premium: [
@@ -102,14 +101,8 @@ export function hasFeature(plan: SubscriptionPlan, featureKey: keyof typeof FEAT
   return plans.includes(plan)
 }
 
-/** Comissão por barbeiro: Pro/Premium, ou super_admin (acesso total ao SaaS). */
-export function canUseBarberCommission(
-  plan: SubscriptionPlan | null,
-  barbershopRole?: string | null,
-  isTest?: boolean | null
-): boolean {
-  if (barbershopRole === "super_admin") return true
-  if (isTest === true) return true
+/** Comissão por barbeiro: só Pro/Premium (plano efetivo vindo da assinatura / allowlist / simulação). */
+export function canUseBarberCommission(plan: SubscriptionPlan | null): boolean {
   return !!(plan && hasFeature(plan, "barber_commission"))
 }
 

@@ -6,8 +6,21 @@
  * `DATABASE_URL` ainda não está disponível no passo de “Collecting page data”. Na Vercel, sem
  * `DATABASE_URL` em runtime, a primeira query ainda falha com a mensagem clara abaixo.
  */
+import { readFileSync } from "fs"
+import { join } from "path"
 import { PrismaClient } from "@prisma/client"
 import { PrismaPg } from "@prisma/adapter-pg"
+
+/** Identidade do client gerado em `node_modules/.prisma/client` (muda após `prisma generate`). */
+function readPrismaGeneratedClientId(): string {
+  try {
+    const pkgPath = join(process.cwd(), "node_modules", ".prisma", "client", "package.json")
+    const pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as { name?: string }
+    return typeof pkg.name === "string" ? pkg.name : ""
+  } catch {
+    return ""
+  }
+}
 
 function getDatabaseUrl(): string {
   const url = process.env.DATABASE_URL?.trim()
@@ -26,11 +39,13 @@ function getDatabaseUrl(): string {
 }
 
 /**
- * Em desenvolvimento o Next reaproveita este singleton no hot reload. Depois de rodar
- * `npx prisma generate` ou alterar `prisma/schema.prisma`, reinicie `npm run dev` —
- * senão o cliente antigo pode acusar "Unknown field …" em queries novas.
+ * Em desenvolvimento o Next reaproveita este singleton no hot reload. Se o client em disco
+ * mudar (ex.: após `prisma generate`), descartamos o singleton antigo na próxima chamada.
  */
-const globalForPrisma = globalThis as unknown as { prisma: PrismaClient | undefined }
+const globalForPrisma = globalThis as unknown as {
+  prisma: PrismaClient | undefined
+  __trimtimePrismaClientId?: string
+}
 
 function createPrismaClient(): PrismaClient {
   const connectionString = getDatabaseUrl()
@@ -46,6 +61,16 @@ let prismaProduction: PrismaClient | undefined
 
 function getClient(): PrismaClient {
   if (process.env.NODE_ENV !== "production") {
+    const clientId = readPrismaGeneratedClientId()
+    if (
+      globalForPrisma.prisma &&
+      clientId &&
+      globalForPrisma.__trimtimePrismaClientId !== clientId
+    ) {
+      void globalForPrisma.prisma.$disconnect().catch(() => {})
+      globalForPrisma.prisma = undefined
+    }
+    if (clientId) globalForPrisma.__trimtimePrismaClientId = clientId
     if (!globalForPrisma.prisma) {
       globalForPrisma.prisma = createPrismaClient()
     }

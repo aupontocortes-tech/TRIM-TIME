@@ -154,6 +154,17 @@ const CONFIG_TAB_TRIGGER_CLASS =
 
 const CONFIG_TAB_LABEL_CLASS = "max-w-[9rem] sm:max-w-none"
 
+/** Avisos internos (super admin, conta de teste, variáveis .env): só super_admin ou ambiente local. */
+function isLocalDevOrigin(origin: string): boolean {
+  if (!origin) return false
+  try {
+    const { hostname } = new URL(origin)
+    return hostname === "localhost" || hostname === "127.0.0.1"
+  } catch {
+    return false
+  }
+}
+
 export default function ConfiguracoesPage() {
   const {
     plan,
@@ -170,24 +181,19 @@ export default function ConfiguracoesPage() {
     changeUnit,
     refetch: refetchUnits,
   } = useUnits()
-  const commissionFeature =
-    barbershop?.role === "super_admin" ||
-    barbershop?.is_test === true ||
-    (plan != null && hasFeature(plan, "barber_commission"))
-  const multiUnitsFeature =
-    barbershop?.role === "super_admin" ||
-    barbershop?.is_test === true ||
-    (plan != null && hasFeature(plan, "multi_units"))
-  const whatsappIntegrationFeature =
-    barbershop?.role === "super_admin" ||
-    barbershop?.is_test === true ||
-    (plan != null && hasFeature(plan, "whatsapp_integration"))
+
+  /** Plano efetivo (API) — super admin / teste seguem a assinatura escolhida em Plano. */
+  const commissionFeature = plan != null && hasFeature(plan, "barber_commission")
+  const multiUnitsFeature = plan != null && hasFeature(plan, "multi_units")
+  const whatsappIntegrationFeature = plan != null && hasFeature(plan, "whatsapp_integration")
+  const waitlistFeature = plan != null && hasFeature(plan, "waiting_list")
 
   const [barbearia, setBarbearia] = useState<BarbeariaForm>(emptyBarbearia)
   const [horarios, setHorarios] = useState<
     Record<(typeof DIAS_SEMANA_KEYS)[number], HorarioDiaUi>
   >(() => defaultHorariosUi())
   const [bookingRules, setBookingRules] = useState<BookingRulesUi>(() => defaultBookingRulesUi())
+  const [waitlistAcceptMinutes, setWaitlistAcceptMinutes] = useState(15)
 
   const [listaServicos, setListaServicos] = useState<Service[]>([])
   const [servicosLoading, setServicosLoading] = useState(true)
@@ -250,6 +256,7 @@ export default function ConfiguracoesPage() {
   const [inviteExpiry, setInviteExpiry] = useState<string | null>(null)
   const [inviteBusy, setInviteBusy] = useState(false)
   const [inviteCopied, setInviteCopied] = useState(false)
+  const [appProfCopiedId, setAppProfCopiedId] = useState<string | null>(null)
   const [inviteError, setInviteError] = useState<string | null>(null)
 
   const [isSaving, setIsSaving] = useState(false)
@@ -306,6 +313,8 @@ export default function ConfiguracoesPage() {
   const [subscriptionBusy, setSubscriptionBusy] = useState(false)
   const [subscriptionError, setSubscriptionError] = useState<string | null>(null)
   const [subscriptionOk, setSubscriptionOk] = useState<string | null>(null)
+  /** Modal com lista completa de benefícios do plano (card inteiro é clicável). */
+  const [planDetailOpen, setPlanDetailOpen] = useState<SubscriptionPlan | null>(null)
 
   type TrimPlayRankRow = {
     rank: number
@@ -337,6 +346,11 @@ export default function ConfiguracoesPage() {
     })
     setHorarios(openingHoursFromSettings(barbershop.settings?.opening_hours))
     setBookingRules(bookingRulesFromSettings(barbershop.settings?.booking_rules))
+    const w = barbershop.settings?.waitlist_accept_deadline_minutes
+    const wn = typeof w === "number" ? w : Number(w)
+    setWaitlistAcceptMinutes(
+      Number.isFinite(wn) && wn > 0 ? Math.min(24 * 60, Math.round(wn)) : 15
+    )
   }, [
     barbershop?.id,
     barbershop?.updated_at,
@@ -1367,6 +1381,9 @@ export default function ConfiguracoesPage() {
 
   const managedByBilling =
     barbershop?.role !== "super_admin" && barbershop?.is_test !== true
+  /** Cliente pagante em produção não vê blocos de “conta de teste”, Super Admin ou TRIMTIME_UNLOCK. */
+  const showInternalAccountHints =
+    barbershop?.role === "super_admin" || isLocalDevOrigin(origin)
   const subscriptionCanceled = subscription?.status === "canceled"
   const planCards: SubscriptionPlan[] = ["basic", "pro", "premium"]
   const normalizedShopName = (barbershop?.name ?? "")
@@ -1830,6 +1847,30 @@ export default function ConfiguracoesPage() {
                     className="bg-input border-border text-foreground"
                   />
                 </Field>
+
+                {waitlistFeature ? (
+                  <Field className="max-w-[280px]">
+                    <FieldLabel htmlFor="waitlist-accept-min">Lista de espera — minutos para aceitar vaga</FieldLabel>
+                    <p className="text-xs text-muted-foreground mb-1">
+                      Depois que uma vaga é liberada, o cliente tem esse tempo para confirmar; se não confirmar, o
+                      próximo na fila é avisado (Plano Pro ou Premium).
+                    </p>
+                    <Input
+                      id="waitlist-accept-min"
+                      type="number"
+                      min={1}
+                      max={1440}
+                      step={1}
+                      value={waitlistAcceptMinutes}
+                      onChange={(e) =>
+                        setWaitlistAcceptMinutes(
+                          Math.min(24 * 60, Math.max(1, Math.round(Number(e.target.value) || 15)))
+                        )
+                      }
+                      className="bg-input border-border text-foreground"
+                    />
+                  </Field>
+                ) : null}
 
                 <div className="space-y-3">
                   {diasSemana.map((dia) => {
@@ -2375,9 +2416,18 @@ export default function ConfiguracoesPage() {
               <div>
                 <CardTitle className="text-foreground">Equipe</CardTitle>
                 <CardDescription className="text-muted-foreground">
-                  Profissionais da barbearia. Comissão (% sobre o valor do atendimento) nos planos{" "}
-                  <strong className="text-foreground">Pro</strong> e <strong className="text-foreground">Premium</strong>{" "}
-                  (e para conta <strong className="text-foreground">Super Admin</strong>).
+                  Cada profissional pode abrir o <span className="text-foreground font-medium">app da equipe</span>{" "}
+                  (agenda dia/semana/mês e lista de espera no nome dele) com e-mail, telefone, senha e código de 6
+                  dígitos — copie o link abaixo em cada card. Comissão (% sobre o valor do atendimento) nos planos{" "}
+                  <strong className="text-foreground">Pro</strong> e <strong className="text-foreground">Premium</strong>
+                  {showInternalAccountHints ? (
+                    <>
+                      {" "}
+                      (e para conta <strong className="text-foreground">Super Admin</strong>).
+                    </>
+                  ) : (
+                    "."
+                  )}
                 </CardDescription>
                 {!commissionFeature && (
                   <p className="text-sm text-amber-600/90 dark:text-amber-400/90 mt-2">
@@ -2615,6 +2665,33 @@ export default function ConfiguracoesPage() {
                         <div className="text-sm text-muted-foreground space-y-0.5">
                           {prof.phone && <p>{prof.phone}</p>}
                           {prof.email && <p className="truncate">{prof.email}</p>}
+                          {prof.portal_token ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="mt-2 h-8 text-xs"
+                              onClick={async () => {
+                                const base = origin?.trim() || (typeof window !== "undefined" ? window.location.origin : "")
+                                const url = `${base}/profissional/${prof.portal_token}`
+                                try {
+                                  await navigator.clipboard.writeText(url)
+                                  setAppProfCopiedId(prof.id)
+                                  setTimeout(() => setAppProfCopiedId(null), 2000)
+                                  setEquipeError(null)
+                                } catch {
+                                  setEquipeError("Não foi possível copiar o link do app.")
+                                }
+                              }}
+                            >
+                              {appProfCopiedId === prof.id ? (
+                                <Check className="w-3.5 h-3.5 mr-1.5" />
+                              ) : (
+                                <Smartphone className="w-3.5 h-3.5 mr-1.5" />
+                              )}
+                              {appProfCopiedId === prof.id ? "Link copiado" : "Copiar link do app"}
+                            </Button>
+                          ) : null}
                         </div>
                       </div>
                       <div className="text-center min-w-[72px]">
@@ -2834,7 +2911,7 @@ export default function ConfiguracoesPage() {
                       {subscription?.status ?? "não encontrada"}
                     </strong>
                   </p>
-                  {!managedByBilling && subscription?.plan && (
+                  {!managedByBilling && subscription?.plan && showInternalAccountHints && (
                     <p className="mt-1">
                       Plano contratado para teste:{" "}
                       <strong className="text-foreground">{PLAN_LABELS[subscription.plan]}</strong>
@@ -2853,6 +2930,9 @@ export default function ConfiguracoesPage() {
                   </div>
                 )}
 
+                <p className="text-xs text-muted-foreground">
+                  Clique em qualquer lugar do card do plano para ver a lista completa do que está incluso.
+                </p>
                 <div className="grid gap-3 md:grid-cols-3">
                   {planCards.map((planOption) => {
                     const isCurrent = plan === planOption && subscription?.status !== "canceled"
@@ -2865,7 +2945,16 @@ export default function ConfiguracoesPage() {
                     return (
                       <div
                         key={planOption}
-                        className={`rounded-lg border p-4 ${
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setPlanDetailOpen(planOption)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault()
+                            setPlanDetailOpen(planOption)
+                          }
+                        }}
+                        className={`rounded-lg border p-4 text-left cursor-pointer transition-colors hover:border-primary/60 hover:bg-secondary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
                           isCurrent ? "border-primary bg-primary/5" : "border-border bg-secondary/10"
                         }`}
                       >
@@ -2878,11 +2967,15 @@ export default function ConfiguracoesPage() {
                             <li key={`${planOption}_${feature}`}>- {feature}</li>
                           ))}
                         </ul>
+                        <p className="mt-2 text-[11px] text-primary/90 font-medium">Ver plano completo →</p>
                         <Button
                           type="button"
                           className="w-full mt-3 bg-primary text-primary-foreground hover:bg-primary/90"
                           disabled={subscriptionBusy || isCurrent}
-                          onClick={() => void handleChoosePlan(planOption)}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            void handleChoosePlan(planOption)
+                          }}
                         >
                           {actionLabel}
                         </Button>
@@ -2890,6 +2983,63 @@ export default function ConfiguracoesPage() {
                     )
                   })}
                 </div>
+
+                <Dialog
+                  open={planDetailOpen !== null}
+                  onOpenChange={(open) => {
+                    if (!open) setPlanDetailOpen(null)
+                  }}
+                >
+                  <DialogContent className="bg-card border-border text-foreground max-w-md max-h-[min(90vh,640px)] overflow-y-auto">
+                    {planDetailOpen ? (
+                      <>
+                        <DialogHeader>
+                          <DialogTitle className="text-foreground">
+                            Plano {PLAN_LABELS[planDetailOpen]}
+                          </DialogTitle>
+                          <DialogDescription className="text-muted-foreground">
+                            <span className="text-primary font-semibold text-base">
+                              R$ {PLAN_PRICES[planDetailOpen]}/mês
+                            </span>
+                            <span className="block mt-2">
+                              Tudo que está incluso neste plano para você comparar com tranquilidade.
+                            </span>
+                          </DialogDescription>
+                        </DialogHeader>
+                        <ul className="mt-2 space-y-2 text-sm text-muted-foreground border-t border-border pt-4">
+                          {PLAN_FEATURES[planDetailOpen].map((feature) => (
+                            <li key={`detail_${planDetailOpen}_${feature}`} className="flex gap-2">
+                              <Check className="w-4 h-4 shrink-0 text-primary mt-0.5" aria-hidden />
+                              <span className="text-foreground/90">{feature}</span>
+                            </li>
+                          ))}
+                        </ul>
+                        {(() => {
+                          const opt = planDetailOpen
+                          const isCurrentModal = plan === opt && subscription?.status !== "canceled"
+                          const label = isCurrentModal
+                            ? "Plano atual"
+                            : managedByBilling
+                              ? "Contratar este plano"
+                              : "Selecionar para teste"
+                          return (
+                            <Button
+                              type="button"
+                              className="w-full mt-6 bg-primary text-primary-foreground hover:bg-primary/90"
+                              disabled={subscriptionBusy || isCurrentModal}
+                              onClick={() => {
+                                void handleChoosePlan(opt)
+                                setPlanDetailOpen(null)
+                              }}
+                            >
+                              {label}
+                            </Button>
+                          )
+                        })()}
+                      </>
+                    ) : null}
+                  </DialogContent>
+                </Dialog>
 
                 <div className="flex flex-wrap gap-2">
                   <Button
@@ -2915,7 +3065,7 @@ export default function ConfiguracoesPage() {
                   para <strong className="text-foreground">Pro</strong> ou{" "}
                   <strong className="text-foreground">Premium</strong> por aqui.
                 </p>
-                {!managedByBilling && (
+                {!managedByBilling && showInternalAccountHints && (
                   <div className="p-3 rounded-lg border border-primary/30 bg-primary/10">
                     {barbershop.role === "super_admin" ? (
                       <div className="space-y-2">
@@ -2959,38 +3109,41 @@ export default function ConfiguracoesPage() {
               </CardContent>
             </Card>
 
-            <Card className="bg-card border-border">
-              <CardHeader>
-                <CardTitle className="text-foreground">Informações de conta</CardTitle>
-                <CardDescription className="text-muted-foreground">
-                  Contexto sobre tipo de conta e desbloqueios de desenvolvimento.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4 max-w-2xl text-sm text-muted-foreground">
-                <div>
-                  <p className="text-foreground font-medium mb-1">Tipo de conta da barbearia</p>
-                  {barbershop.role === "super_admin" ? (
+            {showInternalAccountHints ? (
+              <Card className="bg-card border-border">
+                <CardHeader>
+                  <CardTitle className="text-foreground">Informações de conta</CardTitle>
+                  <CardDescription className="text-muted-foreground">
+                    Contexto interno: tipo de conta e desbloqueios de desenvolvimento (visível só para Super Admin ou em
+                    localhost).
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4 max-w-2xl text-sm text-muted-foreground">
+                  <div>
+                    <p className="text-foreground font-medium mb-1">Tipo de conta da barbearia</p>
+                    {barbershop.role === "super_admin" ? (
+                      <p>
+                        <strong className="text-primary">Super Admin (Trim Time)</strong> — acesso total aos recursos do
+                        sistema sem cobrança.
+                      </p>
+                    ) : (
+                      <p>
+                        <strong className="text-foreground">Dono da barbearia</strong> — configura equipe, serviços e
+                        agenda neste painel.
+                      </p>
+                    )}
+                  </div>
+                  <div className="p-3 rounded-lg border border-border bg-secondary/20">
+                    <p className="text-foreground font-medium mb-1">Desenvolvimento</p>
                     <p>
-                      <strong className="text-primary">Super Admin (Trim Time)</strong> — acesso total aos recursos do
-                      sistema sem cobrança.
+                      No servidor, a variável{" "}
+                      <code className="text-xs bg-muted px-1 rounded">TRIMTIME_UNLOCK_ALL_PLAN_FEATURES=true</code> faz
+                      todas as barbearias usarem recursos equivalentes ao <strong>Premium</strong>.
                     </p>
-                  ) : (
-                    <p>
-                      <strong className="text-foreground">Dono da barbearia</strong> — configura equipe, serviços e agenda
-                      neste painel.
-                    </p>
-                  )}
-                </div>
-                <div className="p-3 rounded-lg border border-border bg-secondary/20">
-                  <p className="text-foreground font-medium mb-1">Desenvolvimento</p>
-                  <p>
-                    No servidor, a variável{" "}
-                    <code className="text-xs bg-muted px-1 rounded">TRIMTIME_UNLOCK_ALL_PLAN_FEATURES=true</code> faz
-                    todas as barbearias usarem recursos equivalentes ao <strong>Premium</strong>.
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : null}
           </div>
         </TabsContent>
 

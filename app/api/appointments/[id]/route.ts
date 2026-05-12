@@ -15,6 +15,13 @@ import { withServiceDescriptionsFromDb } from "@/lib/service-queries"
 import { normalizeAppointmentTime } from "@/lib/scheduling"
 import { trySendWhatsAppAppointmentPostService } from "@/lib/whatsapp-appointment-events"
 import { expireStaleAppointmentsForBarbershop } from "@/lib/appointment-expiry"
+import { resolveEffectivePlanForActiveSession } from "@/lib/barbershop-effective-plan-server"
+import { hasFeature } from "@/lib/plans"
+import {
+  expireStaleWaitlistNotifications,
+  notifyNextWaitingForFreedSlot,
+  primaryServiceIdFromAppointment,
+} from "@/lib/waitlist-service"
 
 function mergeServiceLineQuantities(rows: unknown): { order: string[]; qty: Map<string, number> } {
   const qty = new Map<string, number>()
@@ -377,29 +384,15 @@ export async function PATCH(
 }
 
 async function notifyFirstWaitingList(barbershopId: string, appointment: Appointment) {
-  const first = await prisma.waitingListItem.findFirst({
-    where: { barbershopId, status: "waiting" },
-    orderBy: { createdAt: "asc" },
-    select: { id: true, clientId: true, serviceId: true },
-  })
-  if (!first) return
-  await prisma.waitingListItem.update({
-    where: { id: first.id },
-    data: { status: "notified", notifiedAt: new Date() },
-  })
-  await prisma.notificationLog.create({
-    data: {
-      barbershopId,
-      clientId: first.clientId,
-      appointmentId: appointment.id,
-      type: "push",
-      event: "waiting_list_slot_available",
-      payload: {
-        date: appointment.date,
-        time: appointment.time,
-        service_id: appointment.service_id,
-      },
-    },
+  const plan = await resolveEffectivePlanForActiveSession(barbershopId)
+  if (!plan || !hasFeature(plan, "waiting_list")) return
+  await expireStaleWaitlistNotifications(barbershopId)
+  await notifyNextWaitingForFreedSlot(barbershopId, {
+    barberId: appointment.barber_id,
+    serviceId: primaryServiceIdFromAppointment(appointment),
+    date: appointment.date,
+    time: appointment.time,
+    sourceAppointmentId: appointment.id,
   })
 }
 
