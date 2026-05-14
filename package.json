@@ -8,6 +8,7 @@
   "scripts": {
     "postinstall": "prisma generate",
     "dev": "prisma generate && next dev --webpack -H 0.0.0.0 -p 3000",
+    "open:local": "explorer http://localhost:3000/",
     "build": "prisma generate && next build --webpack",
     "start": "next start",
     "lint": "tsc --noEmit",

@@ -26,6 +26,8 @@ export default function ConviteBarbeiroPage() {
   const [telefone, setTelefone] = useState("")
   const [cpf, setCpf] = useState("")
   const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null)
+  const [senha, setSenha] = useState("")
+  const [confirmarSenha, setConfirmarSenha] = useState("")
   const [busy, setBusy] = useState(false)
   const [done, setDone] = useState(false)
   const [portalToken, setPortalToken] = useState<string | null>(null)
@@ -106,6 +108,14 @@ export default function ConviteBarbeiroPage() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     setFormError(null)
+    if (senha.length < 6) {
+      setFormError("A senha do app deve ter pelo menos 6 caracteres.")
+      return
+    }
+    if (senha !== confirmarSenha) {
+      setFormError("As senhas não coincidem.")
+      return
+    }
     setBusy(true)
     try {
       const res = await fetch(`/api/public/barber-invite/${encodeURIComponent(token)}`, {
@@ -117,6 +127,7 @@ export default function ConviteBarbeiroPage() {
           phone: telefone,
           cpf,
           photo_url: photoDataUrl,
+          password: senha,
         }),
       })
       const j = (await res.json().catch(() => ({}))) as { error?: string; portal_token?: string | null }
@@ -179,8 +190,8 @@ export default function ConviteBarbeiroPage() {
               <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-2">
                 <p className="text-sm font-medium text-foreground text-center">Seu app (agenda no celular)</p>
                 <p className="text-xs text-muted-foreground text-center">
-                  Guarde este link. Entre com e-mail, telefone, senha (definida no 1º acesso) e código de 6 dígitos por
-                  e-mail — igual ao cliente.
+                  Guarde este link. Para entrar: mesmo e-mail e telefone do cadastro, a senha que você criou e o código
+                  de 6 dígitos enviado por e-mail (OTP).
                 </p>
                 <div className="flex flex-col gap-2">
                   <Button
@@ -218,9 +229,9 @@ export default function ConviteBarbeiroPage() {
       <Card className="max-w-lg mx-auto border-border bg-card shadow-lg">
         <TabHeader />
         <CardHeader>
-          <CardTitle className="text-foreground text-xl">Cadastro de profissional</CardTitle>
+          <CardTitle className="text-foreground text-xl">Cadastro no app do profissional</CardTitle>
           <CardDescription>
-            <span className="text-foreground font-medium">{lojaNome}</span>
+            Mini app da Trim Time · <span className="text-foreground font-medium">{lojaNome}</span>
             {expira ? (
               <span className="block mt-1 text-xs">Link válido até {expira}</span>
             ) : null}
@@ -318,6 +329,39 @@ export default function ConviteBarbeiroPage() {
                   maxLength={14}
                 />
               </Field>
+
+              <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-3">
+                <p className="text-sm font-medium text-foreground">Senha do app (agenda e comissão)</p>
+                <p className="text-xs text-muted-foreground">
+                  Use esta senha junto com o código por e-mail sempre que abrir o app do profissional.
+                </p>
+                <Field>
+                  <FieldLabel htmlFor="senha-app">Senha</FieldLabel>
+                  <Input
+                    id="senha-app"
+                    type="password"
+                    className="bg-input border-border"
+                    value={senha}
+                    onChange={(e) => setSenha(e.target.value)}
+                    required
+                    minLength={6}
+                    autoComplete="new-password"
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="confirmar-senha">Confirmar senha</FieldLabel>
+                  <Input
+                    id="confirmar-senha"
+                    type="password"
+                    className="bg-input border-border"
+                    value={confirmarSenha}
+                    onChange={(e) => setConfirmarSenha(e.target.value)}
+                    required
+                    minLength={6}
+                    autoComplete="new-password"
+                  />
+                </Field>
+              </div>
             </FieldGroup>
             <Button
               type="submit"

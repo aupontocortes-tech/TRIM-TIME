@@ -7,11 +7,31 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { InputOTP, InputOTPGroup, InputOTPSlot, REGEXP_ONLY_DIGITS } from "@/components/ui/input-otp"
-import { Calendar, Clock, Loader2, LogOut, Scissors, Users } from "lucide-react"
+import { Calendar, Clock, Loader2, LogOut, Scissors, Users, Wallet } from "lucide-react"
 import type { Appointment, WaitingListItem } from "@/lib/db/types"
 import { normalizePublicOtpCode } from "@/lib/public-otp-code"
 
 const OTP_LEN = 6
+
+function formatBrl(n: number) {
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(n)
+}
+
+function commissionLineForAppointment(
+  a: Appointment,
+  defaultPct: number
+): { label: string; value: string } | null {
+  const stored = a.commission_amount
+  if (stored != null && Number.isFinite(stored)) {
+    return { label: "Comissão", value: formatBrl(stored) }
+  }
+  const total = a.total_price
+  if (total == null || !Number.isFinite(total) || total <= 0) return null
+  const pct = a.commission_percent ?? defaultPct
+  if (!Number.isFinite(pct) || pct <= 0) return null
+  const est = Math.round(total * (pct / 100) * 100) / 100
+  return { label: "Comissão (estimada)", value: formatBrl(est) }
+}
 
 function toYMD(d: Date) {
   const y = d.getFullYear()
@@ -57,6 +77,7 @@ export default function ProfissionalAppPage() {
   const [shopName, setShopName] = useState("")
   const [barberName, setBarberName] = useState("")
   const [hasPassword, setHasPassword] = useState(false)
+  const [myCommissionPct, setMyCommissionPct] = useState(0)
 
   const [auth, setAuth] = useState(false)
   const [sessionLoading, setSessionLoading] = useState(true)
@@ -97,7 +118,7 @@ export default function ProfissionalAppPage() {
 
   useEffect(() => {
     if (!portalToken) return
-    let c = false
+    let cancelled = false
     setMetaLoading(true)
     fetch(`${base}/meta`)
       .then(async (r) => {
@@ -106,8 +127,9 @@ export default function ProfissionalAppPage() {
           barbershop_name?: string
           barber_name?: string
           has_password?: boolean
+          commission_percent?: number
         }
-        if (c) return
+        if (cancelled) return
         if (!r.ok) {
           setMetaErr(j.error || "Link inválido")
           return
@@ -115,15 +137,19 @@ export default function ProfissionalAppPage() {
         setShopName(j.barbershop_name ?? "")
         setBarberName(j.barber_name ?? "")
         setHasPassword(!!j.has_password)
+        const commissionPct = j.commission_percent
+        setMyCommissionPct(
+          typeof commissionPct === "number" && Number.isFinite(commissionPct) ? commissionPct : 0
+        )
       })
       .catch(() => {
-        if (!c) setMetaErr("Erro de rede")
+        if (!cancelled) setMetaErr("Erro de rede")
       })
       .finally(() => {
-        if (!c) setMetaLoading(false)
+        if (!cancelled) setMetaLoading(false)
       })
     return () => {
-      c = true
+      cancelled = true
     }
   }, [portalToken, base])
 
@@ -336,8 +362,10 @@ export default function ProfissionalAppPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-xs text-muted-foreground">
-              Use o mesmo e-mail e telefone do cadastro. Enviaremos um código de {OTP_LEN} dígitos (como no app do
-              cliente). {hasPassword ? "Depois informe sua senha." : "No primeiro acesso você define a senha do app."}
+              Use o mesmo e-mail e telefone do cadastro. Enviaremos um código de {OTP_LEN} dígitos por e-mail (OTP).{" "}
+              {hasPassword
+                ? "Informe a senha que você criou no cadastro (ou definiu no primeiro acesso ao app)."
+                : "No primeiro acesso, após o código, você define a senha do app."}
             </p>
             {authErr ? (
               <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-md p-3">
@@ -463,6 +491,27 @@ export default function ProfissionalAppPage() {
           Você vê só os seus horários. Bloqueios de agenda são feitos pelo dono da barbearia no painel.
         </p>
 
+        <Card className="border-border border-primary/20 bg-primary/5">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Wallet className="w-4 h-4 text-primary" />
+              Comissão
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm space-y-1">
+            <p className="text-foreground">
+              Percentual na sua ficha:{" "}
+              <span className="font-semibold tabular-nums">
+                {myCommissionPct > 0 ? `${myCommissionPct.toLocaleString("pt-BR")}%` : "0% (plano sem comissão ou não configurado)"}
+              </span>
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Em cada horário aparece o valor quando a barbearia registrou a venda, ou uma estimativa com base no
+              total do agendamento e no percentual.
+            </p>
+          </CardContent>
+        </Card>
+
         <div className="flex flex-wrap gap-2">
           {(["dia", "semana", "mes"] as const).map((v) => (
             <Button
@@ -513,7 +562,9 @@ export default function ProfissionalAppPage() {
                   <div key={ymd}>
                     <p className="text-xs font-medium text-muted-foreground mb-2">{formatDataPt(ymd)}</p>
                     <ul className="space-y-2">
-                      {list.map((a) => (
+                      {list.map((a) => {
+                        const comm = commissionLineForAppointment(a, myCommissionPct)
+                        return (
                         <li
                           key={a.id}
                           className="rounded-lg border border-border bg-card/50 p-3 text-sm"
@@ -529,8 +580,19 @@ export default function ProfissionalAppPage() {
                               ? a.service_lines.map((l) => l.service?.name ?? "Serviço").join(", ")
                               : a.service?.name ?? "Serviço"}
                           </p>
+                          {a.total_price != null && Number.isFinite(a.total_price) ? (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Total agendamento: {formatBrl(a.total_price)}
+                            </p>
+                          ) : null}
+                          {comm ? (
+                            <p className="text-xs font-medium text-primary mt-1">
+                              {comm.label}: {comm.value}
+                            </p>
+                          ) : null}
                         </li>
-                      ))}
+                        )
+                      })}
                     </ul>
                   </div>
                 ))}

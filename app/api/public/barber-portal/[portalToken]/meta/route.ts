@@ -21,6 +21,7 @@ export async function GET(
       barbershop_slug: barber.barbershop.slug,
       barber_name: barber.name,
       has_password: !!barber.passwordHash,
+      commission_percent: Number(barber.commission),
     })
   } catch (e) {
     return NextResponse.json(

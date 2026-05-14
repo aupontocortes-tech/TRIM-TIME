@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto"
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { hashPassword } from "@/lib/auth/password"
 import { canAddBarber, canUseBarberCommission, getBarberLimitMessage } from "@/lib/plans"
 import { resolveEffectivePlanForBarbershop } from "@/lib/barbershop-effective-plan-server"
 import { assertValidProfilePhotoDataUrl } from "@/lib/photo-data-url"
@@ -69,6 +70,7 @@ export async function POST(
       phone?: string
       cpf?: string
       photo_url?: string | null
+      password?: string
     }
 
     const name = String(body.name ?? "").trim()
@@ -102,6 +104,14 @@ export async function POST(
     }
     if (!photoUrl) {
       return NextResponse.json({ error: "Envie uma foto de perfil" }, { status: 400 })
+    }
+
+    const password = String(body.password ?? "").trim()
+    if (password.length < 6) {
+      return NextResponse.json(
+        { error: "A senha do app deve ter pelo menos 6 caracteres" },
+        { status: 400 }
+      )
     }
 
     const result = await prisma.$transaction(async (tx) => {
@@ -163,6 +173,7 @@ export async function POST(
           active: true,
           role: "user",
           portalToken: randomUUID(),
+          passwordHash: hashPassword(password),
         },
       })
 

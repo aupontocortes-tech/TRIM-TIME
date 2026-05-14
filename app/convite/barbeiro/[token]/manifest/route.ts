@@ -17,8 +17,9 @@ export async function GET(
 
   const manifest = {
     name: "Trim Time — Cadastro profissional",
-    short_name: "Cadastro",
-    description: "Complete seu cadastro como profissional na barbearia.",
+    short_name: "Trim Profissional",
+    description:
+      "Mini app: cadastro na equipe. Depois use o app Agenda para ver horários, lista de espera e comissão (login com senha + código por e-mail).",
     id: `trimtime-barber-invite-${token.slice(0, 12)}`,
     start_url: startUrl,
     scope: "/",
