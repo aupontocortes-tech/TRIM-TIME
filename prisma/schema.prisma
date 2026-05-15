@@ -563,6 +563,11 @@ model TrimPlayVisualEffectAsset {
 model PlatformSettings {
   id                    String   @id @default("singleton")
   landingWhatsappPhone  String?  @map("landing_whatsapp_phone")
+  priceBasic            Decimal? @map("price_basic") @db.Decimal(10, 2)
+  pricePro              Decimal? @map("price_pro") @db.Decimal(10, 2)
+  pricePremium          Decimal? @map("price_premium") @db.Decimal(10, 2)
+  /// Quando true, valores exibidos/cobrados seguem esta config (integração futura com gateway).
+  paymentApiEnabled     Boolean  @default(false) @map("payment_api_enabled")
   updatedAt             DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
   @@map("platform_settings")

@@ -1,4 +1,10 @@
 import { prisma } from "@/lib/prisma"
+import {
+  defaultPlanPrices,
+  isPaymentApiEnabledFromEnv,
+  mergePlanPricesFromDb,
+  type PlanPricesMap,
+} from "@/lib/plan-prices"
 
 const SINGLETON_ID = "singleton"
 
@@ -54,4 +60,51 @@ export async function resolveLandingWhatsappUrl(): Promise<string | null> {
   if (!phone) return null
   const url = buildLandingWhatsappUrl(phone)
   return url || null
+}
+
+export async function getEffectivePlanPrices(): Promise<PlanPricesMap> {
+  try {
+    const row = await getPlatformSettings()
+    return mergePlanPricesFromDb({
+      priceBasic: row.priceBasic,
+      pricePro: row.pricePro,
+      pricePremium: row.pricePremium,
+    })
+  } catch (e) {
+    console.error("[platform-settings] getEffectivePlanPrices", e)
+    return defaultPlanPrices()
+  }
+}
+
+export async function isPaymentApiActive(): Promise<boolean> {
+  try {
+    const row = await getPlatformSettings()
+    if (row.paymentApiEnabled) return true
+  } catch {
+    /* fallback env */
+  }
+  return isPaymentApiEnabledFromEnv()
+}
+
+export function platformSettingsToApi(row: {
+  landingWhatsappPhone: string | null
+  priceBasic: unknown
+  pricePro: unknown
+  pricePremium: unknown
+  paymentApiEnabled: boolean
+}) {
+  const plan_prices = mergePlanPricesFromDb({
+    priceBasic: row.priceBasic,
+    pricePro: row.pricePro,
+    pricePremium: row.pricePremium,
+  })
+  return {
+    landing_whatsapp_phone: row.landingWhatsappPhone ?? "",
+    plan_prices,
+    price_basic: row.priceBasic != null ? Number(row.priceBasic) : null,
+    price_pro: row.pricePro != null ? Number(row.pricePro) : null,
+    price_premium: row.pricePremium != null ? Number(row.pricePremium) : null,
+    payment_api_enabled: row.paymentApiEnabled,
+    payment_api_active: row.paymentApiEnabled || isPaymentApiEnabledFromEnv(),
+  }
 }

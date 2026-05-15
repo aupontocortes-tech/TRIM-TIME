@@ -1,0 +1,5 @@
+ALTER TABLE platform_settings
+  ADD COLUMN IF NOT EXISTS price_basic NUMERIC(10, 2),
+  ADD COLUMN IF NOT EXISTS price_pro NUMERIC(10, 2),
+  ADD COLUMN IF NOT EXISTS price_premium NUMERIC(10, 2),
+  ADD COLUMN IF NOT EXISTS payment_api_enabled BOOLEAN NOT NULL DEFAULT false;

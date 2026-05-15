@@ -82,15 +82,31 @@ export default function LandingPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [whatsappUrl, setWhatsappUrl] = useState<string | null>(null)
   const [trialDays, setTrialDays] = useState(TRIAL_DAYS)
+  const [planPrices, setPlanPrices] = useState(PLAN_PRICES)
 
   useEffect(() => {
     fetch("/api/public/landing-config")
       .then((r) => (r.ok ? r.json() : null))
-      .then((j: { whatsapp_url?: string | null; trial_days?: number } | null) => {
-        if (!j) return
-        if (typeof j.trial_days === "number" && j.trial_days > 0) setTrialDays(j.trial_days)
-        if (j.whatsapp_url) setWhatsappUrl(j.whatsapp_url)
-      })
+      .then(
+        (
+          j: {
+            whatsapp_url?: string | null
+            trial_days?: number
+            plan_prices?: typeof PLAN_PRICES
+          } | null
+        ) => {
+          if (!j) return
+          if (typeof j.trial_days === "number" && j.trial_days > 0) setTrialDays(j.trial_days)
+          if (j.whatsapp_url) setWhatsappUrl(j.whatsapp_url)
+          if (j.plan_prices) {
+            setPlanPrices({
+              basic: j.plan_prices.basic ?? PLAN_PRICES.basic,
+              pro: j.plan_prices.pro ?? PLAN_PRICES.pro,
+              premium: j.plan_prices.premium ?? PLAN_PRICES.premium,
+            })
+          }
+        }
+      )
       .catch(() => {})
   }, [])
 
@@ -437,7 +453,7 @@ export default function LandingPage() {
                   <p className="text-sm text-muted-foreground">Para começar</p>
                 </div>
                 <div className="mb-6">
-                  <span className="text-4xl font-bold text-blue-600">R${PLAN_PRICES.basic}</span>
+                  <span className="text-4xl font-bold text-blue-600">R${planPrices.basic}</span>
                   <span className="text-muted-foreground">/mês</span>
                 </div>
                 <ul className="space-y-3 mb-6">
@@ -469,7 +485,7 @@ export default function LandingPage() {
                   <p className="text-sm text-muted-foreground">Para crescer</p>
                 </div>
                 <div className="mb-6">
-                  <span className="text-4xl font-bold text-primary">R${PLAN_PRICES.pro}</span>
+                  <span className="text-4xl font-bold text-primary">R${planPrices.pro}</span>
                   <span className="text-muted-foreground">/mês</span>
                 </div>
                 <ul className="space-y-3 mb-6">
@@ -496,7 +512,7 @@ export default function LandingPage() {
                   <p className="text-sm text-muted-foreground">Tudo que você precisa</p>
                 </div>
                 <div className="mb-6">
-                  <span className="text-4xl font-bold text-green-600">R${PLAN_PRICES.premium}</span>
+                  <span className="text-4xl font-bold text-green-600">R${planPrices.premium}</span>
                   <span className="text-muted-foreground">/mês</span>
                 </div>
                 <ul className="space-y-3 mb-6">
