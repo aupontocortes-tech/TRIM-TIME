@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -12,18 +12,87 @@ import {
   Clock, 
   Shield,
   Bell,
-  ChevronRight,
   Star,
   Check,
   Menu,
-  X
+  X,
+  Sparkles,
+  ChevronRight,
+  MessageCircle,
+  Gift,
+  Building2,
+  ListOrdered,
+  Wallet,
+  BarChart3,
+  Smartphone,
+  UserPlus,
 } from "lucide-react"
-import { PLAN_PRICES, PLAN_LABELS, PLAN_FEATURES } from "@/lib/plans"
+import { PLAN_PRICES, PLAN_LABELS, PLAN_FEATURES, TRIAL_DAYS } from "@/lib/plans"
 import { BrandLogo } from "@/components/brand-logo"
 import { TrimTimeWordmark } from "@/components/trim-time-wordmark"
 
+function WhatsappIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.435 9.884-9.884 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+    </svg>
+  )
+}
+
+const landingWhatsappBtnClass =
+  "border border-[#1a7a3f]/60 bg-gradient-to-r from-[#0d6b36] via-[#128c42] to-[#1a9f4d] text-white shadow-[0_0_22px_rgba(18,140,66,0.4)] hover:from-[#0f7540] hover:via-[#159a4a] hover:to-[#1fad55] hover:shadow-[0_0_28px_rgba(21,154,74,0.45)] active:scale-[0.98] transition-all duration-200"
+
+const landingBlueBtnClass =
+  "bg-gradient-to-r from-[#1e3a8a] via-[#2563eb] to-[#3b82f6] text-white border border-[#1d4ed8] hover:from-[#1e40af] hover:via-[#3b82f6] hover:to-[#60a5fa] shadow-[0_0_22px_rgba(37,99,235,0.55),0_6px_20px_rgba(0,0,0,0.35)] ring-1 ring-[#93c5fd]/40 active:scale-[0.98] transition-all duration-200"
+
+/** Botão principal de cadastro — dourado forte e brilhante (sem tom esbranquiçado) */
+const landingGoldBtnClass =
+  "bg-gradient-to-r from-[#7a5206] via-[#c9a227] to-[#d4af37] text-[#120c02] border border-[#a67c0a] hover:from-[#8f6108] hover:via-[#d4af37] hover:to-[#e0b830] shadow-[0_0_22px_rgba(201,162,39,0.55),0_6px_20px_rgba(0,0,0,0.35)] ring-1 ring-[#e8c547]/40 active:scale-[0.98] transition-all duration-200"
+
+function LandingWhatsappHeaderButton({
+  whatsappUrl,
+  className = "",
+}: {
+  whatsappUrl: string | null
+  className?: string
+}) {
+  return (
+    <Button
+      asChild
+      className={`h-10 px-4 gap-2 rounded-lg font-semibold shrink-0 ${landingWhatsappBtnClass} ${!whatsappUrl ? "opacity-80 saturate-75 pointer-events-none" : ""} ${className}`}
+    >
+      <a
+        href={whatsappUrl ?? "#"}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={`inline-flex items-center justify-center gap-2 no-underline text-white ${className.includes("w-full") ? "w-full" : ""}`}
+        aria-label="Fale conosco no WhatsApp"
+        onClick={(e) => {
+          if (!whatsappUrl) e.preventDefault()
+        }}
+      >
+        <WhatsappIcon className="w-4 h-4 shrink-0" />
+        <span>Fale conosco</span>
+      </a>
+    </Button>
+  )
+}
+
 export default function LandingPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [whatsappUrl, setWhatsappUrl] = useState<string | null>(null)
+  const [trialDays, setTrialDays] = useState(TRIAL_DAYS)
+
+  useEffect(() => {
+    fetch("/api/public/landing-config")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j: { whatsapp_url?: string | null; trial_days?: number } | null) => {
+        if (!j) return
+        if (typeof j.trial_days === "number" && j.trial_days > 0) setTrialDays(j.trial_days)
+        if (j.whatsapp_url) setWhatsappUrl(j.whatsapp_url)
+      })
+      .catch(() => {})
+  }, [])
 
   return (
     <div className="min-h-screen bg-background">
@@ -49,14 +118,15 @@ export default function LandingPage() {
               </Link>
             </nav>
 
-<div className="hidden md:flex items-center gap-4">
+<div className="hidden md:flex items-center gap-3 lg:gap-4">
+                <LandingWhatsappHeaderButton whatsappUrl={whatsappUrl} />
                 <Link href="/login">
-                  <Button variant="ghost" className="text-foreground hover:text-primary">
+                  <Button className={`h-10 px-5 font-bold ${landingBlueBtnClass}`}>
                     Sou Barbeiro
                   </Button>
                 </Link>
               <Link href="/cadastro?tipo=barbearia">
-                <Button className="bg-primary text-primary-foreground hover:bg-primary/90">
+                <Button size="lg" className={`h-11 px-7 text-base font-bold ${landingGoldBtnClass}`}>
                   Começar Agora
                 </Button>
               </Link>
@@ -98,13 +168,14 @@ export default function LandingPage() {
                 Depoimentos
               </Link>
 <div className="flex flex-col gap-2 pt-4 border-t border-border">
+                    <LandingWhatsappHeaderButton whatsappUrl={whatsappUrl} className="w-full h-11 justify-center" />
                     <Link href="/login">
-                      <Button variant="ghost" className="w-full text-foreground hover:text-primary">
+                      <Button className={`w-full h-11 font-bold ${landingBlueBtnClass}`}>
                         Sou Barbeiro
                       </Button>
                     </Link>
                 <Link href="/cadastro?tipo=barbearia">
-                  <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90">
+                  <Button size="lg" className={`w-full h-12 text-base font-bold ${landingGoldBtnClass}`}>
                     Começar Agora
                   </Button>
                 </Link>
@@ -135,18 +206,53 @@ export default function LandingPage() {
                 Você vê tudo na sua agenda: horário, cliente, serviço e detalhes do agendamento.
               </p>
 
-              <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
-                <Link href="/cadastro?tipo=barbearia">
-                  <Button size="lg" className="bg-primary text-primary-foreground hover:bg-primary/90 w-full sm:w-auto">
-                    Criar minha conta
-                    <ChevronRight className="w-4 h-4 ml-2" />
+              <div className="flex flex-col gap-3 justify-center lg:justify-start max-w-md mx-auto lg:mx-0 w-full">
+                <Link href="/cadastro?tipo=barbearia" className="w-full">
+                  <Button
+                    type="button"
+                    className={`w-full h-auto min-h-[3.25rem] py-3.5 px-5 rounded-xl font-bold flex items-center justify-center gap-3 ${landingGoldBtnClass}`}
+                  >
+                    <Sparkles className="w-5 h-5 shrink-0" />
+                    <span className="flex flex-col items-start text-left leading-tight">
+                      <span className="text-base sm:text-lg">Comece agora</span>
+                      <span className="text-xs sm:text-sm font-normal opacity-90">
+                        Teste grátis por {trialDays} dias
+                      </span>
+                    </span>
                   </Button>
                 </Link>
-                <Link href="#funcionalidades">
-                  <Button size="lg" variant="outline" className="border-border text-foreground hover:bg-secondary w-full sm:w-auto">
-                    Ver Funcionalidades
-                  </Button>
-                </Link>
+                <Button
+                  asChild
+                  className={[
+                    "w-full h-auto min-h-[3.25rem] py-3.5 px-5 rounded-xl font-semibold",
+                    landingWhatsappBtnClass,
+                    "shadow-[0_10px_28px_rgba(0,0,0,0.4)]",
+                    !whatsappUrl ? "opacity-80 saturate-75 cursor-not-allowed" : "",
+                  ].join(" ")}
+                >
+                  <a
+                    href={whatsappUrl ?? "#duvidas-whatsapp"}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full flex items-center justify-center gap-3 no-underline text-white"
+                    aria-disabled={!whatsappUrl}
+                    onClick={(e) => {
+                      if (!whatsappUrl) e.preventDefault()
+                    }}
+                  >
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/20 ring-2 ring-white/30">
+                      <WhatsappIcon className="w-6 h-6 text-white drop-shadow-sm" />
+                    </span>
+                    <span className="flex flex-col items-start text-left leading-tight">
+                      <span className="text-base sm:text-lg font-bold tracking-tight drop-shadow-sm">
+                        Tirar dúvidas: fale conosco
+                      </span>
+                      <span className="text-xs sm:text-sm font-medium text-white/90">
+                        Chamar no WhatsApp
+                      </span>
+                    </span>
+                  </a>
+                </Button>
               </div>
 
               <div className="flex items-center gap-8 mt-10 justify-center lg:justify-start">
@@ -251,7 +357,47 @@ export default function LandingPage() {
                 icon: Bell,
                 title: "Lembretes e confirmações automáticas",
                 description: "O cliente recebe lembretes antes do horário marcado para não esquecer do agendamento. Confirmação automática ao agendar e opção de lembrete por push, e-mail ou WhatsApp, reduzindo faltas e deixando sua agenda mais previsível."
-              }
+              },
+              {
+                icon: MessageCircle,
+                title: "WhatsApp Business",
+                description: "Integração com a API oficial do WhatsApp para confirmações, lembretes e mensagens pós-atendimento — seus clientes são avisados no app que já usam todo dia."
+              },
+              {
+                icon: ListOrdered,
+                title: "Lista de espera",
+                description: "Quando um horário abre, o sistema avisa quem estava na fila. Menos buracos na agenda e clientes que não desistem de cortar com você."
+              },
+              {
+                icon: Wallet,
+                title: "Comissão por barbeiro",
+                description: "Defina o percentual de cada profissional e acompanhe quanto cada um gerou. Ideal para equipes com mais de um cadeira."
+              },
+              {
+                icon: Gift,
+                title: "Programa de fidelidade",
+                description: "Pontos por visita para seus clientes voltarem. Recompense quem agenda com frequência e fortaleça o relacionamento com a barbearia."
+              },
+              {
+                icon: Building2,
+                title: "Várias unidades",
+                description: "Gerencie mais de uma loja na mesma conta: cada unidade com agenda, contato e endereço, sem misturar os agendamentos."
+              },
+              {
+                icon: BarChart3,
+                title: "Dashboard e relatórios",
+                description: "Visão clara do negócio: agendamentos, faturamento e desempenho. Relatórios que ajudam a decidir preço, equipe e horários de pico."
+              },
+              {
+                icon: Smartphone,
+                title: "App no celular do cliente",
+                description: "Seu link vira experiência de app no celular do cliente (PWA): ele agenda, recebe lembretes e pode instalar na tela inicial sem baixar da loja."
+              },
+              {
+                icon: UserPlus,
+                title: "Equipe por convite",
+                description: "Envie link de cadastro para novos barbeiros. Eles entram com foto, dados e app próprio para ver a própria agenda e comissão."
+              },
             ].map((feature, i) => (
               <Card key={i} className="bg-card border-border hover:border-primary/50 transition-colors group">
                 <CardContent className="p-6">
@@ -451,11 +597,24 @@ export default function LandingPage() {
                     <ChevronRight className="w-4 h-4 ml-2" />
                   </Button>
                 </Link>
-                <Link href="/contato">
-                  <Button size="lg" variant="outline" className="border-border text-foreground hover:bg-secondary w-full sm:w-auto">
+                <Button
+                  asChild
+                  size="lg"
+                  className={`w-full sm:w-auto ${landingBlueBtnClass} ${!whatsappUrl ? "opacity-80 pointer-events-none" : ""}`}
+                >
+                  <a
+                    href={whatsappUrl ?? "#"}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="no-underline"
+                    aria-label="Falar com um especialista no WhatsApp"
+                    onClick={(e) => {
+                      if (!whatsappUrl) e.preventDefault()
+                    }}
+                  >
                     Falar com um Especialista
-                  </Button>
-                </Link>
+                  </a>
+                </Button>
               </div>
             </div>
           </div>

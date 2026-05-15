@@ -557,3 +557,13 @@ model TrimPlayVisualEffectAsset {
   @@index([eventKey, enabled, sortOrder])
   @@map("trim_play_visual_effect_assets")
 }
+
+// ========== CONFIGURAÇÕES GLOBAIS (SUPER ADMIN) ==========
+/// Linha única (id = singleton): WhatsApp da landing, etc.
+model PlatformSettings {
+  id                    String   @id @default("singleton")
+  landingWhatsappPhone  String?  @map("landing_whatsapp_phone")
+  updatedAt             DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("platform_settings")
+}
