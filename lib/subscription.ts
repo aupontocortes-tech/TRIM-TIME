@@ -2,10 +2,19 @@
  * Lógica de assinatura e trial - Trim Time SaaS
  */
 
-import type { Barbershop, Subscription, SubscriptionPlan, SubscriptionStatus } from "@/lib/db/types"
+import type {
+  PostTrialChoice,
+  Subscription,
+  SubscriptionPlan,
+} from "@/lib/db/types"
 import { TRIAL_DAYS } from "@/lib/plans"
 
-/** Se `true` ou `1`, todas as barbearias tratam plano efetivo como Premium (desenvolvimento). Desligue em produção com pagamento real. */
+/** Super ADM ou conta de teste: sem cartão obrigatório, sem fluxo Asaas nem bloqueios de cobrança. */
+export function isBillingExemptBarbershop(barbershop: { role?: string; is_test?: boolean } | null): boolean {
+  return barbershop?.role === "super_admin" || barbershop?.is_test === true
+}
+
+/** Se `true` ou `1`, todas as barbearias tratam plano efetivo como Premium (desenvolvimento). */
 export function isUnlockAllPlanFeaturesEnv(): boolean {
   const v = process.env.TRIMTIME_UNLOCK_ALL_PLAN_FEATURES?.trim().toLowerCase()
   return v === "1" || v === "true" || v === "yes"
@@ -17,28 +26,65 @@ export function isTrialActive(subscription: Subscription | null): boolean {
   return new Date(subscription.trial_end) > new Date()
 }
 
+export function isTrialExpired(subscription: Subscription | null): boolean {
+  if (!subscription || subscription.status !== "trial") return false
+  if (!subscription.trial_end) return false
+  return new Date(subscription.trial_end) <= new Date()
+}
+
+export function hasCardSetup(subscription: Subscription | null): boolean {
+  return !!subscription?.card_setup_at
+}
+
+/** Durante o trial com cobrança ativa: cartão obrigatório antes de usar o painel (exceto contas isentas). */
+export function requiresCardSetup(
+  subscription: Subscription | null,
+  billingEnabled: boolean,
+  exemptFromBillingRules = false
+): boolean {
+  if (exemptFromBillingRules || !billingEnabled) return false
+  if (!subscription || subscription.status !== "trial") return false
+  if (!isTrialActive(subscription)) return false
+  return !hasCardSetup(subscription)
+}
+
+/** Trial acabou, cartão já cadastrado, ainda não aceitou nem recusou contratar. */
+export function needsTrialDecision(
+  subscription: Subscription | null,
+  exemptFromBillingRules = false
+): boolean {
+  if (exemptFromBillingRules) return false
+  if (!subscription) return false
+  if (!isTrialExpired(subscription)) return false
+  if (!hasCardSetup(subscription)) return false
+  if (subscription.post_trial_choice) return false
+  return true
+}
+
 export function getEffectivePlan(subscription: Subscription | null): SubscriptionPlan | null {
   if (!subscription) return null
-  if (subscription.status === "trial") return "premium" // trial é sempre premium
-  if (subscription.status === "active" || subscription.status === "past_due") return subscription.plan
+
+  if (subscription.status === "trial") {
+    if (!isTrialActive(subscription)) return null
+    if (needsTrialDecision(subscription)) return null
+    return subscription.plan
+  }
+
+  if (subscription.post_trial_choice === "declined") return null
+  if (subscription.status === "active" || subscription.status === "past_due") {
+    return subscription.plan
+  }
   return null
 }
 
-/**
- * Plano efetivo para limites e `hasFeature`.
- *
- * Barbearia com role `super_admin` ou `is_test`: **só** a assinatura no banco (e trial → Premium).
- * Assim o dono do SaaS consegue alternar Básico / Pro / Premium no painel sem ser preso em
- * TRIMTIME_UNLOCK, e-mail ou nome da allowlist interna.
- *
- * Demais contas: unlock .env → allowlist e-mail/nome → assinatura.
- */
 export function getEffectivePlanForBarbershop(
   barbershop: { role?: string; is_test?: boolean; name?: string | null; email?: string | null } | null,
   subscription: Subscription | null
 ): SubscriptionPlan | null {
   if (barbershop?.role === "super_admin" || barbershop?.is_test === true) {
-    return getEffectivePlan(subscription)
+    /** Plataforma não cobra conta interna nem testes: sempre o plano do banco ou premium por padrão. */
+    if (!subscription) return "premium"
+    return subscription.plan
   }
 
   const normalizedName = (barbershop?.name ?? "")
@@ -49,16 +95,11 @@ export function getEffectivePlanForBarbershop(
   const normalizedNameCompact = normalizedName.replace(/[^a-z0-9]+/g, " ").trim()
   const normalizedEmail = (barbershop?.email ?? "").trim().toLowerCase()
 
-  const namedFullAccessPatterns = [
-    /^auto\s*cortes?$/i,
-    /^bsb\s*t+h?iago\s*lins$/i,
-  ]
+  const namedFullAccessPatterns = [/^auto\s*cortes?$/i, /^bsb\s*t+h?iago\s*lins$/i]
   const isNamedFullAccess = namedFullAccessPatterns.some((re) =>
     re.test(normalizedNameCompact)
   )
-  const fullAccessEmails = new Set([
-    "bsbthiagolins@gmail.com",
-  ])
+  const fullAccessEmails = new Set(["bsbthiagolins@gmail.com"])
   const isFullAccessEmail = fullAccessEmails.has(normalizedEmail)
 
   if (isUnlockAllPlanFeaturesEnv()) return "premium"
@@ -75,15 +116,27 @@ export function daysLeftInTrial(subscription: Subscription | null): number {
   return Math.max(0, diff)
 }
 
-export function shouldPromptPlanChoice(subscription: Subscription | null): boolean {
+export function shouldPromptPlanChoice(
+  subscription: Subscription | null,
+  exemptFromBillingRules = false
+): boolean {
+  if (exemptFromBillingRules) return false
   if (!subscription) return true
+  if (needsTrialDecision(subscription, false)) return true
   if (subscription.status === "trial" && !isTrialActive(subscription)) return true
+  if (subscription.post_trial_choice === "declined") return true
   if (subscription.status === "canceled" || subscription.status === "past_due") return true
   return false
 }
 
-export function createTrialEndDate(): Date {
+export function createTrialEndDate(days: number = TRIAL_DAYS): Date {
   const end = new Date()
-  end.setDate(end.getDate() + TRIAL_DAYS)
+  end.setDate(end.getDate() + Math.max(1, days))
   return end
+}
+
+export function isPostTrialChoice(
+  value: string | null | undefined
+): value is PostTrialChoice {
+  return value === "accepted" || value === "declined"
 }

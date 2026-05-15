@@ -101,6 +101,8 @@ export interface BarbershopUnit {
   updated_at: string
 }
 
+export type PostTrialChoice = "accepted" | "declined"
+
 export interface Subscription {
   id: string
   barbershop_id: string
@@ -108,6 +110,8 @@ export interface Subscription {
   status: SubscriptionStatus
   trial_end: string | null
   next_payment: string | null
+  card_setup_at?: string | null
+  post_trial_choice?: PostTrialChoice | null
   created_at: string
   updated_at: string
 }

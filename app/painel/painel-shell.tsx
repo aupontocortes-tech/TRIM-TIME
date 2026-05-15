@@ -12,6 +12,7 @@ import {
   Calendar, 
   Users, 
   DollarSign,
+  CreditCard,
   Settings,
   Menu,
   X,
@@ -31,6 +32,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { BrandLogo } from "@/components/brand-logo"
+import { SubscriptionGate } from "@/components/subscription-gate"
 import { PLAN_SIMULATION_COOKIE_NAME } from "@/lib/plan-simulation-constants"
 
 /** Role para exibição do menu: super_admin e admin_barbershop veem tudo; user (barbeiro) só agenda e clientes. */
@@ -46,6 +48,7 @@ const menuItems: { href: string; label: string; icon: typeof LayoutDashboard; ro
     icon: Building2,
     roles: ["super_admin", "admin_barbershop"],
   },
+  { href: "/painel/assinatura", label: "Assinatura", icon: CreditCard, roles: ["super_admin", "admin_barbershop"] },
   { href: "/painel/configuracoes", label: "Configurações", icon: Settings, roles: ["super_admin", "admin_barbershop"] },
   { href: "/painel/suporte", label: "Suporte", icon: MessageCircle },
 ]
@@ -290,7 +293,7 @@ function PainelLayoutInner({ children }: { children: React.ReactNode }) {
         </header>
 
         <main className="p-4 sm:p-6 lg:p-8">
-          {children}
+          <SubscriptionGate>{children}</SubscriptionGate>
         </main>
       </div>
     </div>

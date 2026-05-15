@@ -1,3 +1,4 @@
+import type { SubscriptionPlan } from "@/lib/db/types"
 import { prisma } from "@/lib/prisma"
 import {
   defaultPlanPrices,
@@ -91,6 +92,9 @@ export function platformSettingsToApi(row: {
   priceBasic: unknown
   pricePro: unknown
   pricePremium: unknown
+  planConfigs?: unknown
+  defaultTrialDays: number
+  defaultTrialPlan: SubscriptionPlan
   paymentApiEnabled: boolean
 }) {
   const plan_prices = mergePlanPricesFromDb({
@@ -101,6 +105,9 @@ export function platformSettingsToApi(row: {
   return {
     landing_whatsapp_phone: row.landingWhatsappPhone ?? "",
     plan_prices,
+    plan_configs: row.planConfigs ?? null,
+    default_trial_days: row.defaultTrialDays,
+    default_trial_plan: row.defaultTrialPlan,
     price_basic: row.priceBasic != null ? Number(row.priceBasic) : null,
     price_pro: row.pricePro != null ? Number(row.pricePro) : null,
     price_premium: row.pricePremium != null ? Number(row.pricePremium) : null,
@@ -108,3 +115,4 @@ export function platformSettingsToApi(row: {
     payment_api_active: row.paymentApiEnabled || isPaymentApiEnabledFromEnv(),
   }
 }
+

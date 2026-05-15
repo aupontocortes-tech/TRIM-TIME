@@ -3,6 +3,7 @@ import { getBarbershopIdFromRequest } from "@/lib/tenant"
 import { hashPassword } from "@/lib/auth/password"
 import { withBarbershopPasswordHash } from "@/lib/barbershop-auth-settings"
 import { createTrialEndDate } from "@/lib/subscription"
+import { getTrialConfig } from "@/lib/plan-catalog"
 import { prisma } from "@/lib/prisma"
 import { toBarbershopApi } from "@/lib/prisma-barbershop"
 import { resolveEffectivePlanForActiveSession } from "@/lib/barbershop-effective-plan-server"
@@ -54,7 +55,7 @@ export async function GET() {
   }
 }
 
-/** Cadastro de nova barbearia: cria barbershop + assinatura em trial (7 dias Premium). Usa Prisma para não depender do cache do Supabase. */
+/** Cadastro de nova barbearia: cria barbershop + trial (padrão 2 dias no plano Pro). */
 export async function POST(request: Request) {
   try {
     const body = await request.json() as {
@@ -79,7 +80,8 @@ export async function POST(request: Request) {
     if (existing) slug = `${slug}-${Date.now().toString(36)}`
     const emailLower = body.email.trim().toLowerCase()
     const isSuperAdmin = !!process.env.SUPER_ADMIN_EMAIL && emailLower === process.env.SUPER_ADMIN_EMAIL.trim().toLowerCase()
-    const trialEnd = createTrialEndDate()
+    const trialCfg = await getTrialConfig()
+    const trialEnd = createTrialEndDate(trialCfg.days)
     const barbershop = await prisma.barbershop.create({
       data: {
         name: body.name.trim(),
@@ -93,7 +95,7 @@ export async function POST(request: Request) {
     await prisma.subscription.create({
       data: {
         barbershopId: barbershop.id,
-        plan: "premium",
+        plan: trialCfg.plan,
         status: "trial",
         trialEnd,
       },

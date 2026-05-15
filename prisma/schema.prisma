@@ -253,18 +253,26 @@ model MarketingCampaign {
 
 // ========== SUBSCRIPTIONS ==========
 model Subscription {
-  id            String             @id @default(uuid()) @db.Uuid
-  barbershopId  String             @unique @map("barbershop_id") @db.Uuid
-  barbershop    Barbershop         @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
-  plan          SubscriptionPlan   @default(premium)
-  status        SubscriptionStatus @default(trial)
-  trialEnd      DateTime?          @map("trial_end") @db.Timestamptz
-  nextPayment   DateTime?          @map("next_payment") @db.Timestamptz
-  createdAt     DateTime           @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt     DateTime           @updatedAt @map("updated_at") @db.Timestamptz
+  id                  String             @id @default(uuid()) @db.Uuid
+  barbershopId        String             @unique @map("barbershop_id") @db.Uuid
+  barbershop          Barbershop         @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  plan                SubscriptionPlan   @default(pro)
+  status              SubscriptionStatus @default(trial)
+  trialEnd            DateTime?          @map("trial_end") @db.Timestamptz
+  nextPayment         DateTime?          @map("next_payment") @db.Timestamptz
+  asaasCustomerId     String?            @map("asaas_customer_id")
+  asaasSubscriptionId String?            @map("asaas_subscription_id")
+  billingType         String?            @map("billing_type")
+  /// Cartão cadastrado no Asaas (obrigatório durante o trial com billing ativo).
+  cardSetupAt         DateTime?          @map("card_setup_at") @db.Timestamptz
+  /// Após o trial: accepted = contratou; declined = recusou (sem cobrança).
+  postTrialChoice     String?            @map("post_trial_choice")
+  createdAt           DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt           DateTime           @updatedAt @map("updated_at") @db.Timestamptz
 
   @@index([barbershopId])
   @@index([status])
+  @@index([asaasSubscriptionId])
 }
 
 // ========== BARBERS ==========
@@ -561,14 +569,18 @@ model TrimPlayVisualEffectAsset {
 // ========== CONFIGURAÇÕES GLOBAIS (SUPER ADMIN) ==========
 /// Linha única (id = singleton): WhatsApp da landing, etc.
 model PlatformSettings {
-  id                    String   @id @default("singleton")
-  landingWhatsappPhone  String?  @map("landing_whatsapp_phone")
-  priceBasic            Decimal? @map("price_basic") @db.Decimal(10, 2)
-  pricePro              Decimal? @map("price_pro") @db.Decimal(10, 2)
-  pricePremium          Decimal? @map("price_premium") @db.Decimal(10, 2)
-  /// Quando true, valores exibidos/cobrados seguem esta config (integração futura com gateway).
-  paymentApiEnabled     Boolean  @default(false) @map("payment_api_enabled")
-  updatedAt             DateTime @updatedAt @map("updated_at") @db.Timestamptz
+  id                    String           @id @default("singleton")
+  landingWhatsappPhone  String?          @map("landing_whatsapp_phone")
+  priceBasic            Decimal?         @map("price_basic") @db.Decimal(10, 2)
+  pricePro              Decimal?         @map("price_pro") @db.Decimal(10, 2)
+  pricePremium          Decimal?         @map("price_premium") @db.Decimal(10, 2)
+  /// Nomes, benefícios e limites por plano (JSON). Preços também em price_*.
+  planConfigs           Json?            @map("plan_configs")
+  defaultTrialDays      Int              @default(7) @map("default_trial_days")
+  defaultTrialPlan      SubscriptionPlan @default(pro) @map("default_trial_plan")
+  /// Quando true + ASAAS_API_KEY, cobrança via Asaas.
+  paymentApiEnabled     Boolean          @default(false) @map("payment_api_enabled")
+  updatedAt             DateTime         @updatedAt @map("updated_at") @db.Timestamptz
 
   @@map("platform_settings")
 }

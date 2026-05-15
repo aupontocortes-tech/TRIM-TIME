@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { isBillingEnabled } from "@/lib/asaas/billing-service"
 import { getBarbershopIdFromRequest } from "@/lib/tenant"
 import { prisma } from "@/lib/prisma"
 import type { Subscription } from "@/lib/db/types"
@@ -64,9 +65,21 @@ export async function POST(request: Request) {
     }
     const barbershop = await prisma.barbershop.findUnique({
       where: { id: barbershopId },
-      select: { id: true },
+      select: { id: true, isTest: true, role: true },
     })
     if (!barbershop) return NextResponse.json({ error: "Barbearia não encontrada" }, { status: 404 })
+
+    if (await isBillingEnabled()) {
+      if (barbershop.role !== "super_admin" && !barbershop.isTest) {
+        return NextResponse.json(
+          {
+            error: "Use a página de assinatura para contratar com pagamento.",
+            redirect: "/painel/assinatura",
+          },
+          { status: 400 }
+        )
+      }
+    }
 
     const nextPayment = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
     const data = await prisma.subscription.upsert({

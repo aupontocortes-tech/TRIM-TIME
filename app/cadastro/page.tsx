@@ -77,11 +77,12 @@ function CadastroPageContent() {
           throw new Error(err.error || "Erro ao iniciar sessão")
         }
         await sessionRes.json().catch(() => ({}))
+        const isSuperAdmin = barbershop.role === "super_admin"
         if (typeof window !== "undefined") {
-          window.location.assign("/painel")
+          window.location.assign(isSuperAdmin ? "/painel" : "/painel/assinatura?setup=card")
           return
         }
-        router.push("/painel")
+        router.push(isSuperAdmin ? "/painel" : "/painel/assinatura?setup=card")
       } else {
         await new Promise((resolve) => setTimeout(resolve, 500))
         router.push("/")

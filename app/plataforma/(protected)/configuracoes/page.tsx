@@ -20,6 +20,8 @@ const GOLD = "#D4AF37"
 type SettingsPayload = {
   landing_whatsapp_phone?: string
   plan_prices?: Record<SubscriptionPlan, number>
+  default_trial_days?: number
+  default_trial_plan?: SubscriptionPlan
   payment_api_enabled?: boolean
   payment_api_active?: boolean
   error?: string
@@ -116,6 +118,8 @@ export default function PlataformaConfiguracoesPage() {
   const [waErr, setWaErr] = useState<string | null>(null)
 
   const [prices, setPrices] = useState({ ...PLAN_PRICES })
+  const [trialDays, setTrialDays] = useState(7)
+  const [trialPlan, setTrialPlan] = useState<SubscriptionPlan>("pro")
   const [paymentApiEnabled, setPaymentApiEnabled] = useState(false)
   const [paymentApiActive, setPaymentApiActive] = useState(false)
   const [plansSaving, setPlansSaving] = useState(false)
@@ -142,6 +146,8 @@ export default function PlataformaConfiguracoesPage() {
           premium: j.plan_prices.premium ?? PLAN_PRICES.premium,
         })
       }
+      if (typeof j.default_trial_days === "number") setTrialDays(j.default_trial_days)
+      if (j.default_trial_plan) setTrialPlan(j.default_trial_plan)
       setPaymentApiEnabled(!!j.payment_api_enabled)
       setPaymentApiActive(!!j.payment_api_active)
     } catch {
@@ -198,6 +204,8 @@ export default function PlataformaConfiguracoesPage() {
           price_basic: prices.basic,
           price_pro: prices.pro,
           price_premium: prices.premium,
+          default_trial_days: trialDays,
+          default_trial_plan: trialPlan,
           payment_api_enabled: paymentApiEnabled,
         }),
       })
@@ -221,7 +229,7 @@ export default function PlataformaConfiguracoesPage() {
     ? `Atual: ${formatPhoneSummary(savedPhone)}`
     : "Nenhum número — botões de WhatsApp ocultos na landing"
 
-  const plansSummary = `Básico R$ ${prices.basic} · Pro R$ ${prices.pro} · Premium R$ ${prices.premium}`
+  const plansSummary = `Trial ${trialDays}d ${PLAN_LABELS[trialPlan]} · Básico R$ ${prices.basic} · Pro R$ ${prices.pro} · Premium R$ ${prices.premium}`
 
   if (loading) {
     return (
@@ -304,6 +312,34 @@ export default function PlataformaConfiguracoesPage() {
             {plansErr ? <Alert tone="err">{plansErr}</Alert> : null}
             {plansMsg ? <Alert tone="ok">{plansMsg}</Alert> : null}
 
+            <div className="grid sm:grid-cols-2 gap-4 rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
+              <div>
+                <Label htmlFor="trial-days" className="text-zinc-300">Dias grátis no cadastro</Label>
+                <Input
+                  id="trial-days"
+                  type="number"
+                  min={0}
+                  max={90}
+                  className="mt-1.5 bg-zinc-950 border-zinc-700 text-white"
+                  value={trialDays}
+                  onChange={(e) => setTrialDays(Number(e.target.value) || 0)}
+                />
+              </div>
+              <div>
+                <Label htmlFor="trial-plan" className="text-zinc-300">Plano do período grátis</Label>
+                <select
+                  id="trial-plan"
+                  className="mt-1.5 w-full h-10 rounded-md bg-zinc-950 border border-zinc-700 text-white px-3 text-sm"
+                  value={trialPlan}
+                  onChange={(e) => setTrialPlan(e.target.value as SubscriptionPlan)}
+                >
+                  {(["basic", "pro", "premium"] as const).map((p) => (
+                    <option key={p} value={p}>{PLAN_LABELS[p]}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
             <div className="grid sm:grid-cols-3 gap-4">
               {(["basic", "pro", "premium"] as const).map((plan) => (
                 <div key={plan} className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
@@ -336,8 +372,7 @@ export default function PlataformaConfiguracoesPage() {
               <div>
                 <p className="text-sm font-medium text-white">API de pagamento</p>
                 <p className="text-xs text-zinc-500 mt-1">
-                  Marque quando o gateway estiver conectado. Os valores acima serão usados na cobrança quando a
-                  integração estiver ativa.
+                  Ative quando ASAAS_API_KEY estiver no servidor. Cobrança recorrente via Asaas (cartão ou PIX).
                 </p>
                 {paymentApiActive ? (
                   <p className="text-xs text-emerald-500/90 mt-2">Status: ativa (config ou ambiente)</p>

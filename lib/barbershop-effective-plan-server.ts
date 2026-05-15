@@ -5,7 +5,12 @@
  */
 import { prisma } from "@/lib/prisma"
 import { getPlanSimulationOverride } from "@/lib/plan-simulation-server"
-import { getEffectivePlanForBarbershop } from "@/lib/subscription"
+import { isPaymentApiActive } from "@/lib/platform-settings"
+import {
+  getEffectivePlanForBarbershop,
+  isBillingExemptBarbershop,
+  requiresCardSetup,
+} from "@/lib/subscription"
 import type {
   Subscription,
   SubscriptionPlan,
@@ -28,15 +33,22 @@ export async function resolveEffectivePlanForActiveSession(
 export async function resolveEffectivePlanForBarbershop(
   barbershopId: string
 ): Promise<SubscriptionPlan | null> {
-  const [bs, sub] = await Promise.all([
+  const [bs, sub, billingActive] = await Promise.all([
     prisma.barbershop.findUnique({
       where: { id: barbershopId },
       select: { name: true, email: true, role: true, isTest: true },
     }),
     prisma.subscription.findUnique({
       where: { barbershopId },
-      select: { plan: true, status: true, trialEnd: true },
+      select: {
+        plan: true,
+        status: true,
+        trialEnd: true,
+        cardSetupAt: true,
+        postTrialChoice: true,
+      },
     }),
+    isPaymentApiActive(),
   ])
 
   const subscription: Subscription | null = sub
@@ -47,10 +59,20 @@ export async function resolveEffectivePlanForBarbershop(
         status: sub.status as SubscriptionStatus,
         trial_end: sub.trialEnd?.toISOString() ?? null,
         next_payment: null,
+        card_setup_at: sub.cardSetupAt?.toISOString() ?? null,
+        post_trial_choice: (sub.postTrialChoice as Subscription["post_trial_choice"]) ?? null,
         created_at: "",
         updated_at: "",
       }
     : null
+
+  const exempt = isBillingExemptBarbershop(
+    bs ? { role: bs.role, is_test: bs.isTest } : null
+  )
+
+  if (subscription && !exempt && requiresCardSetup(subscription, billingActive)) {
+    return null
+  }
 
   return getEffectivePlanForBarbershop(
     bs ? { name: bs.name, email: bs.email, role: bs.role, is_test: bs.isTest } : null,

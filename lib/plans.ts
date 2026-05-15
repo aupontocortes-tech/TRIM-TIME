@@ -23,7 +23,7 @@ export const BARBER_LIMITS: Record<SubscriptionPlan, number | null> = {
   premium: null, // ilimitado
 }
 
-/** Dias de trial para novas barbearias (plano Premium) */
+/** Dias de trial padrão (sobrescrito por platform_settings.default_trial_days) */
 export const TRIAL_DAYS = 7
 
 /** Recursos por plano */

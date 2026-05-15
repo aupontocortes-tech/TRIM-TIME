@@ -6,7 +6,9 @@ import {
   platformSettingsToApi,
   whatsappDigitsForWaMe,
 } from "@/lib/platform-settings"
+import { mergePlanCatalogIntoStored } from "@/lib/plan-catalog"
 import { parsePlanPriceInput } from "@/lib/plan-prices"
+import type { SubscriptionPlan } from "@/lib/db/types"
 import { prisma } from "@/lib/prisma"
 function parseWhatsappField(body: { landing_whatsapp_phone?: string }) {
   const raw = String(body.landing_whatsapp_phone ?? "").trim()
@@ -45,6 +47,9 @@ export async function PATCH(request: Request) {
       price_pro?: number | string
       price_premium?: number | string
       payment_api_enabled?: boolean
+      default_trial_days?: number
+      default_trial_plan?: SubscriptionPlan
+      plan_configs?: unknown
     }
 
     const existing = await getPlatformSettings()
@@ -54,6 +59,9 @@ export async function PATCH(request: Request) {
       pricePro?: number | null
       pricePremium?: number | null
       paymentApiEnabled?: boolean
+      defaultTrialDays?: number
+      defaultTrialPlan?: SubscriptionPlan
+      planConfigs?: object
     } = {}
 
     if ("landing_whatsapp_phone" in body) {
@@ -97,6 +105,19 @@ export async function PATCH(request: Request) {
       update.paymentApiEnabled = body.payment_api_enabled
     }
 
+    if (typeof body.default_trial_days === "number" && body.default_trial_days >= 0 && body.default_trial_days <= 90) {
+      update.defaultTrialDays = Math.round(body.default_trial_days)
+    }
+    if (
+      body.default_trial_plan &&
+      ["basic", "pro", "premium"].includes(body.default_trial_plan)
+    ) {
+      update.defaultTrialPlan = body.default_trial_plan
+    }
+    if (body.plan_configs && typeof body.plan_configs === "object") {
+      update.planConfigs = mergePlanCatalogIntoStored(existing.planConfigs, body.plan_configs as never)
+    }
+
     const row = await prisma.platformSettings.upsert({
       where: { id: "singleton" },
       create: {
@@ -106,6 +127,9 @@ export async function PATCH(request: Request) {
         pricePro: update.pricePro ?? existing.pricePro,
         pricePremium: update.pricePremium ?? existing.pricePremium,
         paymentApiEnabled: update.paymentApiEnabled ?? existing.paymentApiEnabled,
+        defaultTrialDays: update.defaultTrialDays ?? existing.defaultTrialDays,
+        defaultTrialPlan: update.defaultTrialPlan ?? existing.defaultTrialPlan,
+        planConfigs: update.planConfigs ?? existing.planConfigs ?? undefined,
       },
       update,
     })
