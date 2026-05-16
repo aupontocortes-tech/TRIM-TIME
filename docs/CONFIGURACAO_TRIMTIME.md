@@ -36,7 +36,13 @@ O cadastro em `/cadastro` envia o código via **Supabase Admin** (`generateLink`
 
 **Obrigatório na Vercel e no `.env.local`:** `SUPABASE_SERVICE_ROLE_KEY` (além de URL e ANON_KEY).
 
-No template de e-mail do Supabase, inclua `{{ .Token }}` para o usuário ver os dígitos. Peça um **novo código** após deploy.
+No template de e-mail do Supabase, inclua `{{ .Token }}` nestes modelos (cadastro usa **Invite**; quem já tentou antes usa **Magic Link** / **Confirm signup**):
+
+- **Invite user** (principal no cadastro novo)
+- **Magic Link**
+- **Confirm signup**
+
+Recuperação de senha usa **Reset password** — por isso o código podia chegar lá e não no cadastro. Peça um **novo código** após deploy.
 
 ## Período grátis (7 dias na landing)
 

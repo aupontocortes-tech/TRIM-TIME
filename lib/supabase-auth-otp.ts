@@ -12,10 +12,20 @@ export function painelSignupOtpSendOptions() {
   }
 }
 
-type OtpVerifyType = "signup" | "email" | "magiclink"
+type OtpVerifyType = "signup" | "email" | "magiclink" | "invite" | "recovery"
 
-/** Ordem: cadastro novo (signup) e usuário já existente no Auth (magiclink). */
-const VERIFY_TYPES: OtpVerifyType[] = ["signup", "magiclink", "email"]
+/**
+ * Ordem para cadastro:
+ * - invite: e-mail novo (template "Invite", costuma ter {{ .Token }} como Recovery)
+ * - signup / magiclink: usuário já criado no Auth em tentativa anterior
+ */
+const PAINEL_SIGNUP_VERIFY_TYPES: OtpVerifyType[] = [
+  "invite",
+  "signup",
+  "magiclink",
+  "email",
+  "recovery",
+]
 
 function otpRedirectTo(): string | undefined {
   const url =
@@ -24,9 +34,26 @@ function otpRedirectTo(): string | undefined {
   return url || undefined
 }
 
+function isSupabaseRateLimit(message: string | undefined): boolean {
+  const msg = (message ?? "").toLowerCase()
+  return (
+    msg.includes("rate limit") ||
+    msg.includes("too many") ||
+    msg.includes("exceeded") ||
+    msg.includes("for security purposes")
+  )
+}
+
+function isInviteUserAlreadyRegistered(message: string | undefined): boolean {
+  const msg = (message ?? "").toLowerCase()
+  return msg.includes("already been registered") || msg.includes("already registered")
+}
+
 /**
- * Envia OTP por e-mail via Admin API (dispara o mesmo e-mail com {{ .Token }} do Supabase).
- * `signInWithOtp` sozinho costuma mandar só "Confirm your signup" com link, sem dígitos.
+ * Envia OTP por e-mail via Admin API.
+ * Cadastro novo: `invite` (não usa o template "Confirm signup", que muitas vezes só manda link).
+ * E-mail já no Auth: `magiclink` (template Magic Link / signup).
+ * Recuperação de senha usa `recovery` — outro fluxo; por isso "esqueci senha" funcionava e cadastro não.
  */
 export async function sendSupabaseEmailOtp(
   email: string
@@ -43,20 +70,31 @@ export async function sendSupabaseEmailOtp(
   }
 
   const redirectTo = otpRedirectTo()
-  const { data, error } = await admin.auth.admin.generateLink({
-    type: "magiclink",
+  const linkOpts = redirectTo ? { redirectTo } : undefined
+
+  let data: Awaited<ReturnType<typeof admin.auth.admin.generateLink>>["data"]
+  let error: Awaited<ReturnType<typeof admin.auth.admin.generateLink>>["error"]
+
+  const invite = await admin.auth.admin.generateLink({
+    type: "invite",
     email,
-    options: redirectTo ? { redirectTo } : undefined,
+    options: linkOpts,
   })
+  data = invite.data
+  error = invite.error
+
+  if (error && isInviteUserAlreadyRegistered(error.message)) {
+    const magic = await admin.auth.admin.generateLink({
+      type: "magiclink",
+      email,
+      options: linkOpts,
+    })
+    data = magic.data
+    error = magic.error
+  }
 
   if (error) {
-    const msg = (error.message ?? "").toLowerCase()
-    if (
-      msg.includes("rate limit") ||
-      msg.includes("too many") ||
-      msg.includes("exceeded") ||
-      msg.includes("for security purposes")
-    ) {
+    if (isSupabaseRateLimit(error.message)) {
       return {
         error: "Muitas solicitações de código. Aguarde cerca de 60 segundos e tente de novo.",
         status: 429,
@@ -96,10 +134,11 @@ export async function sendSupabaseEmailOtpLegacyAnon(email: string) {
  */
 export async function verifyEmailOtpWithFallback(
   supabase: SupabaseClient,
-  params: { email: string; token: string }
+  params: { email: string; token: string },
+  types: OtpVerifyType[] = PAINEL_SIGNUP_VERIFY_TYPES
 ) {
   let lastError: { message?: string } | null = null
-  for (const type of VERIFY_TYPES) {
+  for (const type of types) {
     const { data, error } = await supabase.auth.verifyOtp({
       email: params.email,
       token: params.token,
