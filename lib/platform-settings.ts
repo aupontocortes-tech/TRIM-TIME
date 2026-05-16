@@ -31,14 +31,53 @@ export function buildLandingWhatsappUrl(phoneDigits: string): string {
   return `https://wa.me/${d}?text=${text}`
 }
 
+/** Corrige default_trial_days / plan_configs.trialDays legados (ex.: 2 dias da migration 020). */
+async function healStaleTrialDaysIfNeeded(row: {
+  id: string
+  defaultTrialDays: number
+  planConfigs: unknown
+}) {
+  const needsDefault = row.defaultTrialDays < TRIAL_DAYS
+  let planConfigs = row.planConfigs
+  let needsPlanConfigs = false
+  if (planConfigs && typeof planConfigs === "object") {
+    const pc = planConfigs as { trialDays?: number }
+    if (typeof pc.trialDays === "number" && pc.trialDays > 0 && pc.trialDays < TRIAL_DAYS) {
+      needsPlanConfigs = true
+      planConfigs = { ...pc, trialDays: TRIAL_DAYS }
+    }
+  }
+  if (!needsDefault && !needsPlanConfigs) return row
+  return prisma.platformSettings.update({
+    where: { id: row.id },
+    data: {
+      ...(needsDefault ? { defaultTrialDays: TRIAL_DAYS } : {}),
+      ...(needsPlanConfigs ? { planConfigs: planConfigs as object } : {}),
+    },
+  })
+}
+
 export async function getPlatformSettings() {
-  const row = await prisma.platformSettings.findUnique({
+  let row = await prisma.platformSettings.findUnique({
     where: { id: SINGLETON_ID },
   })
-  if (row) return row
-  return prisma.platformSettings.create({
-    data: { id: SINGLETON_ID, defaultTrialDays: TRIAL_DAYS },
-  })
+  if (!row) {
+    return prisma.platformSettings.create({
+      data: { id: SINGLETON_ID, defaultTrialDays: TRIAL_DAYS, defaultTrialPlan: "pro" },
+    })
+  }
+  if (row.defaultTrialDays < TRIAL_DAYS) {
+    row = await healStaleTrialDaysIfNeeded(row)
+  } else {
+    const pc =
+      row.planConfigs && typeof row.planConfigs === "object"
+        ? (row.planConfigs as { trialDays?: number })
+        : null
+    if (typeof pc?.trialDays === "number" && pc.trialDays > 0 && pc.trialDays < TRIAL_DAYS) {
+      row = await healStaleTrialDaysIfNeeded(row)
+    }
+  }
+  return row
 }
 
 export function landingWhatsappPhoneFromEnv(): string | null {

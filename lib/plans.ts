@@ -23,8 +23,22 @@ export const BARBER_LIMITS: Record<SubscriptionPlan, number | null> = {
   premium: null, // ilimitado
 }
 
-/** Dias de trial padrão (sobrescrito por platform_settings.default_trial_days) */
+/** Dias de trial padrão no Plano Pro (marketing + assinatura). */
 export const TRIAL_DAYS = 7
+
+export const TRIAL_PLAN: SubscriptionPlan = "pro"
+
+/** Texto padrão na landing e cadastro. */
+export const TRIAL_OFFER_HEADLINE = `${TRIAL_DAYS} dias grátis no Plano Pro`
+
+/**
+ * Valores legados no banco (ex.: migration 020 com default 2) não podem aparecer na UI nem no trial real.
+ */
+export function normalizeTrialDays(days: number | null | undefined): number {
+  const n = typeof days === "number" && Number.isFinite(days) ? Math.round(days) : 0
+  if (n < TRIAL_DAYS) return TRIAL_DAYS
+  return n
+}
 
 /** Recursos por plano */
 export const PLAN_FEATURES = {

@@ -10,5 +10,5 @@ CREATE INDEX IF NOT EXISTS idx_subscriptions_asaas_subscription
 
 ALTER TABLE platform_settings
   ADD COLUMN IF NOT EXISTS plan_configs JSONB,
-  ADD COLUMN IF NOT EXISTS default_trial_days INT NOT NULL DEFAULT 2,
+  ADD COLUMN IF NOT EXISTS default_trial_days INT NOT NULL DEFAULT 7,
   ADD COLUMN IF NOT EXISTS default_trial_plan subscription_plan NOT NULL DEFAULT 'pro';

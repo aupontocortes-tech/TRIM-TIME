@@ -5,6 +5,8 @@ import {
   PLAN_LABELS,
   PLAN_PRICES,
   TRIAL_DAYS,
+  TRIAL_PLAN,
+  normalizeTrialDays,
 } from "@/lib/plans"
 import { getPlatformSettings } from "@/lib/platform-settings"
 import { mergePlanPricesFromDb } from "@/lib/plan-prices"
@@ -40,7 +42,7 @@ const PLANS: SubscriptionPlan[] = ["basic", "pro", "premium"]
 function defaultCatalog(): PlanCatalog {
   return {
     trialDays: TRIAL_DAYS,
-    trialPlan: "pro" as SubscriptionPlan,
+    trialPlan: TRIAL_PLAN,
     plans: {
       basic: {
         name: PLAN_LABELS.basic,
@@ -81,11 +83,13 @@ export async function getPlanCatalog(): Promise<PlanCatalog> {
     for (const p of PLANS) {
       base.plans[p].price = prices[p]
     }
-    if (row.defaultTrialDays > 0) base.trialDays = row.defaultTrialDays
+    if (row.defaultTrialDays > 0) base.trialDays = normalizeTrialDays(row.defaultTrialDays)
     if (row.defaultTrialPlan) base.trialPlan = row.defaultTrialPlan
 
     const stored = parseStoredConfigs(row.planConfigs)
-    if (stored?.trialDays && stored.trialDays > 0) base.trialDays = stored.trialDays
+    if (stored?.trialDays && stored.trialDays > 0) {
+      base.trialDays = normalizeTrialDays(stored.trialDays)
+    }
     if (stored?.trialPlan && PLANS.includes(stored.trialPlan)) base.trialPlan = stored.trialPlan
 
     for (const p of PLANS) {
@@ -103,6 +107,8 @@ export async function getPlanCatalog(): Promise<PlanCatalog> {
   } catch (e) {
     console.error("[plan-catalog] getPlanCatalog", e)
   }
+  base.trialDays = normalizeTrialDays(base.trialDays)
+  if (!PLANS.includes(base.trialPlan)) base.trialPlan = TRIAL_PLAN
   return base
 }
 

@@ -27,7 +27,13 @@ import {
   Smartphone,
   UserPlus,
 } from "lucide-react"
-import { PLAN_PRICES, PLAN_LABELS, PLAN_FEATURES, TRIAL_DAYS } from "@/lib/plans"
+import {
+  PLAN_PRICES,
+  PLAN_LABELS,
+  PLAN_FEATURES,
+  TRIAL_DAYS,
+  TRIAL_OFFER_HEADLINE,
+} from "@/lib/plans"
 import { BrandLogo } from "@/components/brand-logo"
 import { TrimTimeWordmark } from "@/components/trim-time-wordmark"
 
@@ -81,7 +87,6 @@ function LandingWhatsappHeaderButton({
 export default function LandingPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [whatsappUrl, setWhatsappUrl] = useState<string | null>(null)
-  const [trialDays, setTrialDays] = useState(TRIAL_DAYS)
   const [planPrices, setPlanPrices] = useState(PLAN_PRICES)
 
   useEffect(() => {
@@ -91,12 +96,10 @@ export default function LandingPage() {
         (
           j: {
             whatsapp_url?: string | null
-            trial_days?: number
             plan_prices?: typeof PLAN_PRICES
           } | null
         ) => {
           if (!j) return
-          if (typeof j.trial_days === "number" && j.trial_days > 0) setTrialDays(j.trial_days)
           if (j.whatsapp_url) setWhatsappUrl(j.whatsapp_url)
           if (j.plan_prices) {
             setPlanPrices({
@@ -232,7 +235,7 @@ export default function LandingPage() {
                     <span className="flex flex-col items-start text-left leading-tight">
                       <span className="text-base sm:text-lg">Comece agora</span>
                       <span className="text-xs sm:text-sm font-normal opacity-90">
-                        Teste grátis por {trialDays} dias
+                        {TRIAL_OFFER_HEADLINE}
                       </span>
                     </span>
                   </Button>
@@ -443,10 +446,10 @@ export default function LandingPage() {
               Você paga, seus clientes agendam grátis pelo seu link exclusivo
             </p>
             <p className="text-sm text-muted-foreground max-w-2xl mx-auto mt-4">
-              <strong className="text-foreground">Novo cadastro:</strong> começa no{" "}
-              <strong className="text-foreground">Plano Pro em período de teste gratuito</strong> (cadastro do cartão
-              necessário para liberar o uso do painel, sem cobrança durante o teste). Os valores abaixo são as mensalidades{" "}
-              <span className="text-foreground/90">após</span> o teste — você escolhe se continua ou não.
+              <strong className="text-foreground">Novo cadastro:</strong>{" "}
+              <strong className="text-foreground">{TRIAL_OFFER_HEADLINE}</strong> — use todos os recursos do Pro sem
+              cobrança nesse período (cadastro do cartão só para ativar o painel). Depois dos {TRIAL_DAYS} dias, se
+              quiser continuar, a mensalidade do plano escolhido passa a valer; se não, basta não contratar.
             </p>
           </div>
 

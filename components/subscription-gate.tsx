@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Loader2, CreditCard, CalendarClock } from "lucide-react"
 import { TrialBillingTrust } from "@/components/onboarding/trial-billing-trust"
-import { TRIAL_DAYS } from "@/lib/plans"
+import { TRIAL_DAYS, normalizeTrialDays } from "@/lib/plans"
 
 const ALLOW_PATHS = ["/painel/assinatura", "/painel/configuracoes", "/painel/suporte"]
 
@@ -36,7 +36,7 @@ export function SubscriptionGate({ children }: { children: React.ReactNode }) {
       .then((j) => {
         if (cancelled) return
         const d = j?.catalog?.trialDays
-        if (typeof d === "number" && d > 0) setTrialDays(d)
+        if (typeof d === "number" && d > 0) setTrialDays(normalizeTrialDays(d))
         if (j?.billing_exempt) {
           setMode("none")
           return
