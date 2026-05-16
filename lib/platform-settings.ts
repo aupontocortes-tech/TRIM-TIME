@@ -6,6 +6,7 @@ import {
   mergePlanPricesFromDb,
   type PlanPricesMap,
 } from "@/lib/plan-prices"
+import { TRIAL_DAYS } from "@/lib/plans"
 
 const SINGLETON_ID = "singleton"
 
@@ -36,7 +37,7 @@ export async function getPlatformSettings() {
   })
   if (row) return row
   return prisma.platformSettings.create({
-    data: { id: SINGLETON_ID },
+    data: { id: SINGLETON_ID, defaultTrialDays: TRIAL_DAYS },
   })
 }
 

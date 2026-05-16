@@ -1,7 +1,11 @@
 import crypto from "node:crypto"
 import { prisma } from "@/lib/prisma"
 import { conflictForBarbershopSignup } from "@/lib/barbershop-signup-conflicts"
-import { createAnonServerAuthClient } from "@/lib/supabase/server"
+import { createAnonServerAuthClient, createServiceRoleClient } from "@/lib/supabase/server"
+import {
+  painelSignupOtpSendOptions,
+  verifyEmailOtpWithFallback,
+} from "@/lib/supabase-auth-otp"
 import { isPublicOtpLengthValid, normalizePublicOtpCode } from "@/lib/public-otp-code"
 import {
   canonicalSignupEmail,
@@ -165,12 +169,10 @@ export async function sendPainelSignupOtp(
     }
   }
 
+  // Sem `options.data`: com metadados o GoTrue costuma enviar link "Confirm signup" em vez do código.
   const { error: authErr } = await supabase.auth.signInWithOtp({
     email: emailCanon,
-    options: {
-      shouldCreateUser: true,
-      data: { intent: PAINEL_SIGNUP_OTP_METADATA_INTENT },
-    },
+    options: painelSignupOtpSendOptions(),
   })
 
   if (authErr) {
@@ -221,13 +223,12 @@ export async function verifyPainelSignupOtp(
     return { error: "Supabase não configurado.", status: 500 }
   }
 
-  const { data: authData, error: authErr } = await supabase.auth.verifyOtp({
+  const { data: authData, error: authErr } = await verifyEmailOtpWithFallback(supabase, {
     email: emailCanon,
     token,
-    type: "email",
   })
 
-  if (authErr || !authData.user) {
+  if (authErr || !authData?.user) {
     const raw = authErr?.message?.toLowerCase() ?? ""
     let error =
       "Código inválido ou expirado. Confira os dígitos ou peça um novo código."
@@ -242,14 +243,16 @@ export async function verifyPainelSignupOtp(
     return { error: "E-mail não confere com o código.", status: 400 }
   }
 
-  const meta = (user.user_metadata || {}) as Record<string, unknown>
-  const intentMeta = typeof meta.intent === "string" ? meta.intent.trim() : ""
-  if (intentMeta !== PAINEL_SIGNUP_OTP_METADATA_INTENT) {
-    return {
-      error:
-        "Este código não é válido para cadastro de barbearia. Peça um novo código nesta página.",
-      status: 403,
-    }
+  try {
+    const admin = createServiceRoleClient()
+    await admin.auth.admin.updateUserById(user.id, {
+      user_metadata: {
+        ...(user.user_metadata as Record<string, unknown>),
+        intent: PAINEL_SIGNUP_OTP_METADATA_INTENT,
+      },
+    })
+  } catch (e) {
+    console.warn("[painel-signup] metadata intent após OTP", e)
   }
 
   const auditExists = await otpSend.findFirst({
