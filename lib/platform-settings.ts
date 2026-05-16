@@ -10,6 +10,10 @@ import { TRIAL_DAYS } from "@/lib/plans"
 
 const SINGLETON_ID = "singleton"
 
+type PlatformSettingsRow = NonNullable<
+  Awaited<ReturnType<typeof prisma.platformSettings.findUnique>>
+>
+
 export function normalizeWhatsappPhoneDigits(raw: string): string {
   return raw.replace(/\D/g, "")
 }
@@ -32,11 +36,7 @@ export function buildLandingWhatsappUrl(phoneDigits: string): string {
 }
 
 /** Corrige default_trial_days / plan_configs.trialDays legados (ex.: 2 dias da migration 020). */
-async function healStaleTrialDaysIfNeeded(row: {
-  id: string
-  defaultTrialDays: number
-  planConfigs: unknown
-}) {
+async function healStaleTrialDaysIfNeeded(row: PlatformSettingsRow): Promise<PlatformSettingsRow> {
   const needsDefault = row.defaultTrialDays < TRIAL_DAYS
   let planConfigs = row.planConfigs
   let needsPlanConfigs = false
@@ -57,26 +57,28 @@ async function healStaleTrialDaysIfNeeded(row: {
   })
 }
 
-export async function getPlatformSettings() {
-  let row = await prisma.platformSettings.findUnique({
+export async function getPlatformSettings(): Promise<PlatformSettingsRow> {
+  const existing = await prisma.platformSettings.findUnique({
     where: { id: SINGLETON_ID },
   })
-  if (!row) {
-    return prisma.platformSettings.create({
+  let row: PlatformSettingsRow =
+    existing ??
+    (await prisma.platformSettings.create({
       data: { id: SINGLETON_ID, defaultTrialDays: TRIAL_DAYS, defaultTrialPlan: "pro" },
-    })
-  }
+    }))
+
   if (row.defaultTrialDays < TRIAL_DAYS) {
-    row = await healStaleTrialDaysIfNeeded(row)
-  } else {
-    const pc =
-      row.planConfigs && typeof row.planConfigs === "object"
-        ? (row.planConfigs as { trialDays?: number })
-        : null
-    if (typeof pc?.trialDays === "number" && pc.trialDays > 0 && pc.trialDays < TRIAL_DAYS) {
-      row = await healStaleTrialDaysIfNeeded(row)
-    }
+    return healStaleTrialDaysIfNeeded(row)
   }
+
+  const pc =
+    row.planConfigs && typeof row.planConfigs === "object"
+      ? (row.planConfigs as { trialDays?: number })
+      : null
+  if (typeof pc?.trialDays === "number" && pc.trialDays > 0 && pc.trialDays < TRIAL_DAYS) {
+    return healStaleTrialDaysIfNeeded(row)
+  }
+
   return row
 }
 
