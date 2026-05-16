@@ -17,8 +17,6 @@ export { normalizeSignupEmail, isValidSignupEmail, canonicalSignupEmail } from "
 /** Metadados do usuário Supabase OTP — precisa conferir na verificação. */
 export const PAINEL_SIGNUP_OTP_METADATA_INTENT = "painel_signup"
 
-const OTP_AUDIT_PLACEHOLDER = "****"
-
 const OTP_TTL_MS = 10 * 60 * 1000
 
 const TOKEN_TTL_MS = 45 * 60 * 1000
@@ -27,7 +25,7 @@ const TOKEN_TTL_MS = 45 * 60 * 1000
 function painelSignupPrismaOrNull() {
   type OtpSend = {
     count: (args: object) => Promise<number>
-    findFirst: (args: object) => Promise<{ createdAt: Date } | null>
+    findFirst: (args: object) => Promise<{ id: string; code: string; expiresAt: Date; createdAt?: Date } | null>
     create: (args: object) => Promise<{ id: string }>
     delete: (args: object) => Promise<unknown>
     deleteMany: (args: object) => Promise<unknown>
@@ -123,23 +121,19 @@ export async function sendPainelSignupOtp(
     return { error: "Já existe uma conta cadastrada com este telefone.", status: 409 }
   }
 
+  const sent = await sendSupabaseEmailOtp(authEmail)
+  if ("error" in sent) {
+    return { error: sent.error, status: sent.status }
+  }
+
   const expiresAt = new Date(now.getTime() + OTP_TTL_MS)
-  const audit = await otpSend.create({
+  await otpSend.create({
     data: {
       email: authEmail,
-      code: OTP_AUDIT_PLACEHOLDER,
+      code: sent.otp,
       expiresAt,
     },
   })
-
-  const sent = await sendSupabaseEmailOtp(authEmail)
-  if ("error" in sent) {
-    const throttled = sent.status === 429
-    if (!throttled) {
-      await otpSend.delete({ where: { id: audit.id } }).catch(() => {})
-    }
-    return { error: sent.error, status: sent.status }
-  }
 
   return {
     ok: true,
@@ -173,55 +167,63 @@ export async function verifyPainelSignupOtp(
     }
   }
 
-  let supabase
-  try {
-    supabase = createAnonServerAuthClient()
-  } catch {
-    return { error: "Supabase não configurado.", status: 500 }
-  }
-
-  const { data: authData, error: authErr } = await verifyEmailOtpWithFallback(supabase, {
-    email: authEmail,
-    token,
-  })
-
-  if (authErr || !authData?.user) {
-    const raw = authErr?.message?.toLowerCase() ?? ""
-    let error =
-      "Código inválido ou expirado. Confira os dígitos ou peça um novo código."
-    if (raw.includes("expired") || raw.includes("otp_expired")) {
-      error = "Código expirado. Peça um novo em «Enviar de novo»."
-    }
-    return { error, status: 401 }
-  }
-
-  const user = authData.user
-  if (!user.email || !emailsEquivalentForSignup(user.email, emailCanon)) {
-    return { error: "E-mail não confere com o código.", status: 400 }
-  }
-
-  try {
-    const admin = createServiceRoleClient()
-    await admin.auth.admin.updateUserById(user.id, {
-      user_metadata: {
-        ...(user.user_metadata as Record<string, unknown>),
-        intent: PAINEL_SIGNUP_OTP_METADATA_INTENT,
-      },
-    })
-  } catch (e) {
-    console.warn("[painel-signup] metadata intent após OTP", e)
-  }
-
-  const auditExists = await otpSend.findFirst({
+  const audit = await otpSend.findFirst({
     where: { email: authEmail },
     orderBy: { createdAt: "desc" },
-    select: { id: true },
+    select: { id: true, code: true, expiresAt: true },
   })
-  if (!auditExists) {
+  if (!audit) {
     return {
       error:
         "Não há envio registrado para este e-mail neste fluxo. Comece pelo passo anterior.",
       status: 400,
+    }
+  }
+
+  const storedCode = normalizePublicOtpCode(audit.code)
+  const codeOk =
+    isPublicOtpLengthValid(storedCode.length) &&
+    storedCode === token &&
+    audit.expiresAt.getTime() > Date.now()
+
+  if (!codeOk) {
+    let supabase
+    try {
+      supabase = createAnonServerAuthClient()
+    } catch {
+      return { error: "Supabase não configurado.", status: 500 }
+    }
+
+    const { data: authData, error: authErr } = await verifyEmailOtpWithFallback(supabase, {
+      email: authEmail,
+      token,
+    })
+
+    if (authErr || !authData?.user) {
+      const raw = authErr?.message?.toLowerCase() ?? ""
+      let error =
+        "Código inválido ou expirado. Confira os dígitos ou peça um novo código."
+      if (raw.includes("expired") || raw.includes("otp_expired")) {
+        error = "Código expirado. Peça um novo em «Enviar de novo»."
+      }
+      return { error, status: 401 }
+    }
+
+    const user = authData.user
+    if (!user.email || !emailsEquivalentForSignup(user.email, emailCanon)) {
+      return { error: "E-mail não confere com o código.", status: 400 }
+    }
+
+    try {
+      const admin = createServiceRoleClient()
+      await admin.auth.admin.updateUserById(user.id, {
+        user_metadata: {
+          ...(user.user_metadata as Record<string, unknown>),
+          intent: PAINEL_SIGNUP_OTP_METADATA_INTENT,
+        },
+      })
+    } catch (e) {
+      console.warn("[painel-signup] metadata intent após OTP", e)
     }
   }
 

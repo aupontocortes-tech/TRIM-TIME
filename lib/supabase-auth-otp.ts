@@ -1,11 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { createAnonServerAuthClient, createServiceRoleClient } from "@/lib/supabase/server"
 
-/**
- * GoTrue pode enviar link de confirmação em vez de código quando `options.data` é passado
- * em signInWithOtp para usuários novos. Metadados devem ser gravados após verify (admin) ou
- * validados só no backend (auditoria local).
- */
 export function painelSignupOtpSendOptions() {
   return {
     shouldCreateUser: true as const,
@@ -14,11 +9,6 @@ export function painelSignupOtpSendOptions() {
 
 type OtpVerifyType = "signup" | "email" | "magiclink" | "invite" | "recovery"
 
-/**
- * Ordem para cadastro:
- * - invite: e-mail novo (template "Invite", costuma ter {{ .Token }} como Recovery)
- * - signup / magiclink: usuário já criado no Auth em tentativa anterior
- */
 const PAINEL_SIGNUP_VERIFY_TYPES: OtpVerifyType[] = [
   "invite",
   "signup",
@@ -27,14 +17,8 @@ const PAINEL_SIGNUP_VERIFY_TYPES: OtpVerifyType[] = [
   "recovery",
 ]
 
-/**
- * Cadastro usa só o código digitado na tela — não precisa de link no e-mail.
- * Sem redirectTo o Supabase ainda pode incluir link se o template tiver {{ .ConfirmationURL }}.
- * Remova esse placeholder do template "Invite user" e deixe só {{ .Token }}.
- */
-function painelSignupOtpLinkOptions(): undefined {
-  return undefined
-}
+const RATE_LIMIT_MSG =
+  "O Supabase bloqueou envios de e-mail (limite atingido). Aguarde cerca de 1 hora, aumente os limites em Authentication → Rate limits ou configure SMTP em Providers → Email."
 
 function isSupabaseRateLimit(message: string | undefined): boolean {
   const msg = (message ?? "").toLowerCase()
@@ -42,7 +26,8 @@ function isSupabaseRateLimit(message: string | undefined): boolean {
     msg.includes("rate limit") ||
     msg.includes("too many") ||
     msg.includes("exceeded") ||
-    msg.includes("for security purposes")
+    msg.includes("for security purposes") ||
+    (msg.includes("after ") && msg.includes("second"))
   )
 }
 
@@ -51,15 +36,15 @@ function isInviteUserAlreadyRegistered(message: string | undefined): boolean {
   return msg.includes("already been registered") || msg.includes("already registered")
 }
 
+export type SendSupabaseEmailOtpResult =
+  | { ok: true; otp: string }
+  | { error: string; status: number }
+
 /**
- * Envia OTP por e-mail via Admin API.
- * Cadastro novo: `invite` (não usa o template "Confirm signup", que muitas vezes só manda link).
- * E-mail já no Auth: `magiclink` (template Magic Link / signup).
- * Recuperação de senha usa `recovery` — outro fluxo; por isso "esqueci senha" funcionava e cadastro não.
+ * Dispara o e-mail (Invite user) e obtém o OTP do Auth.
+ * inviteUserByEmail envia o template "Invite user"; generateLink fornece o código para validar.
  */
-export async function sendSupabaseEmailOtp(
-  email: string
-): Promise<{ ok: true } | { error: string; status: number }> {
+export async function sendSupabaseEmailOtp(email: string): Promise<SendSupabaseEmailOtpResult> {
   let admin
   try {
     admin = createServiceRoleClient()
@@ -71,7 +56,15 @@ export async function sendSupabaseEmailOtp(
     }
   }
 
-  const linkOpts = painelSignupOtpLinkOptions()
+  const inviteMail = await admin.auth.admin.inviteUserByEmail(email)
+  if (inviteMail.error) {
+    if (isSupabaseRateLimit(inviteMail.error.message)) {
+      return { error: RATE_LIMIT_MSG, status: 429 }
+    }
+    if (!isInviteUserAlreadyRegistered(inviteMail.error.message)) {
+      console.warn("[painel-signup] inviteUserByEmail:", inviteMail.error.message)
+    }
+  }
 
   let data: Awaited<ReturnType<typeof admin.auth.admin.generateLink>>["data"]
   let error: Awaited<ReturnType<typeof admin.auth.admin.generateLink>>["error"]
@@ -79,7 +72,6 @@ export async function sendSupabaseEmailOtp(
   const invite = await admin.auth.admin.generateLink({
     type: "invite",
     email,
-    options: linkOpts,
   })
   data = invite.data
   error = invite.error
@@ -88,7 +80,6 @@ export async function sendSupabaseEmailOtp(
     const magic = await admin.auth.admin.generateLink({
       type: "magiclink",
       email,
-      options: linkOpts,
     })
     data = magic.data
     error = magic.error
@@ -96,10 +87,7 @@ export async function sendSupabaseEmailOtp(
 
   if (error) {
     if (isSupabaseRateLimit(error.message)) {
-      return {
-        error: "Muitas solicitações de código. Aguarde cerca de 60 segundos e tente de novo.",
-        status: 429,
-      }
+      return { error: RATE_LIMIT_MSG, status: 429 }
     }
     return {
       error: (error.message ?? "").trim() || "Não foi possível enviar o código por e-mail.",
@@ -111,17 +99,14 @@ export async function sendSupabaseEmailOtp(
   if (!otp) {
     return {
       error:
-        "O provedor de e-mail não gerou código OTP. Confira Authentication → Email no Supabase.",
+        "O Supabase não gerou código OTP. Confira Authentication → Email e os templates com {{ .Token }}.",
       status: 502,
     }
   }
 
-  return { ok: true }
+  return { ok: true, otp }
 }
 
-/**
- * Fallback legado (menos confiável para cadastro novo).
- */
 export async function sendSupabaseEmailOtpLegacyAnon(email: string) {
   const supabase = createAnonServerAuthClient()
   return supabase.auth.signInWithOtp({
@@ -130,9 +115,6 @@ export async function sendSupabaseEmailOtpLegacyAnon(email: string) {
   })
 }
 
-/**
- * Tenta tipos de verify compatíveis com OTP por e-mail (cadastro novo vs login).
- */
 export async function verifyEmailOtpWithFallback(
   supabase: SupabaseClient,
   params: { email: string; token: string },
