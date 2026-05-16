@@ -326,7 +326,7 @@ function CadastroPageContent() {
                     {barbeariaStep === "dados" &&
                       "Comece com o básico: nome, e-mail, celular e senha."}
                     {barbeariaStep === "otp" &&
-                      "Enviamos um código de verificação para o seu e-mail. Digite os dígitos abaixo. Confira também Spam ou Lixo eletrônico."}
+                      "Enviamos um código de 6 dígitos para o seu e-mail. Digite só os números abaixo — não precisa clicar em nenhum link do e-mail (apps de e-mail teste costumam mostrar um botão de link; ignore). Confira também Spam."}
                     {barbeariaStep === "barbearia" &&
                       `Por último, o nome da barbearia. Depois você cadastra o cartão para ativar os ${TRIAL_DAYS} dias grátis no Pro.`}
                   </p>
@@ -495,6 +495,11 @@ function CadastroPageContent() {
                     <strong className="break-all text-foreground">
                       {emailCanonicalDisplay || normalizeEmail(formData.email)}
                     </strong>
+                  </p>
+                  <p className="text-xs text-muted-foreground rounded-md border border-border/80 bg-muted/30 px-3 py-2">
+                    O cadastro valida apenas o <strong className="text-foreground">código numérico</strong> nesta
+                    tela. Se o e-mail tiver um link para abrir o site ou o app, você pode ignorar — não substitui o
+                    código.
                   </p>
                   <Field>
                     <FieldLabel htmlFor="otp-code-input" className="flex items-center gap-1.5">

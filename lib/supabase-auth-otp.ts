@@ -27,11 +27,13 @@ const PAINEL_SIGNUP_VERIFY_TYPES: OtpVerifyType[] = [
   "recovery",
 ]
 
-function otpRedirectTo(): string | undefined {
-  const url =
-    process.env.NEXT_PUBLIC_APP_URL?.trim() ||
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined)
-  return url || undefined
+/**
+ * Cadastro usa só o código digitado na tela — não precisa de link no e-mail.
+ * Sem redirectTo o Supabase ainda pode incluir link se o template tiver {{ .ConfirmationURL }}.
+ * Remova esse placeholder do template "Invite user" e deixe só {{ .Token }}.
+ */
+function painelSignupOtpLinkOptions(): undefined {
+  return undefined
 }
 
 function isSupabaseRateLimit(message: string | undefined): boolean {
@@ -69,8 +71,7 @@ export async function sendSupabaseEmailOtp(
     }
   }
 
-  const redirectTo = otpRedirectTo()
-  const linkOpts = redirectTo ? { redirectTo } : undefined
+  const linkOpts = painelSignupOtpLinkOptions()
 
   let data: Awaited<ReturnType<typeof admin.auth.admin.generateLink>>["data"]
   let error: Awaited<ReturnType<typeof admin.auth.admin.generateLink>>["error"]

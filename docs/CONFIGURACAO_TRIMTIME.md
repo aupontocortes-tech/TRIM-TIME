@@ -42,7 +42,18 @@ No template de e-mail do Supabase, inclua `{{ .Token }}` nestes modelos (cadastr
 - **Magic Link**
 - **Confirm signup**
 
-Recuperação de senha usa **Reset password** — por isso o código podia chegar lá e não no cadastro. Peça um **novo código** após deploy.
+Recuperação de senha usa **Reset password** — por isso o código podia chegar lá e não no cadastro.
+
+No template **Invite user**, use **somente** o código — **não** coloque `{{ .ConfirmationURL }}` no corpo, senão o e-mail vira um botão de link (e apps de e-mail falso destacam isso em vez dos números):
+
+```html
+<h2>Código de acesso</h2>
+<p>Seu código para cadastrar sua barbearia no Trim Time:</p>
+<h1>{{ .Token }}</h1>
+<p>Válido por cerca de 10 minutos. Digite na tela de cadastro do site — não é necessário clicar em link.</p>
+```
+
+Peça um **novo código** após alterar o template.
 
 ## Período grátis (7 dias na landing)
 
