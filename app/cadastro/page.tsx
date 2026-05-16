@@ -1,24 +1,27 @@
 "use client"
 
-import { Suspense, useState } from "react"
+import { Suspense, useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { FieldGroup, Field, FieldLabel } from "@/components/ui/field"
-import { Eye, EyeOff, ArrowLeft, Check } from "lucide-react"
+import { Eye, EyeOff, ArrowLeft, Mail, Store } from "lucide-react"
 import { BrandLogo } from "@/components/brand-logo"
+import { SignupProgress } from "@/components/onboarding/signup-progress"
+import type { SignupFlowStep } from "@/lib/onboarding"
+import { TRIAL_DAYS } from "@/lib/plans"
 
 function CadastroPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const planoSelecionado = searchParams.get("plano") || "premium"
   const tipo = searchParams.get("tipo") || "barbearia" // barbearia ou cliente
 
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
-  const [step, setStep] = useState(1)
+  type BarbeariaStep = "dados" | "otp" | "barbearia"
+  const [barbeariaStep, setBarbeariaStep] = useState<BarbeariaStep>("dados")
   const [formData, setFormData] = useState({
     nome: "",
     email: "",
@@ -26,79 +29,212 @@ function CadastroPageContent() {
     password: "",
     confirmPassword: "",
     nomeBarbearia: "",
-    endereco: "",
-    cidade: "",
-    plano: planoSelecionado
   })
   const [error, setError] = useState("")
+  const [otpCode, setOtpCode] = useState("")
+  const [signupToken, setSignupToken] = useState("")
+  const [otpSending, setOtpSending] = useState(false)
+  const [emailCanonicalDisplay, setEmailCanonicalDisplay] = useState("")
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" })
+  }, [barbeariaStep])
+
+  useEffect(() => {
+    if (typeof document === "undefined") return
+    if (tipo === "barbearia" && barbeariaStep === "otp") {
+      queueMicrotask(() => document.getElementById("otp-code-input")?.focus())
+    }
+  }, [tipo, barbeariaStep])
+
+  const normalizeEmail = (raw: string) => raw.trim().toLowerCase()
+
+  const handleContinueBarbeariaDados = async () => {
+    if (!formData.nome.trim()) {
+      setError("Informe seu nome.")
+      return
+    }
+    if (!formData.email.trim()) {
+      setError("Informe seu e-mail.")
+      return
+    }
     if (formData.password !== formData.confirmPassword) {
-      setError("As senhas não coincidem")
+      setError("As senhas não coincidem.")
       return
     }
-
     if (formData.password.length < 6) {
-      setError("A senha deve ter pelo menos 6 caracteres")
+      setError("A senha deve ter pelo menos 6 caracteres.")
       return
     }
+    const telDig = formData.telefone.replace(/\D/g, "")
+    if (telDig.length < 10) {
+      setError("Informe um celular válido com DDD (para segurança e contato da conta).")
+      return
+    }
+    setError("")
+    setOtpSending(true)
+    try {
+      const res = await fetch("/api/auth/painel-signup/otp/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: formData.email.trim(),
+          phone: formData.telefone.trim() || undefined,
+        }),
+      })
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(typeof j.error === "string" ? j.error : "Não foi possível enviar o código.")
+      setOtpCode("")
+      if (typeof j.email_canonical === "string" && j.email_canonical) {
+        setEmailCanonicalDisplay(j.email_canonical)
+      } else {
+        setEmailCanonicalDisplay(normalizeEmail(formData.email))
+      }
+      setBarbeariaStep("otp")
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erro ao enviar código.")
+    } finally {
+      setOtpSending(false)
+    }
+  }
 
+  const handleResendPainelOtp = async () => {
+    await handleContinueBarbeariaDados()
+  }
+
+  const handleVerifyPainelOtp = async () => {
+    const code = otpCode.trim()
+    if (!code) {
+      setError("Informe o código enviado para o seu e-mail.")
+      return
+    }
     setIsLoading(true)
     setError("")
-
     try {
-      if (tipo === "barbearia") {
-        const res = await fetch("/api/barbershops", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({
-            name: formData.nomeBarbearia || formData.nome,
-            email: formData.email,
-            phone: formData.telefone?.replace(/\D/g, "") ? formData.telefone : undefined,
-            password: formData.password,
-          }),
-        })
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}))
-          throw new Error(err.error || "Erro ao criar barbearia")
-        }
-        const barbershop = await res.json()
-        const sessionRes = await fetch("/api/auth/session", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ barbershop_id: barbershop.id }),
-        })
-        if (!sessionRes.ok) {
-          const err = await sessionRes.json().catch(() => ({}))
-          throw new Error(err.error || "Erro ao iniciar sessão")
-        }
-        await sessionRes.json().catch(() => ({}))
-        const isSuperAdmin = barbershop.role === "super_admin"
-        if (typeof window !== "undefined") {
-          window.location.assign(isSuperAdmin ? "/painel" : "/painel/assinatura?setup=card")
-          return
-        }
-        router.push(isSuperAdmin ? "/painel" : "/painel/assinatura?setup=card")
-      } else {
-        await new Promise((resolve) => setTimeout(resolve, 500))
-        router.push("/")
+      const res = await fetch("/api/auth/painel-signup/otp/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ email: formData.email.trim(), code }),
+      })
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(typeof j.error === "string" ? j.error : "Código inválido ou expirado.")
+      const token = typeof j.signup_token === "string" ? j.signup_token : ""
+      if (!token) throw new Error("Resposta inválida do servidor.")
+      if (typeof j.email_canonical === "string" && j.email_canonical) {
+        setEmailCanonicalDisplay(j.email_canonical)
       }
+      setSignupToken(token)
+      setBarbeariaStep("barbearia")
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erro ao verificar código.")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  /** Cria conta + sessão — só chamado no passo 3. */
+  const finalizeBarbeariaSignup = async () => {
+    if (!signupToken) {
+      setError("Confirme o e-mail com o código antes de criar a conta.")
+      return
+    }
+    setIsLoading(true)
+    setError("")
+    try {
+      const digits = formData.telefone.replace(/\D/g, "")
+      const res = await fetch("/api/barbershops", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          name: formData.nomeBarbearia.trim(),
+          email: formData.email.trim(),
+          phone: digits || undefined,
+          password: formData.password,
+          painel_signup_token: signupToken,
+        }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || "Erro ao criar barbearia")
+      }
+      const barbershop = await res.json()
+      const sessionRes = await fetch("/api/auth/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ barbershop_id: barbershop.id }),
+      })
+      if (!sessionRes.ok) {
+        const err = await sessionRes.json().catch(() => ({}))
+        throw new Error(err.error || "Erro ao iniciar sessão")
+      }
+      await sessionRes.json().catch(() => ({}))
+      const isSuperAdmin = barbershop.role === "super_admin"
+      if (typeof window !== "undefined") {
+        window.location.assign(isSuperAdmin ? "/painel" : "/painel/assinatura?setup=card")
+        return
+      }
+      router.push(isSuperAdmin ? "/painel" : "/painel/assinatura?setup=card")
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Erro ao criar conta. Tente novamente."
-      const isTableError = typeof msg === "string" && (msg.includes("schema cache") || msg.includes("could not find the table") || msg.includes("barbershops"))
+      const isTableError =
+        typeof msg === "string" &&
+        (msg.includes("schema cache") ||
+          msg.includes("could not find the table") ||
+          msg.includes("barbershops") ||
+          msg.includes("painel_signup_tokens") ||
+          msg.includes("painel_signup_otp_sends"))
       setError(
         isTableError
-          ? "Falta criar as tabelas no Supabase. Abra o Supabase → SQL Editor → New query → copie TODO o conteúdo do arquivo supabase/CRIAR_TABELAS_SUPABASE.sql do projeto, cole no editor e clique em Run. Depois tente o cadastro de novo."
+          ? "Falta atualizar o banco (novas tabelas de OTP de cadastro e/ou tabelas do Trim Time). No projeto, rode prisma db push contra o Postgres do Supabase ou aplique migrações, depois tente de novo."
           : msg
       )
     } finally {
       setIsLoading(false)
     }
   }
+
+  const finalizeClienteSignup = async () => {
+    if (formData.password !== formData.confirmPassword) {
+      setError("As senhas não coincidem")
+      return
+    }
+    if (formData.password.length < 6) {
+      setError("A senha deve ter pelo menos 6 caracteres")
+      return
+    }
+    setIsLoading(true)
+    setError("")
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 500))
+      router.push("/")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleFormWizardSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (tipo === "barbearia") {
+      if (barbeariaStep === "dados") {
+        await handleContinueBarbeariaDados()
+        return
+      }
+      if (barbeariaStep === "otp") {
+        await handleVerifyPainelOtp()
+        return
+      }
+      await finalizeBarbeariaSignup()
+      return
+    }
+    await finalizeClienteSignup()
+  }
+
+  const signupFlowStep: SignupFlowStep =
+    barbeariaStep === "dados" ? "dados" : barbeariaStep === "otp" ? "otp" : "barbearia"
 
   const formatPhone = (value: string) => {
     const numbers = value.replace(/\D/g, "")
@@ -131,36 +267,69 @@ function CadastroPageContent() {
               <BrandLogo size="lg" />
             </div>
             <h1 className="text-2xl font-bold text-foreground">Criar Conta</h1>
-            <p className="text-muted-foreground">
+            <p className="text-muted-foreground text-sm leading-relaxed">
               {tipo === "barbearia"
-                ? "Cadastre sua barbearia no Trim Time"
+                ? `${TRIAL_DAYS} dias grátis no Plano Pro. Cadastro rápido. Cartão só na etapa final, sem cobrança imediata.`
                 : "Crie sua conta para agendar"
               }
             </p>
           </CardHeader>
 
           <CardContent className="pt-6">
-            {/* Progress steps */}
-            <div className="flex items-center justify-center gap-2 mb-6">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                step >= 1 ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground"
-              }`}>
-                {step > 1 ? <Check className="w-4 h-4" /> : "1"}
+            {tipo === "barbearia" ? (
+              <>
+              <SignupProgress current={signupFlowStep} className="mb-6" />
+              <div className="hidden mb-5 space-y-3">
+                <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-[11px] sm:text-xs text-muted-foreground">
+                  <span
+                    className={
+                      barbeariaStep === "dados"
+                        ? "font-semibold text-primary"
+                        : "opacity-80 text-primary/80"
+                    }
+                  >
+                    __REMOVE_STEP__
+                  </span>
+                  <span className="opacity-40">→</span>
+                  <span
+                    className={
+                      barbeariaStep === "otp" ? "font-semibold text-primary" : ""
+                    }
+                  >
+                    ② Código no e-mail
+                  </span>
+                  <span className="opacity-40">→</span>
+                  <span className={barbeariaStep === "barbearia" ? "font-semibold text-primary" : ""}>
+                    ③ Nome da barbearia
+                  </span>
+                </div>
               </div>
-              <div className={`w-12 h-0.5 ${step >= 2 ? "bg-primary" : "bg-border"}`} />
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                step >= 2 ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground"
-              }`}>
-                2
-              </div>
-            </div>
+              </>
+            ) : null}
 
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={(e) => void handleFormWizardSubmit(e)} className="space-y-4">
               {error && (
                 <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
                   {error}
                 </div>
               )}
+
+              {tipo === "barbearia" ? (
+                <div
+                  className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-3 text-left"
+                  role="status"
+                  aria-live="polite"
+                >
+                  <p className="text-sm font-semibold text-foreground">
+                    {barbeariaStep === "dados" &&
+                      "Comece com o básico: nome, e-mail, celular e senha."}
+                    {barbeariaStep === "otp" &&
+                      "Enviamos um código de verificação para o seu e-mail. Digite os dígitos abaixo. Confira também Spam ou Lixo eletrônico."}
+                    {barbeariaStep === "barbearia" &&
+                      `Por último, o nome da barbearia. Depois você cadastra o cartão para ativar os ${TRIAL_DAYS} dias grátis no Pro.`}
+                  </p>
+                </div>
+              ) : null}
 
               {tipo === "cliente" && (
                 <FieldGroup>
@@ -239,7 +408,7 @@ function CadastroPageContent() {
                 </FieldGroup>
               )}
 
-              {tipo === "barbearia" && step === 1 && (
+              {tipo === "barbearia" && barbeariaStep === "dados" && (
                 <FieldGroup>
                   <Field>
                     <FieldLabel htmlFor="nome">Seu nome</FieldLabel>
@@ -317,10 +486,49 @@ function CadastroPageContent() {
                 </FieldGroup>
               )}
 
-              {tipo === "barbearia" && step === 2 && (
+              {tipo === "barbearia" && barbeariaStep === "otp" && (
+                <FieldGroup>
+                  <p className="text-sm text-muted-foreground">
+                    Use o mesmo e-mail:{" "}
+                    <strong className="break-all text-foreground">
+                      {emailCanonicalDisplay || normalizeEmail(formData.email)}
+                    </strong>
+                  </p>
+                  <Field>
+                    <FieldLabel htmlFor="otp-code-input" className="flex items-center gap-1.5">
+                      <Mail className="w-3.5 h-3.5" aria-hidden />
+                      Código de verificação (e-mail)
+                    </FieldLabel>
+                    <Input
+                      id="otp-code-input"
+                      inputMode="text"
+                      autoComplete="one-time-code"
+                      placeholder="000000"
+                      maxLength={10}
+                      value={otpCode}
+                      onChange={(e) => setOtpCode(e.target.value.replace(/\s+/g, ""))}
+                      className="text-center text-xl tracking-[0.4em] font-mono bg-input border-border text-foreground"
+                    />
+                  </Field>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full"
+                    disabled={otpSending || isLoading}
+                    onClick={() => void handleResendPainelOtp()}
+                  >
+                    {otpSending ? "Enviando…" : "Enviar código de novo"}
+                  </Button>
+                </FieldGroup>
+              )}
+
+              {tipo === "barbearia" && barbeariaStep === "barbearia" && (
                 <FieldGroup>
                   <Field>
-                    <FieldLabel htmlFor="nomeBarbearia">Nome da Barbearia</FieldLabel>
+                    <FieldLabel htmlFor="nomeBarbearia" className="flex items-center gap-1.5">
+                      <Store className="w-3.5 h-3.5" aria-hidden />
+                      Nome da barbearia
+                    </FieldLabel>
                     <Input
                       id="nomeBarbearia"
                       type="text"
@@ -331,102 +539,62 @@ function CadastroPageContent() {
                       className="bg-input border-border text-foreground placeholder:text-muted-foreground"
                     />
                   </Field>
-
-                  <Field>
-                    <FieldLabel htmlFor="endereco">Endereço (opcional)</FieldLabel>
-                    <Input
-                      id="endereco"
-                      type="text"
-                      placeholder="Rua, número, bairro"
-                      value={formData.endereco}
-                      onChange={(e) => setFormData({ ...formData, endereco: e.target.value })}
-                      className="bg-input border-border text-foreground placeholder:text-muted-foreground"
-                    />
-                  </Field>
-
-                  <Field>
-                    <FieldLabel htmlFor="cidade">Cidade (opcional)</FieldLabel>
-                    <Input
-                      id="cidade"
-                      type="text"
-                      placeholder="Sua cidade"
-                      value={formData.cidade}
-                      onChange={(e) => setFormData({ ...formData, cidade: e.target.value })}
-                      className="bg-input border-border text-foreground placeholder:text-muted-foreground"
-                    />
-                  </Field>
-
-                  <Field>
-                    <FieldLabel>Plano desejado</FieldLabel>
-                    <p className="text-xs text-muted-foreground mb-2">
-                      Escolha o plano que melhor atende sua barbearia.
-                    </p>
-                    <div className="grid grid-cols-3 gap-2">
-                      {[
-                        { id: "basic", name: "Básico", price: "R$19", desc: "/mês" },
-                        { id: "pro", name: "Pro", price: "R$39", desc: "/mês" },
-                        { id: "premium", name: "Premium", price: "R$79", desc: "/mês" }
-                      ].map((plan) => (
-                        <button
-                          key={plan.id}
-                          type="button"
-                          onClick={() => setFormData({ ...formData, plano: plan.id })}
-                          className={`p-3 rounded-lg border text-center transition-colors ${
-                            formData.plano === plan.id
-                              ? "border-primary bg-primary/10"
-                              : "border-border hover:border-primary/50"
-                          }`}
-                        >
-                          <p className="text-xs font-medium text-foreground">{plan.name}</p>
-                          <p className="text-sm font-bold text-primary">{plan.price}</p>
-                          <p className="text-xs text-muted-foreground">{plan.desc}</p>
-                        </button>
-                      ))}
-                    </div>
-                  </Field>
                 </FieldGroup>
               )}
 
-              {tipo === "barbearia" && step === 1 ? (
-                <Button 
-                  type="button"
-                  onClick={() => {
-                    if (formData.password !== formData.confirmPassword) {
-                      setError("As senhas não coincidem")
-                      return
-                    }
-                    if (formData.password.length < 6) {
-                      setError("A senha deve ter pelo menos 6 caracteres")
-                      return
-                    }
-                    setError("")
-                    setStep(2)
-                  }}
+              {tipo === "barbearia" && barbeariaStep === "dados" ? (
+                <Button
+                  type="submit"
                   className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+                  disabled={otpSending || isLoading}
                 >
-                  Continuar
+                  {otpSending ? "Enviando código…" : "Enviar código por e-mail"}
                 </Button>
-              ) : tipo === "barbearia" && step === 2 ? (
+              ) : tipo === "barbearia" && barbeariaStep === "otp" ? (
                 <div className="space-y-3">
-                  <Button 
-                    type="submit" 
+                  <Button
+                    type="submit"
                     className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
                     disabled={isLoading}
                   >
-                    {isLoading ? "Criando conta..." : "Criar Conta"}
+                    {isLoading ? "Verificando…" : "Confirmar código e continuar"}
                   </Button>
-                  <Button 
+                  <Button
                     type="button"
                     variant="outline"
-                    onClick={() => setStep(1)}
+                    onClick={() => {
+                      setError("")
+                      setBarbeariaStep("dados")
+                    }}
+                    className="w-full border-border text-foreground hover:bg-secondary"
+                  >
+                    Voltar
+                  </Button>
+                </div>
+              ) : tipo === "barbearia" && barbeariaStep === "barbearia" ? (
+                <div className="space-y-3">
+                  <Button
+                    type="submit"
+                    className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+                    disabled={isLoading}
+                  >
+                    {isLoading ? "Criando conta…" : "Criar conta e ir para assinatura"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setError("")
+                      setBarbeariaStep("otp")
+                    }}
                     className="w-full border-border text-foreground hover:bg-secondary"
                   >
                     Voltar
                   </Button>
                 </div>
               ) : (
-                <Button 
-                  type="submit" 
+                <Button
+                  type="submit"
                   className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
                   disabled={isLoading}
                 >

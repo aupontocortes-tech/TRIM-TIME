@@ -9,6 +9,8 @@ import { Badge } from "@/components/ui/badge"
 import { Loader2, CreditCard, QrCode, ArrowLeft, CheckCircle2 } from "lucide-react"
 import type { SubscriptionPlan, SubscriptionStatus } from "@/lib/db/types"
 import type { PlanCatalog } from "@/lib/plan-catalog"
+import { TrialBillingTrust } from "@/components/onboarding/trial-billing-trust"
+import { TRIAL_DAYS } from "@/lib/plans"
 
 type BillingSubscription = {
   plan: SubscriptionPlan
@@ -52,6 +54,8 @@ function AssinaturaContent() {
   const [checkoutLoading, setCheckoutLoading] = useState(false)
   const [cancelLoading, setCancelLoading] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
+
+  const trialLengthDays = catalog?.trialDays ?? TRIAL_DAYS
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -121,7 +125,7 @@ function AssinaturaContent() {
   const handleSubscribeEarly = async () => {
     if (
       !confirm(
-        "A primeira mensalidade será cobrada já (pelo cartão já cadastrado). Os 7 dias grátis deixam de se aplicar. Continuar?"
+        `A primeira mensalidade será cobrada já (pelo cartão já cadastrado). Os ${trialLengthDays} dias grátis deixam de se aplicar. Continuar?`
       )
     )
       return
@@ -292,18 +296,29 @@ function AssinaturaContent() {
     ? new Date(subscription.next_payment).toLocaleDateString("pt-BR")
     : "—"
 
+  /** Durante o período de teste, apenas o plano Pro pode ser cobrado antecipadamente. */
+  const subscribeEarlyPlans: SubscriptionPlan[] =
+    trialActive && subscription?.status === "trial" ? ["pro"] : PLAN_ORDER
+
+  const isOnboardingCheckout =
+    !billingExempt && (setupCard || needsCard) && !cardComplete
+
   return (
     <div className="max-w-3xl mx-auto space-y-6">
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" asChild>
-          <Link href="/painel/configuracoes?tab=plan">
+          <Link href={isOnboardingCheckout ? "/cadastro" : "/painel/configuracoes?tab=plan"}>
             <ArrowLeft className="w-5 h-5" />
           </Link>
         </Button>
         <div>
-          <h1 className="text-2xl font-bold">Minha assinatura</h1>
+          <h1 className="text-2xl font-bold">
+            {isOnboardingCheckout ? "Ative seu teste grátis" : "Minha assinatura"}
+          </h1>
           <p className="text-sm text-muted-foreground">
-            Plano, cobrança mensal e pagamento via Asaas (cartão ou PIX).
+            {isOnboardingCheckout
+              ? `Plano Pro por ${trialLengthDays} dias — cadastre o cartão para liberar o painel.`
+              : "Plano, cobrança mensal e pagamento via Asaas (cartão ou PIX)."}
           </p>
         </div>
       </div>
@@ -311,7 +326,7 @@ function AssinaturaContent() {
       {billingExempt ? (
         <div className="text-sm rounded-lg border border-border bg-muted/40 px-4 py-3">
           Conta da <strong>equipe da plataforma</strong> ou <strong>de testes</strong>: uso sem cobrança pela plataforma e sem obrigação de cartão. Barbearias
-          normais seguem trial de 7 dias, cartão e pagamento pelo Asaas.
+          normais seguem o período de teste no plano Pro ({trialLengthDays} dias com cartão cadastrado) e pagamento pelo Asaas.
         </div>
       ) : null}
 
@@ -323,33 +338,63 @@ function AssinaturaContent() {
       ) : null}
 
       {cardReturn || cardComplete ? (
-        <div className="flex items-center gap-2 text-sm text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 border rounded-lg p-3">
-          <CheckCircle2 className="w-5 h-5 shrink-0" />
-          Cartão cadastrado. Aproveite seus 7 dias grátis — só haverá cobrança se você aceitar um plano depois.
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 text-sm text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 border rounded-lg p-3">
+            <CheckCircle2 className="w-5 h-5 shrink-0" />
+            Cartão cadastrado. Aproveite seus {trialLengthDays} dias grátis no plano Pro — só haverá cobrança se você aceitar um plano depois.
+          </div>
+          {(setupCard || isOnboardingCheckout) && (
+            <Button asChild className="w-full">
+              <Link href="/painel">Entrar no painel</Link>
+            </Button>
+          )}
         </div>
       ) : null}
 
-      {(needsCard || setupCard) && billingEnabled && !cardComplete ? (
-        <Card className="border-primary shadow-md">
-          <CardHeader>
-            <CardTitle>Cadastre seu cartão (obrigatório)</CardTitle>
-            <CardDescription>
-              7 dias grátis no plano Pro. O cartão é só para facilitar a contratação depois —{" "}
-              <strong>sem cobrança agora</strong>. Após o teste, você escolhe se quer continuar ou
-              não.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button className="w-full" disabled={checkoutLoading} onClick={() => void handleSetupCard()}>
-              {checkoutLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-              <CreditCard className="w-4 h-4 mr-2" />
-              Cadastrar cartão de crédito
-            </Button>
-          </CardContent>
-        </Card>
+      {(needsCard || setupCard) && !cardComplete ? (
+        billingEnabled ? (
+          <Card className="border-primary shadow-md">
+            <CardHeader>
+              <CardTitle>Cadastre seu cartão para começar</CardTitle>
+              <CardDescription>
+                Último passo do cadastro. Validação segura via Asaas — sem débito imediato.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <TrialBillingTrust trialDays={trialLengthDays} />
+              <Button className="w-full" disabled={checkoutLoading} onClick={() => void handleSetupCard()}>
+                {checkoutLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                <CreditCard className="w-4 h-4 mr-2" />
+                Cadastrar cartão de crédito
+              </Button>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card className="border-amber-500/40 bg-amber-500/5">
+            <CardHeader>
+              <CardTitle>Cadastro de cartão</CardTitle>
+              <CardDescription>
+                Seu período de teste exige registrar um cartão para liberar o painel. Esta instância ainda
+                não tem <strong>cobrança online ativa</strong> (configure <code className="text-xs">ASAAS_API_KEY</code> e{" "}
+                <code className="text-xs">PAYMENT_API_ENABLED</code> conforme o arquivo{" "}
+                <code className="text-xs">.env.example</code>).
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground mb-3">
+                Com o gateway ativo, aparecerá o botão que abre o cadastro seguro via Asaas.
+              </p>
+              <Button className="w-full" variant="outline" disabled>
+                <CreditCard className="w-4 h-4 mr-2" />
+                Aguardando integração Asaas
+              </Button>
+            </CardContent>
+          </Card>
+        )
       ) : null}
 
       {!billingExempt &&
+      !isOnboardingCheckout &&
       trialActive &&
       cardComplete &&
       billingEnabled &&
@@ -360,12 +405,13 @@ function AssinaturaContent() {
           <CardHeader>
             <CardTitle>Preferir cobrança agora?</CardTitle>
             <CardDescription>
-              Você pode manter os dias grátis e só decidir no fim, ou iniciar o plano pago já com a primeira fatura gerada para hoje no Asaas (cartão cadastrado).
+              Durante o teste você usa o plano Pro. Você pode manter os dias grátis até o fim ou gerar já a
+              primeira fatura no Asaas (somente plano Pro enquanto o período gratuito estiver ativo).
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex flex-wrap gap-2">
-              {PLAN_ORDER.map((p) => (
+              {subscribeEarlyPlans.map((p) => (
                 <Button
                   key={p}
                   type="button"
@@ -395,11 +441,12 @@ function AssinaturaContent() {
           <CardHeader>
             <CardTitle>Seu teste grátis terminou</CardTitle>
             <CardDescription>
-              Quer continuar usando o Trim Time? Escolha um plano e aceite — ou recuse sem nenhuma
-              cobrança no cartão.
+              Deseja continuar? Escolha Básico, Pro ou Premium. A cobrança só acontece se você clicar em
+              &quot;Sim, quero continuar&quot;. Se recusar, não cobramos nada.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            <TrialBillingTrust trialDays={trialLengthDays} compact />
             <div className="grid gap-2">
               {PLAN_ORDER.map((p) => (
                 <button

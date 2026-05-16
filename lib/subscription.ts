@@ -7,6 +7,7 @@ import type {
   Subscription,
   SubscriptionPlan,
 } from "@/lib/db/types"
+import { TRIAL_GRACE_DAYS_AFTER_DECLINE } from "@/lib/onboarding"
 import { TRIAL_DAYS } from "@/lib/plans"
 
 /** Super ADM ou conta de teste: sem cartão obrigatório, sem fluxo Asaas nem bloqueios de cobrança. */
@@ -36,13 +37,30 @@ export function hasCardSetup(subscription: Subscription | null): boolean {
   return !!subscription?.card_setup_at
 }
 
-/** Durante o trial com cobrança ativa: cartão obrigatório antes de usar o painel (exceto contas isentas). */
+/** Conta recusou contratar, mas ainda pode entrar (configurações/reativar) por alguns dias. */
+export function isInPostDeclineGracePeriod(subscription: Subscription | null): boolean {
+  if (!subscription || subscription.post_trial_choice !== "declined") return false
+  if (!subscription.grace_access_until) return false
+  return new Date(subscription.grace_access_until) > new Date()
+}
+
+export function createGraceAccessUntilDate(
+  days: number = TRIAL_GRACE_DAYS_AFTER_DECLINE
+): Date {
+  const end = new Date()
+  end.setDate(end.getDate() + Math.max(1, days))
+  return end
+}
+
+/**
+ * Durante o trial: cartão obrigatório para liberar o painel (exceto contas isentas).
+ * Independe do Asaas estar configurado — sem gateway, a tela de assinatura explica a limitação.
+ */
 export function requiresCardSetup(
   subscription: Subscription | null,
-  billingEnabled: boolean,
   exemptFromBillingRules = false
 ): boolean {
-  if (exemptFromBillingRules || !billingEnabled) return false
+  if (exemptFromBillingRules) return false
   if (!subscription || subscription.status !== "trial") return false
   if (!isTrialActive(subscription)) return false
   return !hasCardSetup(subscription)
@@ -87,6 +105,12 @@ export function getEffectivePlanForBarbershop(
     return subscription.plan
   }
 
+  /** Trial ativo: recursos do plano contratado no banco (ex.: Pro), sem premium “oculto” por e-mail/nome. */
+  if (subscription?.status === "trial" && isTrialActive(subscription)) {
+    if (isUnlockAllPlanFeaturesEnv()) return "premium"
+    return subscription.plan
+  }
+
   const normalizedName = (barbershop?.name ?? "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
@@ -124,8 +148,11 @@ export function shouldPromptPlanChoice(
   if (!subscription) return true
   if (needsTrialDecision(subscription, false)) return true
   if (subscription.status === "trial" && !isTrialActive(subscription)) return true
-  if (subscription.post_trial_choice === "declined") return true
-  if (subscription.status === "canceled" || subscription.status === "past_due") return true
+  if (subscription.post_trial_choice === "declined" && !isInPostDeclineGracePeriod(subscription)) {
+    return true
+  }
+  if (subscription.status === "canceled" && !isInPostDeclineGracePeriod(subscription)) return true
+  if (subscription.status === "past_due") return true
   return false
 }
 

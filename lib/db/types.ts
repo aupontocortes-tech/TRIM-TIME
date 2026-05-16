@@ -112,6 +112,7 @@ export interface Subscription {
   next_payment: string | null
   card_setup_at?: string | null
   post_trial_choice?: PostTrialChoice | null
+  grace_access_until?: string | null
   created_at: string
   updated_at: string
 }

@@ -442,6 +442,12 @@ export default function LandingPage() {
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
               Você paga, seus clientes agendam grátis pelo seu link exclusivo
             </p>
+            <p className="text-sm text-muted-foreground max-w-2xl mx-auto mt-4">
+              <strong className="text-foreground">Novo cadastro:</strong> começa no{" "}
+              <strong className="text-foreground">Plano Pro em período de teste gratuito</strong> (cadastro do cartão
+              necessário para liberar o uso do painel, sem cobrança durante o teste). Os valores abaixo são as mensalidades{" "}
+              <span className="text-foreground/90">após</span> o teste — você escolhe se continua ou não.
+            </p>
           </div>
 
           <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
@@ -464,9 +470,9 @@ export default function LandingPage() {
                     </li>
                   ))}
                 </ul>
-                <Link href="/cadastro?plano=basic">
+                <Link href="/cadastro?tipo=barbearia">
                   <Button variant="outline" className="w-full border-blue-500 text-blue-600 hover:bg-blue-500/10">
-                    Assinar Básico
+                    Cadastrar — teste Pro grátis
                   </Button>
                 </Link>
               </CardContent>
@@ -496,9 +502,9 @@ export default function LandingPage() {
                     </li>
                   ))}
                 </ul>
-                <Link href="/cadastro?plano=pro">
+                <Link href="/cadastro?tipo=barbearia">
                   <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90">
-                    Assinar Pro
+                    Cadastrar — teste Pro grátis
                   </Button>
                 </Link>
               </CardContent>
@@ -523,9 +529,9 @@ export default function LandingPage() {
                     </li>
                   ))}
                 </ul>
-                <Link href="/cadastro?plano=premium">
+                <Link href="/cadastro?tipo=barbearia">
                   <Button variant="outline" className="w-full border-green-600 text-green-600 hover:bg-green-600/10">
-                    Assinar Premium
+                    Cadastrar — teste Pro grátis
                   </Button>
                 </Link>
               </CardContent>

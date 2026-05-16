@@ -94,6 +94,32 @@ model Barbershop {
   @@index([role])
 }
 
+/// Auditoria / rate limit de OTP Supabase para cadastro do painel (barbearia). Código vem só no e-mail.
+model PainelSignupOtpSend {
+  id        String   @id @default(uuid()) @db.Uuid
+  email     String
+  code      String   @db.VarChar(8)
+  expiresAt DateTime @map("expires_at") @db.Timestamptz
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([email])
+  @@index([expiresAt])
+  @@map("painel_signup_otp_sends")
+}
+
+/// Após verificar o OTP: token de uso único para concluir POST /api/barbershops.
+model PainelSignupToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  email     String
+  token     String    @unique @db.VarChar(128)
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz
+  usedAt    DateTime? @map("used_at") @db.Timestamptz
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([email])
+  @@map("painel_signup_tokens")
+}
+
 /// Auditoria / rate limit de envios OTP; o código real vem do e-mail (Supabase Auth).
 model ClientOtpCode {
   id           String     @id @default(uuid()) @db.Uuid
@@ -267,6 +293,8 @@ model Subscription {
   cardSetupAt         DateTime?          @map("card_setup_at") @db.Timestamptz
   /// Após o trial: accepted = contratou; declined = recusou (sem cobrança).
   postTrialChoice     String?            @map("post_trial_choice")
+  /// Após recusar contratar: login limitado até esta data (conta preservada).
+  graceAccessUntil    DateTime?          @map("grace_access_until") @db.Timestamptz
   createdAt           DateTime           @default(now()) @map("created_at") @db.Timestamptz
   updatedAt           DateTime           @updatedAt @map("updated_at") @db.Timestamptz
 

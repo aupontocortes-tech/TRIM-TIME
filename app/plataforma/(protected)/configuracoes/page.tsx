@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/collapsible"
 import { ChevronDown, CreditCard, Loader2, MessageCircle } from "lucide-react"
 import type { SubscriptionPlan } from "@/lib/db/types"
-import { PLAN_LABELS, PLAN_PRICES } from "@/lib/plans"
+import { PLAN_LABELS, PLAN_PRICES, TRIAL_DAYS } from "@/lib/plans"
 
 const GOLD = "#D4AF37"
 
@@ -118,7 +118,7 @@ export default function PlataformaConfiguracoesPage() {
   const [waErr, setWaErr] = useState<string | null>(null)
 
   const [prices, setPrices] = useState({ ...PLAN_PRICES })
-  const [trialDays, setTrialDays] = useState(7)
+  const [trialDays, setTrialDays] = useState(TRIAL_DAYS)
   const [trialPlan, setTrialPlan] = useState<SubscriptionPlan>("pro")
   const [paymentApiEnabled, setPaymentApiEnabled] = useState(false)
   const [paymentApiActive, setPaymentApiActive] = useState(false)

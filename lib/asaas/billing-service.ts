@@ -12,6 +12,7 @@ import { getAppBaseUrl, isAsaasConfigured } from "@/lib/asaas/config"
 import { getPlanCatalog, getPlanPrice } from "@/lib/plan-catalog"
 import { isPaymentApiActive } from "@/lib/platform-settings"
 import { prisma } from "@/lib/prisma"
+import { createGraceAccessUntilDate } from "@/lib/subscription"
 
 function formatDateYmd(d: Date): string {
   return d.toISOString().slice(0, 10)
@@ -392,6 +393,7 @@ export async function declineTrialSubscription(barbershopId: string): Promise<vo
       nextPayment: null,
       asaasSubscriptionId: null,
       billingType: null,
+      graceAccessUntil: createGraceAccessUntilDate(),
     },
   })
 }

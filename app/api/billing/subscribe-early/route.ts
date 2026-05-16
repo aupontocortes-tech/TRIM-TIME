@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { startPaidSubscriptionEarly } from "@/lib/asaas/billing-service"
 import type { SubscriptionPlan } from "@/lib/db/types"
+import { prisma } from "@/lib/prisma"
 import { getBarbershopIdFromRequest } from "@/lib/tenant"
 
 /** Durante trial: primeira cobrança na data atual (opcional pelo cliente). */
@@ -14,6 +15,25 @@ export async function POST(request: Request) {
     const body = (await request.json()) as { plan?: SubscriptionPlan }
     if (!body.plan || !["basic", "pro", "premium"].includes(body.plan)) {
       return NextResponse.json({ error: "Plano inválido" }, { status: 400 })
+    }
+
+    const row = await prisma.subscription.findUnique({
+      where: { barbershopId },
+      select: { status: true, trialEnd: true },
+    })
+    const trialBlocked =
+      row?.status === "trial" &&
+      row.trialEnd &&
+      row.trialEnd.getTime() > Date.now() &&
+      body.plan !== "pro"
+    if (trialBlocked) {
+      return NextResponse.json(
+        {
+          error:
+            "Durante o período de teste você só pode antecipar cobrança no plano Pro. Depois que o trial encerrar, escolha outro plano.",
+        },
+        { status: 403 }
+      )
     }
 
     const result = await startPaidSubscriptionEarly(barbershopId, body.plan)

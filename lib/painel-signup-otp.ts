@@ -1,0 +1,292 @@
+import crypto from "node:crypto"
+import { prisma } from "@/lib/prisma"
+import { conflictForBarbershopSignup } from "@/lib/barbershop-signup-conflicts"
+import { createAnonServerAuthClient } from "@/lib/supabase/server"
+import { isPublicOtpLengthValid, normalizePublicOtpCode } from "@/lib/public-otp-code"
+import {
+  canonicalSignupEmail,
+  normalizeSignupEmail,
+  isValidSignupEmail,
+  emailsEquivalentForSignup,
+} from "@/lib/signup-identity"
+
+/** Re-export para APIs que já importavam daqui */
+export { normalizeSignupEmail, isValidSignupEmail, canonicalSignupEmail } from "@/lib/signup-identity"
+
+/** Metadados do usuário Supabase OTP — precisa conferir na verificação. */
+export const PAINEL_SIGNUP_OTP_METADATA_INTENT = "painel_signup"
+
+const OTP_AUDIT_PLACEHOLDER = "****"
+
+const OTP_TTL_MS = 10 * 60 * 1000
+
+const TOKEN_TTL_MS = 45 * 60 * 1000
+
+/** Prisma sem `generate` ou schema antigo → delegados `undefined` e `.count` quebra em runtime. */
+function painelSignupPrismaOrNull() {
+  type OtpSend = {
+    count: (args: object) => Promise<number>
+    findFirst: (args: object) => Promise<{ createdAt: Date } | null>
+    create: (args: object) => Promise<{ id: string }>
+    delete: (args: object) => Promise<unknown>
+    deleteMany: (args: object) => Promise<unknown>
+  }
+  type SignupTok = {
+    create: (args: object) => Promise<unknown>
+    updateMany: (args: object) => Promise<unknown>
+    findUnique: (args: object) => Promise<unknown>
+    update: (args: object) => Promise<unknown>
+  }
+  const p = prisma as unknown as { painelSignupOtpSend?: OtpSend; painelSignupToken?: SignupTok }
+  const otpSend = p.painelSignupOtpSend
+  const signupToken = p.painelSignupToken
+  if (!otpSend || !signupToken) {
+    console.error(
+      "[painel-signup] Modelos Prisma ausentes (painelSignupOtpSend / painelSignupToken). " +
+        "Rode `npx prisma generate` e `npx prisma db push` no projeto e faça deploy de novo."
+    )
+    return null
+  }
+  return { otpSend, signupToken }
+}
+
+const PRISMA_UPGRADE_MSG =
+  "Cadastro indisponível: o servidor precisa ser atualizado (Prisma + banco). Rode `npx prisma generate`, `npx prisma db push` e publique de novo."
+
+function envInt(name: string, fallback: number) {
+  const v = process.env[name]?.trim()
+  if (!v) return fallback
+  const n = Number.parseInt(v, 10)
+  return Number.isFinite(n) && n > 0 ? n : fallback
+}
+
+const OTP_RESEND_COOLDOWN_MS = envInt("OTP_RESEND_COOLDOWN_SECONDS", 60) * 1000
+const MAX_SENDS_WINDOW_MS = envInt("OTP_SEND_WINDOW_MINUTES", 60) * 60 * 1000
+const MAX_SENDS_IN_WINDOW = envInt("OTP_MAX_SENDS_PER_WINDOW", 50)
+
+function isSupabaseOtpThrottleMessage(message: string | undefined): boolean {
+  const m = (message ?? "").toLowerCase()
+  return (
+    m.includes("rate limit") ||
+    m.includes("too many") ||
+    m.includes("exceeded") ||
+    m.includes("only request") ||
+    (m.includes("after ") && m.includes("second")) ||
+    m.includes("for security purposes") ||
+    m.includes("e-mail rate") ||
+    m.includes("email rate") ||
+    m.includes("frequency")
+  )
+}
+
+function friendlyOtpSendError(message: string | undefined): string {
+  if (isSupabaseOtpThrottleMessage(message)) {
+    const sec = Math.ceil(OTP_RESEND_COOLDOWN_MS / 1000)
+    return `Muitas solicitações de código. Aguarde cerca de ${sec} segundos entre um envio e outro.`
+  }
+  return (message ?? "").trim() || "Não foi possível enviar o código por e-mail."
+}
+
+/**
+ * @param rawEmail texto digitado pelo usuário
+ * @param opts.phone — bloqueia se já existir barbearia com o mesmo número (BR normalizado).
+ */
+export async function sendPainelSignupOtp(
+  rawEmail: string,
+  opts?: { phone?: string | null }
+): Promise<
+  | { ok: true; expires_in_seconds: number; email_canonical: string }
+  | { error: string; status: number }
+> {
+  const models = painelSignupPrismaOrNull()
+  if (!models) {
+    return { error: PRISMA_UPGRADE_MSG, status: 503 }
+  }
+  const { otpSend } = models
+
+  const emailCanon = canonicalSignupEmail(normalizeSignupEmail(rawEmail))
+  const now = new Date()
+  const windowStart = new Date(now.getTime() - MAX_SENDS_WINDOW_MS)
+
+  const sendsInWindow = await otpSend.count({
+    where: { email: emailCanon, createdAt: { gte: windowStart } },
+  })
+  if (sendsInWindow >= MAX_SENDS_IN_WINDOW) {
+    return { error: "Limite de envios deste código para este e-mail. Tente mais tarde.", status: 429 }
+  }
+
+  const lastSend = await otpSend.findFirst({
+    where: { email: emailCanon },
+    orderBy: { createdAt: "desc" },
+    select: { createdAt: true },
+  })
+  if (lastSend && now.getTime() - lastSend.createdAt.getTime() < OTP_RESEND_COOLDOWN_MS) {
+    const waitSec = Math.ceil(
+      (OTP_RESEND_COOLDOWN_MS - (now.getTime() - lastSend.createdAt.getTime())) / 1000
+    )
+    return {
+      error: `Aguarde ${waitSec}s antes de pedir um novo código.`,
+      status: 429,
+    }
+  }
+
+  const conflict = await conflictForBarbershopSignup(prisma, {
+    email: emailCanon,
+    phone: opts?.phone ?? null,
+  })
+  if (conflict === "email") {
+    return {
+      error: "Já existe uma conta cadastrada com este e-mail (ou um Gmail equivalente).",
+      status: 409,
+    }
+  }
+  if (conflict === "phone") {
+    return { error: "Já existe uma conta cadastrada com este telefone.", status: 409 }
+  }
+
+  const expiresAt = new Date(now.getTime() + OTP_TTL_MS)
+  const audit = await otpSend.create({
+    data: {
+      email: emailCanon,
+      code: OTP_AUDIT_PLACEHOLDER,
+      expiresAt,
+    },
+  })
+
+  let supabase
+  try {
+    supabase = createAnonServerAuthClient()
+  } catch {
+    await otpSend.delete({ where: { id: audit.id } }).catch(() => {})
+    return {
+      error:
+        "Supabase não configurado (NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY).",
+      status: 500,
+    }
+  }
+
+  const { error: authErr } = await supabase.auth.signInWithOtp({
+    email: emailCanon,
+    options: {
+      shouldCreateUser: true,
+      data: { intent: PAINEL_SIGNUP_OTP_METADATA_INTENT },
+    },
+  })
+
+  if (authErr) {
+    const throttled = isSupabaseOtpThrottleMessage(authErr.message)
+    if (!throttled) {
+      await otpSend.delete({ where: { id: audit.id } }).catch(() => {})
+    }
+    return {
+      error: friendlyOtpSendError(authErr.message),
+      status: throttled ? 429 : 400,
+    }
+  }
+
+  return {
+    ok: true,
+    expires_in_seconds: Math.floor(OTP_TTL_MS / 1000),
+    email_canonical: emailCanon,
+  }
+}
+
+export async function verifyPainelSignupOtp(
+  rawEmail: string,
+  rawCode: string
+): Promise<
+  | { ok: true; signup_token: string; expires_at: string; email_canonical: string }
+  | { error: string; status: number }
+> {
+  const models = painelSignupPrismaOrNull()
+  if (!models) {
+    return { error: PRISMA_UPGRADE_MSG, status: 503 }
+  }
+  const { otpSend, signupToken } = models
+
+  const emailCanon = canonicalSignupEmail(normalizeSignupEmail(rawEmail))
+  const token = normalizePublicOtpCode(String(rawCode ?? ""))
+  if (!isPublicOtpLengthValid(token.length)) {
+    return {
+      error:
+        "Informe o código como no e-mail (em geral 6 dígitos; até 10 caracteres em projetos com OTP longo).",
+      status: 400,
+    }
+  }
+
+  let supabase
+  try {
+    supabase = createAnonServerAuthClient()
+  } catch {
+    return { error: "Supabase não configurado.", status: 500 }
+  }
+
+  const { data: authData, error: authErr } = await supabase.auth.verifyOtp({
+    email: emailCanon,
+    token,
+    type: "email",
+  })
+
+  if (authErr || !authData.user) {
+    const raw = authErr?.message?.toLowerCase() ?? ""
+    let error =
+      "Código inválido ou expirado. Confira os dígitos ou peça um novo código."
+    if (raw.includes("expired") || raw.includes("otp_expired")) {
+      error = "Código expirado. Peça um novo em «Enviar de novo»."
+    }
+    return { error, status: 401 }
+  }
+
+  const user = authData.user
+  if (!user.email || !emailsEquivalentForSignup(user.email, emailCanon)) {
+    return { error: "E-mail não confere com o código.", status: 400 }
+  }
+
+  const meta = (user.user_metadata || {}) as Record<string, unknown>
+  const intentMeta = typeof meta.intent === "string" ? meta.intent.trim() : ""
+  if (intentMeta !== PAINEL_SIGNUP_OTP_METADATA_INTENT) {
+    return {
+      error:
+        "Este código não é válido para cadastro de barbearia. Peça um novo código nesta página.",
+      status: 403,
+    }
+  }
+
+  const auditExists = await otpSend.findFirst({
+    where: { email: emailCanon },
+    orderBy: { createdAt: "desc" },
+    select: { id: true },
+  })
+  if (!auditExists) {
+    return {
+      error:
+        "Não há envio registrado para este e-mail neste fluxo. Comece pelo passo anterior.",
+      status: 400,
+    }
+  }
+
+  await otpSend.deleteMany({ where: { email: emailCanon } })
+
+  const opaque = crypto.randomBytes(32).toString("hex")
+  const exp = new Date(Date.now() + TOKEN_TTL_MS)
+
+  await signupToken.updateMany({
+    where: { email: emailCanon, usedAt: null },
+    data: { usedAt: new Date() },
+  })
+
+  await signupToken.create({
+    data: {
+      email: emailCanon,
+      token: opaque,
+      expiresAt: exp,
+    },
+  })
+
+  return {
+    ok: true,
+    signup_token: opaque,
+    expires_at: exp.toISOString(),
+    email_canonical: emailCanon,
+  }
+}

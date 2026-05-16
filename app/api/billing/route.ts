@@ -7,6 +7,7 @@ import {
   hasCardSetup,
   isBillingExemptBarbershop,
   isTrialActive,
+  isInPostDeclineGracePeriod,
   isTrialExpired,
   needsTrialDecision,
   requiresCardSetup,
@@ -29,6 +30,7 @@ function toSubscriptionApi(sub: {
   billingType: string | null
   cardSetupAt: Date | null
   postTrialChoice: string | null
+  graceAccessUntil: Date | null
   createdAt: Date
   updatedAt: Date
 }): Subscription & {
@@ -45,6 +47,7 @@ function toSubscriptionApi(sub: {
     next_payment: sub.nextPayment?.toISOString() ?? null,
     card_setup_at: sub.cardSetupAt?.toISOString() ?? null,
     post_trial_choice: (sub.postTrialChoice as Subscription["post_trial_choice"]) ?? null,
+    grace_access_until: sub.graceAccessUntil?.toISOString() ?? null,
     asaas_customer_id: sub.asaasCustomerId,
     asaas_subscription_id: sub.asaasSubscriptionId,
     billing_type: sub.billingType,
@@ -87,8 +90,9 @@ export async function GET() {
     )
     const trialActive = isTrialActive(subscription)
     const needsPlan = exempt ? false : shouldPromptPlanChoice(subscription)
-    const needsCard = exempt ? false : requiresCardSetup(subscription, billingEnabled)
+    const needsCard = exempt ? false : requiresCardSetup(subscription)
     const needsDecision = exempt ? false : needsTrialDecision(subscription)
+    const inGrace = exempt ? false : isInPostDeclineGracePeriod(subscription)
 
     return NextResponse.json({
       subscription,
@@ -101,6 +105,8 @@ export async function GET() {
       requires_card_setup: needsCard,
       needs_trial_decision: needsDecision,
       needs_plan_choice: needsPlan,
+      in_decline_grace_period: inGrace,
+      grace_access_until: subscription?.grace_access_until ?? null,
       catalog,
       billing: {
         enabled: billingEnabled,

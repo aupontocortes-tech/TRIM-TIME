@@ -5,7 +5,6 @@
  */
 import { prisma } from "@/lib/prisma"
 import { getPlanSimulationOverride } from "@/lib/plan-simulation-server"
-import { isPaymentApiActive } from "@/lib/platform-settings"
 import {
   getEffectivePlanForBarbershop,
   isBillingExemptBarbershop,
@@ -33,7 +32,7 @@ export async function resolveEffectivePlanForActiveSession(
 export async function resolveEffectivePlanForBarbershop(
   barbershopId: string
 ): Promise<SubscriptionPlan | null> {
-  const [bs, sub, billingActive] = await Promise.all([
+  const [bs, sub] = await Promise.all([
     prisma.barbershop.findUnique({
       where: { id: barbershopId },
       select: { name: true, email: true, role: true, isTest: true },
@@ -48,7 +47,6 @@ export async function resolveEffectivePlanForBarbershop(
         postTrialChoice: true,
       },
     }),
-    isPaymentApiActive(),
   ])
 
   const subscription: Subscription | null = sub
@@ -70,7 +68,7 @@ export async function resolveEffectivePlanForBarbershop(
     bs ? { role: bs.role, is_test: bs.isTest } : null
   )
 
-  if (subscription && !exempt && requiresCardSetup(subscription, billingActive)) {
+  if (subscription && !exempt && requiresCardSetup(subscription)) {
     return null
   }
 

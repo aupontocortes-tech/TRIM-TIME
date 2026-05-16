@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { cookies } from "next/headers"
 import { getBarbershopIdFromRequest } from "@/lib/tenant"
 import { hashPassword } from "@/lib/auth/password"
 import { withBarbershopPasswordHash } from "@/lib/barbershop-auth-settings"
@@ -7,6 +8,12 @@ import { getTrialConfig } from "@/lib/plan-catalog"
 import { prisma } from "@/lib/prisma"
 import { toBarbershopApi } from "@/lib/prisma-barbershop"
 import { resolveEffectivePlanForActiveSession } from "@/lib/barbershop-effective-plan-server"
+import { conflictForBarbershopSignup } from "@/lib/barbershop-signup-conflicts"
+import { canonicalSignupEmail, normalizeSignupEmail } from "@/lib/signup-identity"
+import {
+  PAINEL_SIGNUP_COOKIE,
+  verifyPainelSignupSession,
+} from "@/lib/painel-signup-session-cookie"
 import type { Barbershop, BarbershopSettings } from "@/lib/db/types"
 import type { Prisma } from "@prisma/client"
 
@@ -55,61 +62,165 @@ export async function GET() {
   }
 }
 
-/** Cadastro de nova barbearia: cria barbershop + trial (padrão 2 dias no plano Pro). */
+/** Cadastro de nova barbearia: cria barbershop + trial. Exige OTP de e-mail válido (`painel_signup_token`). */
 export async function POST(request: Request) {
   try {
-    const body = await request.json() as {
+    const body = (await request.json()) as {
       name: string
       email: string
       phone?: string
       telefone?: string
       password?: string
+      painel_signup_token?: string
     }
-    if (!body.name?.trim() || !body.email?.trim() || !body.password?.trim()) {
+    const passwordRaw = body.password
+    if (!body.name?.trim() || !body.email?.trim() || !passwordRaw?.trim()) {
       return NextResponse.json(
         { error: "Nome, email e senha são obrigatórios" },
         { status: 400 }
       )
     }
-    if (body.password.trim().length < 6) {
+    const passwordPlain = passwordRaw.trim()
+    if (passwordPlain.length < 6) {
       return NextResponse.json({ error: "A senha deve ter pelo menos 6 caracteres" }, { status: 400 })
     }
-    const phone = (body.phone ?? body.telefone ?? "")?.trim() || null
-    let slug = slugify(body.name)
-    const existing = await prisma.barbershop.findUnique({ where: { slug } })
-    if (existing) slug = `${slug}-${Date.now().toString(36)}`
-    const emailLower = body.email.trim().toLowerCase()
-    const isSuperAdmin = !!process.env.SUPER_ADMIN_EMAIL && emailLower === process.env.SUPER_ADMIN_EMAIL.trim().toLowerCase()
+
+    const hasTokenModel =
+      typeof (prisma as unknown as { painelSignupToken?: { findUnique: unknown } }).painelSignupToken
+        ?.findUnique === "function"
+    if (!hasTokenModel) {
+      return NextResponse.json(
+        {
+          error:
+            "Servidor desatualizado: faltam modelos de cadastro no banco. Rode `npx prisma generate` e `npx prisma db push` e publique de novo.",
+        },
+        { status: 503 }
+      )
+    }
+
+    const emailCanon = canonicalSignupEmail(normalizeSignupEmail(body.email))
+    let signupToken = String(body.painel_signup_token ?? "").trim()
+    if (!signupToken) {
+      const jar = await cookies()
+      const proof = verifyPainelSignupSession(jar.get(PAINEL_SIGNUP_COOKIE)?.value)
+      const now = Date.now()
+      if (proof && proof.e === emailCanon && proof.x > now) {
+        signupToken = proof.t
+      }
+    }
+    if (!signupToken) {
+      return NextResponse.json(
+        {
+          error:
+            "Confirme seu e-mail com o código (OTP) antes de criar a conta, ou conclua a verificação neste mesmo navegador.",
+        },
+        { status: 400 }
+      )
+    }
+
+    const phoneCombined = String(body.phone ?? body.telefone ?? "").trim()
+    const phone = phoneCombined || null
+    const phoneDigitsLen = phoneCombined.replace(/\D/g, "").length
+
     const trialCfg = await getTrialConfig()
     const trialEnd = createTrialEndDate(trialCfg.days)
-    const barbershop = await prisma.barbershop.create({
-      data: {
-        name: body.name.trim(),
-        email: emailLower,
-        phone,
-        slug,
-        role: isSuperAdmin ? "super_admin" : "admin_barbershop",
-        settings: withBarbershopPasswordHash(null, hashPassword(body.password.trim())),
-      },
+
+    const superEnv = process.env.SUPER_ADMIN_EMAIL?.trim()
+    const isSuperAdmin =
+      !!superEnv &&
+      canonicalSignupEmail(normalizeSignupEmail(superEnv)) === emailCanon
+
+    const barbershop = await prisma.$transaction(async (tx) => {
+      const tokenRow = await tx.painelSignupToken.findUnique({
+        where: { token: signupToken },
+      })
+      const tokenProblem =
+        !tokenRow ||
+        tokenRow.usedAt !== null ||
+        tokenRow.email !== emailCanon ||
+        tokenRow.expiresAt.getTime() <= Date.now()
+      if (tokenProblem) {
+        throw Object.assign(new Error("PAINEL_SIGNUP_TOKEN"), {
+          code: "PAINEL_SIGNUP_TOKEN",
+          message:
+            tokenRow &&
+            tokenRow.email === emailCanon &&
+            tokenRow.usedAt === null &&
+            tokenRow.expiresAt.getTime() <= Date.now()
+              ? "Tempo para concluir o cadastro expirou. Confirme o e-mail novamente."
+              : "E-mail não confirmado ou sessão inválida. Digite o código recebido por e-mail e tente de novo.",
+        })
+      }
+
+      const conflict = await conflictForBarbershopSignup(tx, {
+        email: emailCanon,
+        phone: phoneDigitsLen >= 10 ? phone : null,
+      })
+      if (conflict === "email") {
+        throw Object.assign(new Error("DUPE_EMAIL"), {
+          code: "DUPE_EMAIL",
+          message:
+            "Já existe uma conta cadastrada com este e-mail (ou um Gmail equivalente). Faça login ou use outro e-mail.",
+        })
+      }
+      if (conflict === "phone") {
+        throw Object.assign(new Error("DUPE_PHONE"), {
+          code: "DUPE_PHONE",
+          message: "Já existe uma conta cadastrada com este telefone. Use outro número ou entre em contato com o suporte.",
+        })
+      }
+
+      let slug = slugify(body.name.trim())
+      const existingSlug = await tx.barbershop.findUnique({ where: { slug } })
+      if (existingSlug) slug = `${slug}-${Date.now().toString(36)}`
+
+      const b = await tx.barbershop.create({
+        data: {
+          name: body.name.trim(),
+          email: emailCanon,
+          phone,
+          slug,
+          role: isSuperAdmin ? "super_admin" : "admin_barbershop",
+          settings: withBarbershopPasswordHash(null, hashPassword(passwordPlain)),
+        },
+      })
+      await tx.subscription.create({
+        data: {
+          barbershopId: b.id,
+          plan: "pro",
+          status: "trial",
+          trialEnd,
+        },
+      })
+      await tx.barbershopUnit.create({
+        data: {
+          barbershopId: b.id,
+          name: b.name.trim(),
+          active: true,
+          createdAt: b.createdAt,
+        },
+      })
+      await tx.painelSignupToken.update({
+        where: { id: tokenRow.id },
+        data: { usedAt: new Date() },
+      })
+      return b
     })
-    await prisma.subscription.create({
-      data: {
-        barbershopId: barbershop.id,
-        plan: trialCfg.plan,
-        status: "trial",
-        trialEnd,
-      },
-    })
-    await prisma.barbershopUnit.create({
-      data: {
-        barbershopId: barbershop.id,
-        name: barbershop.name.trim(),
-        active: true,
-        createdAt: barbershop.createdAt,
-      },
-    })
-    return NextResponse.json(toBarbershopApi(barbershop))
+
+    const res = NextResponse.json(toBarbershopApi(barbershop))
+    res.cookies.set(PAINEL_SIGNUP_COOKIE, "", { path: "/", maxAge: 0 })
+    return res
   } catch (e) {
+    const err = e as { code?: string; message?: string }
+    if (err?.code === "DUPE_EMAIL") {
+      return NextResponse.json({ error: err.message ?? "E-mail já cadastrado." }, { status: 409 })
+    }
+    if (err?.code === "DUPE_PHONE") {
+      return NextResponse.json({ error: err.message ?? "Telefone já cadastrado." }, { status: 409 })
+    }
+    if (err?.code === "PAINEL_SIGNUP_TOKEN") {
+      return NextResponse.json({ error: err.message ?? "Confirme o e-mail." }, { status: 400 })
+    }
     console.error("[barbershops POST]", e)
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Erro ao cadastrar barbearia" },
