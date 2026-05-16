@@ -11,7 +11,7 @@ import { Eye, EyeOff, ArrowLeft, Mail, Store } from "lucide-react"
 import { BrandLogo } from "@/components/brand-logo"
 import { SignupProgress } from "@/components/onboarding/signup-progress"
 import type { SignupFlowStep } from "@/lib/onboarding"
-import { TRIAL_DAYS } from "@/lib/plans"
+import { TRIAL_DAYS, TRIAL_OFFER_HEADLINE } from "@/lib/plans"
 
 function CadastroPageContent() {
   const router = useRouter()
@@ -86,11 +86,13 @@ function CadastroPageContent() {
       const j = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(typeof j.error === "string" ? j.error : "Não foi possível enviar o código.")
       setOtpCode("")
-      if (typeof j.email_canonical === "string" && j.email_canonical) {
-        setEmailCanonicalDisplay(j.email_canonical)
-      } else {
-        setEmailCanonicalDisplay(normalizeEmail(formData.email))
-      }
+      const displayEmail =
+        typeof j.email_for_otp === "string" && j.email_for_otp
+          ? j.email_for_otp
+          : typeof j.email_canonical === "string" && j.email_canonical
+            ? j.email_canonical
+            : normalizeEmail(formData.email)
+      setEmailCanonicalDisplay(displayEmail)
       setBarbeariaStep("otp")
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao enviar código.")
@@ -269,7 +271,7 @@ function CadastroPageContent() {
             <h1 className="text-2xl font-bold text-foreground">Criar Conta</h1>
             <p className="text-muted-foreground text-sm leading-relaxed">
               {tipo === "barbearia"
-                ? `${TRIAL_DAYS} dias grátis no Plano Pro. Cadastro rápido. Cartão só na etapa final, sem cobrança imediata.`
+                ? `${TRIAL_OFFER_HEADLINE}. Cadastro rápido. Cartão só na etapa final, sem cobrança imediata.`
                 : "Crie sua conta para agendar"
               }
             </p>

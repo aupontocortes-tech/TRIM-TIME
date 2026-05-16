@@ -28,6 +28,7 @@ export async function POST(request: Request) {
       ok: true,
       expires_in_seconds: r.expires_in_seconds,
       email_canonical: r.email_canonical,
+      email_for_otp: r.email_for_otp,
     })
   } catch (e) {
     return NextResponse.json(

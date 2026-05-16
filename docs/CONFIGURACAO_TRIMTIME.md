@@ -30,15 +30,13 @@ Sem essa coluna, o PATCH da barbearia pode falhar ao salvar configurações.
 
 **Painel → Configurações:** dados da barbearia, horários, serviços (API real), equipe, aba **Plano & conta**, **Integrações** (WhatsApp).
 
-## OTP por e-mail (cadastro e login de clientes)
+## OTP por e-mail (cadastro da barbearia)
 
-O código numérico é enviado pelo **Supabase Auth**, não pelo app. Se o e-mail vier só com link *“Confirm your signup”* / *“Confirm your mail”* (sem dígitos), ajuste no painel do Supabase:
+O cadastro em `/cadastro` envia o código via **Supabase Admin** (`generateLink`), não pelo `signInWithOtp` anônimo (que costuma mandar só link “Confirm signup”).
 
-1. **Authentication → Providers → Email** — habilite envio por **OTP** (código), não só confirmação por link.
-2. **Authentication → Email Templates** — no template usado para login/código (ex.: *Magic Link*), o corpo deve incluir `{{ .Token }}` (código), não só `{{ .ConfirmationURL }}`.
-3. Opcional: desative **Confirm email** se quiser um único fluxo OTP para cadastro e login (recomendado para o Trim Time).
+**Obrigatório na Vercel e no `.env.local`:** `SUPABASE_SERVICE_ROLE_KEY` (além de URL e ANON_KEY).
 
-Depois de alterar, peça um **novo código** na tela de cadastro (o e-mail antigo pode ser só link).
+No template de e-mail do Supabase, inclua `{{ .Token }}` para o usuário ver os dígitos. Peça um **novo código** após deploy.
 
 ## Período grátis (7 dias na landing)
 

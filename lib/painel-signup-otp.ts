@@ -2,10 +2,7 @@ import crypto from "node:crypto"
 import { prisma } from "@/lib/prisma"
 import { conflictForBarbershopSignup } from "@/lib/barbershop-signup-conflicts"
 import { createAnonServerAuthClient, createServiceRoleClient } from "@/lib/supabase/server"
-import {
-  painelSignupOtpSendOptions,
-  verifyEmailOtpWithFallback,
-} from "@/lib/supabase-auth-otp"
+import { sendSupabaseEmailOtp, verifyEmailOtpWithFallback } from "@/lib/supabase-auth-otp"
 import { isPublicOtpLengthValid, normalizePublicOtpCode } from "@/lib/public-otp-code"
 import {
   canonicalSignupEmail,
@@ -68,29 +65,6 @@ const OTP_RESEND_COOLDOWN_MS = envInt("OTP_RESEND_COOLDOWN_SECONDS", 60) * 1000
 const MAX_SENDS_WINDOW_MS = envInt("OTP_SEND_WINDOW_MINUTES", 60) * 60 * 1000
 const MAX_SENDS_IN_WINDOW = envInt("OTP_MAX_SENDS_PER_WINDOW", 50)
 
-function isSupabaseOtpThrottleMessage(message: string | undefined): boolean {
-  const m = (message ?? "").toLowerCase()
-  return (
-    m.includes("rate limit") ||
-    m.includes("too many") ||
-    m.includes("exceeded") ||
-    m.includes("only request") ||
-    (m.includes("after ") && m.includes("second")) ||
-    m.includes("for security purposes") ||
-    m.includes("e-mail rate") ||
-    m.includes("email rate") ||
-    m.includes("frequency")
-  )
-}
-
-function friendlyOtpSendError(message: string | undefined): string {
-  if (isSupabaseOtpThrottleMessage(message)) {
-    const sec = Math.ceil(OTP_RESEND_COOLDOWN_MS / 1000)
-    return `Muitas solicitações de código. Aguarde cerca de ${sec} segundos entre um envio e outro.`
-  }
-  return (message ?? "").trim() || "Não foi possível enviar o código por e-mail."
-}
-
 /**
  * @param rawEmail texto digitado pelo usuário
  * @param opts.phone — bloqueia se já existir barbearia com o mesmo número (BR normalizado).
@@ -99,7 +73,7 @@ export async function sendPainelSignupOtp(
   rawEmail: string,
   opts?: { phone?: string | null }
 ): Promise<
-  | { ok: true; expires_in_seconds: number; email_canonical: string }
+  | { ok: true; expires_in_seconds: number; email_canonical: string; email_for_otp: string }
   | { error: string; status: number }
 > {
   const models = painelSignupPrismaOrNull()
@@ -108,19 +82,20 @@ export async function sendPainelSignupOtp(
   }
   const { otpSend } = models
 
-  const emailCanon = canonicalSignupEmail(normalizeSignupEmail(rawEmail))
+  const authEmail = normalizeSignupEmail(rawEmail)
+  const emailCanon = canonicalSignupEmail(authEmail)
   const now = new Date()
   const windowStart = new Date(now.getTime() - MAX_SENDS_WINDOW_MS)
 
   const sendsInWindow = await otpSend.count({
-    where: { email: emailCanon, createdAt: { gte: windowStart } },
+    where: { email: authEmail, createdAt: { gte: windowStart } },
   })
   if (sendsInWindow >= MAX_SENDS_IN_WINDOW) {
     return { error: "Limite de envios deste código para este e-mail. Tente mais tarde.", status: 429 }
   }
 
   const lastSend = await otpSend.findFirst({
-    where: { email: emailCanon },
+    where: { email: authEmail },
     orderBy: { createdAt: "desc" },
     select: { createdAt: true },
   })
@@ -151,45 +126,26 @@ export async function sendPainelSignupOtp(
   const expiresAt = new Date(now.getTime() + OTP_TTL_MS)
   const audit = await otpSend.create({
     data: {
-      email: emailCanon,
+      email: authEmail,
       code: OTP_AUDIT_PLACEHOLDER,
       expiresAt,
     },
   })
 
-  let supabase
-  try {
-    supabase = createAnonServerAuthClient()
-  } catch {
-    await otpSend.delete({ where: { id: audit.id } }).catch(() => {})
-    return {
-      error:
-        "Supabase não configurado (NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY).",
-      status: 500,
-    }
-  }
-
-  // Sem `options.data`: com metadados o GoTrue costuma enviar link "Confirm signup" em vez do código.
-  const { error: authErr } = await supabase.auth.signInWithOtp({
-    email: emailCanon,
-    options: painelSignupOtpSendOptions(),
-  })
-
-  if (authErr) {
-    const throttled = isSupabaseOtpThrottleMessage(authErr.message)
+  const sent = await sendSupabaseEmailOtp(authEmail)
+  if ("error" in sent) {
+    const throttled = sent.status === 429
     if (!throttled) {
       await otpSend.delete({ where: { id: audit.id } }).catch(() => {})
     }
-    return {
-      error: friendlyOtpSendError(authErr.message),
-      status: throttled ? 429 : 400,
-    }
+    return { error: sent.error, status: sent.status }
   }
 
   return {
     ok: true,
     expires_in_seconds: Math.floor(OTP_TTL_MS / 1000),
     email_canonical: emailCanon,
+    email_for_otp: authEmail,
   }
 }
 
@@ -206,7 +162,8 @@ export async function verifyPainelSignupOtp(
   }
   const { otpSend, signupToken } = models
 
-  const emailCanon = canonicalSignupEmail(normalizeSignupEmail(rawEmail))
+  const authEmail = normalizeSignupEmail(rawEmail)
+  const emailCanon = canonicalSignupEmail(authEmail)
   const token = normalizePublicOtpCode(String(rawCode ?? ""))
   if (!isPublicOtpLengthValid(token.length)) {
     return {
@@ -224,7 +181,7 @@ export async function verifyPainelSignupOtp(
   }
 
   const { data: authData, error: authErr } = await verifyEmailOtpWithFallback(supabase, {
-    email: emailCanon,
+    email: authEmail,
     token,
   })
 
@@ -256,7 +213,7 @@ export async function verifyPainelSignupOtp(
   }
 
   const auditExists = await otpSend.findFirst({
-    where: { email: emailCanon },
+    where: { email: authEmail },
     orderBy: { createdAt: "desc" },
     select: { id: true },
   })
@@ -268,7 +225,7 @@ export async function verifyPainelSignupOtp(
     }
   }
 
-  await otpSend.deleteMany({ where: { email: emailCanon } })
+  await otpSend.deleteMany({ where: { email: authEmail } })
 
   const opaque = crypto.randomBytes(32).toString("hex")
   const exp = new Date(Date.now() + TOKEN_TTL_MS)

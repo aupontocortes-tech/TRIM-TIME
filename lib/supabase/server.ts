@@ -48,6 +48,7 @@ export function createAnonServerAuthClient() {
       persistSession: false,
       autoRefreshToken: false,
       detectSessionInUrl: false,
+      flowType: "implicit",
     },
   })
 }
