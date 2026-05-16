@@ -97,7 +97,10 @@ export async function sendPainelSignupOtp(
     orderBy: { createdAt: "desc" },
     select: { createdAt: true },
   })
-  if (lastSend && now.getTime() - lastSend.createdAt.getTime() < OTP_RESEND_COOLDOWN_MS) {
+  if (
+    lastSend?.createdAt &&
+    now.getTime() - lastSend.createdAt.getTime() < OTP_RESEND_COOLDOWN_MS
+  ) {
     const waitSec = Math.ceil(
       (OTP_RESEND_COOLDOWN_MS - (now.getTime() - lastSend.createdAt.getTime())) / 1000
     )
