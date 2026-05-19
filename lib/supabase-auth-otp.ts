@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
+import { isResendOtpConfigured, sendOtpCodeEmail } from "@/lib/otp-email-send"
 import { createAnonServerAuthClient, createServiceRoleClient } from "@/lib/supabase/server"
 
 export function painelSignupOtpSendOptions() {
@@ -41,8 +42,7 @@ export type SendSupabaseEmailOtpResult =
   | { error: string; status: number }
 
 /**
- * Dispara o e-mail (Invite user) e obtém o OTP do Auth.
- * inviteUserByEmail envia o template "Invite user"; generateLink fornece o código para validar.
+ * Obtém OTP do Supabase Auth e entrega por e-mail (Resend, se configurado, senão template Invite do Supabase).
  */
 export async function sendSupabaseEmailOtp(email: string): Promise<SendSupabaseEmailOtpResult> {
   let admin
@@ -53,16 +53,6 @@ export async function sendSupabaseEmailOtp(email: string): Promise<SendSupabaseE
       error:
         "Servidor sem SUPABASE_SERVICE_ROLE_KEY — necessário para enviar o código de cadastro.",
       status: 500,
-    }
-  }
-
-  const inviteMail = await admin.auth.admin.inviteUserByEmail(email)
-  if (inviteMail.error) {
-    if (isSupabaseRateLimit(inviteMail.error.message)) {
-      return { error: RATE_LIMIT_MSG, status: 429 }
-    }
-    if (!isInviteUserAlreadyRegistered(inviteMail.error.message)) {
-      console.warn("[painel-signup] inviteUserByEmail:", inviteMail.error.message)
     }
   }
 
@@ -90,7 +80,7 @@ export async function sendSupabaseEmailOtp(email: string): Promise<SendSupabaseE
       return { error: RATE_LIMIT_MSG, status: 429 }
     }
     return {
-      error: (error.message ?? "").trim() || "Não foi possível enviar o código por e-mail.",
+      error: (error.message ?? "").trim() || "Não foi possível gerar o código.",
       status: 400,
     }
   }
@@ -100,6 +90,44 @@ export async function sendSupabaseEmailOtp(email: string): Promise<SendSupabaseE
     return {
       error:
         "O Supabase não gerou código OTP. Confira Authentication → Email e os templates com {{ .Token }}.",
+      status: 502,
+    }
+  }
+
+  if (isResendOtpConfigured()) {
+    const mailed = await sendOtpCodeEmail({
+      to: email,
+      code: otp,
+      subject: "Código de cadastro — Trim Time",
+      intro: "Seu código para cadastrar sua barbearia no Trim Time:",
+    })
+    if (mailed.ok) {
+      return { ok: true, otp }
+    }
+    return { error: mailed.error, status: 502 }
+  }
+
+  const inviteMail = await admin.auth.admin.inviteUserByEmail(email)
+  if (inviteMail.error) {
+    if (isSupabaseRateLimit(inviteMail.error.message)) {
+      return { error: RATE_LIMIT_MSG, status: 429 }
+    }
+    if (isInviteUserAlreadyRegistered(inviteMail.error.message)) {
+      const magicSend = await createAnonServerAuthClient().auth.signInWithOtp({
+        email,
+        options: { shouldCreateUser: false },
+      })
+      if (!magicSend.error) {
+        return { ok: true, otp }
+      }
+      if (isSupabaseRateLimit(magicSend.error.message)) {
+        return { error: RATE_LIMIT_MSG, status: 429 }
+      }
+    }
+    console.warn("[painel-signup] inviteUserByEmail:", inviteMail.error.message)
+    return {
+      error:
+        "Não foi possível enviar o e-mail. Configure RESEND_API_KEY no servidor ou SMTP em Supabase → Authentication → Email.",
       status: 502,
     }
   }
