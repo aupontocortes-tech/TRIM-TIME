@@ -10,6 +10,7 @@ import { Loader2, CreditCard, QrCode, ArrowLeft, CheckCircle2 } from "lucide-rea
 import type { SubscriptionPlan, SubscriptionStatus } from "@/lib/db/types"
 import type { PlanCatalog } from "@/lib/plan-catalog"
 import { TrialBillingTrust } from "@/components/onboarding/trial-billing-trust"
+import { TrialCardForm } from "@/components/billing/trial-card-form"
 import { TRIAL_DAYS } from "@/lib/plans"
 
 type BillingSubscription = {
@@ -97,29 +98,12 @@ function AssinaturaContent() {
       .catch(() => {})
   }, [cardReturn, load])
 
-  const handleSetupCard = async () => {
-    setCheckoutLoading(true)
+  const handleCardFormSuccess = () => {
+    setCardComplete(true)
+    setNeedsCard(false)
+    setMsg(null)
     setErr(null)
-    try {
-      const r = await fetch("/api/billing/setup-card", {
-        method: "POST",
-        credentials: "include",
-      })
-      const j = await r.json()
-      if (!r.ok) {
-        setErr(j.error || "Erro ao cadastrar cartão")
-        return
-      }
-      if (j.paymentUrl) {
-        window.location.href = j.paymentUrl
-        return
-      }
-      setMsg("Siga as instruções do Asaas para validar seu cartão.")
-    } catch {
-      setErr("Erro de rede")
-    } finally {
-      setCheckoutLoading(false)
-    }
+    void load()
   }
 
   const handleSubscribeEarly = async () => {
@@ -357,16 +341,13 @@ function AssinaturaContent() {
             <CardHeader>
               <CardTitle>Cadastre seu cartão para começar</CardTitle>
               <CardDescription>
-                Último passo do cadastro. Validação segura via Asaas — sem débito imediato.
+                Último passo do cadastro. Pagamento seguro pela Asaas, direto aqui no Trim Time — sem débito
+                imediato.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <TrialBillingTrust trialDays={trialLengthDays} />
-              <Button className="w-full" disabled={checkoutLoading} onClick={() => void handleSetupCard()}>
-                {checkoutLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                <CreditCard className="w-4 h-4 mr-2" />
-                Cadastrar cartão de crédito
-              </Button>
+              <TrialCardForm onSuccess={handleCardFormSuccess} onError={setErr} />
             </CardContent>
           </Card>
         ) : (
@@ -382,7 +363,7 @@ function AssinaturaContent() {
             </CardHeader>
             <CardContent>
               <p className="text-sm text-muted-foreground mb-3">
-                Com o gateway ativo, aparecerá o botão que abre o cadastro seguro via Asaas.
+                Com o gateway ativo, o formulário de cartão aparecerá nesta página.
               </p>
               <Button className="w-full" variant="outline" disabled>
                 <CreditCard className="w-4 h-4 mr-2" />

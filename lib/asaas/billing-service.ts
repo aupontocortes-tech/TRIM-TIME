@@ -1,11 +1,20 @@
 import type { SubscriptionPlan } from "@/lib/db/types"
+import type { TrialCardSetupPayload } from "@/lib/asaas/card-types"
+import {
+  digitsOnly,
+  normalizeCardNumber,
+  normalizeExpiryMonth,
+  normalizeExpiryYear,
+} from "@/lib/asaas/card-types"
 import {
   cancelAsaasSubscription,
   createAsaasCustomer,
   createAsaasSubscription,
   findAsaasCustomerByReference,
   listSubscriptionPayments,
+  tokenizeAsaasCreditCard,
   updateAsaasSubscription,
+  updateAsaasSubscriptionCreditCard,
   type AsaasBillingType,
 } from "@/lib/asaas/client"
 import { getAppBaseUrl, isAsaasConfigured } from "@/lib/asaas/config"
@@ -225,11 +234,36 @@ export function cardSetupSuccessUrl(): string {
   return `${getAppBaseUrl()}/painel/assinatura?card=1`
 }
 
-/**
- * Cadastro de cartão no trial (sem cobrança imediata).
- * Assinatura Asaas com vencimento adiado; cobrança só após o cliente aceitar o plano.
- */
-export async function startTrialCardSetup(barbershopId: string): Promise<CheckoutResult> {
+export type TrialCardSetupPrefill = {
+  name: string
+  email: string
+  phone: string | null
+  postalCode: string | null
+  addressNumber: string | null
+}
+
+export async function getTrialCardSetupPrefill(
+  barbershopId: string
+): Promise<TrialCardSetupPrefill> {
+  const bs = await prisma.barbershop.findUnique({
+    where: { id: barbershopId },
+    select: { name: true, email: true, phone: true, settings: true },
+  })
+  if (!bs) throw new Error("Barbearia não encontrada")
+  const settings = (bs.settings ?? {}) as { cep?: string; address?: string }
+  const addressNumber =
+    settings.address?.match(/\d+/)?.[0] ?? (settings.address ? "S/N" : null)
+  return {
+    name: bs.name,
+    email: bs.email,
+    phone: bs.phone,
+    postalCode: settings.cep?.replace(/\D/g, "") || null,
+    addressNumber,
+  }
+}
+
+/** Garante assinatura Asaas com vencimento adiado (sem débito no trial). */
+export async function ensureTrialAsaasSubscription(barbershopId: string): Promise<string> {
   if (!(await isBillingEnabled())) {
     throw new Error("Cadastro de cartão indisponível. Ative a API de pagamento.")
   }
@@ -248,26 +282,93 @@ export async function startTrialCardSetup(barbershopId: string): Promise<Checkou
   const customerId = await ensureAsaasCustomer(barbershopId)
   const description = `Trim Time — teste grátis (cartão para ${catalog.plans[plan].name})`
 
-  let asaasSubId = sub.asaasSubscriptionId
-  if (!asaasSubId) {
-    const asaasSub = await createAsaasSubscription({
-      customerId,
+  if (sub.asaasSubscriptionId) return sub.asaasSubscriptionId
+
+  const asaasSub = await createAsaasSubscription({
+    customerId,
+    billingType: "CREDIT_CARD",
+    value: price,
+    nextDueDate: deferredChargeDate(),
+    description,
+    externalReference: `${barbershopId}:card_setup`,
+  })
+  await prisma.subscription.update({
+    where: { barbershopId },
+    data: {
+      asaasSubscriptionId: asaasSub.id,
       billingType: "CREDIT_CARD",
-      value: price,
-      nextDueDate: deferredChargeDate(),
-      description,
-      externalReference: `${barbershopId}:card_setup`,
-    })
-    asaasSubId = asaasSub.id
-    await prisma.subscription.update({
-      where: { barbershopId },
-      data: {
-        asaasSubscriptionId: asaasSubId,
-        billingType: "CREDIT_CARD",
-      },
-    })
+    },
+  })
+  return asaasSub.id
+}
+
+export type InAppCardSetupResult = {
+  asaasSubscriptionId: string
+  creditCardLast4: string | null
+  creditCardBrand: string | null
+}
+
+/**
+ * Cadastro de cartão no trial dentro do Trim Time (tokenização + assinatura Asaas).
+ */
+export async function registerTrialCardInApp(
+  barbershopId: string,
+  payload: TrialCardSetupPayload,
+  remoteIp: string
+): Promise<InAppCardSetupResult> {
+  const asaasSubId = await ensureTrialAsaasSubscription(barbershopId)
+  const customerId = await ensureAsaasCustomer(barbershopId)
+
+  const holder = payload.creditCardHolderInfo
+  const phone =
+    digitsOnly(holder.mobilePhone || "") ||
+    digitsOnly(holder.phone || "") ||
+    "11999999999"
+
+  const creditCard = {
+    holderName: payload.creditCard.holderName.trim(),
+    number: normalizeCardNumber(payload.creditCard.number),
+    expiryMonth: normalizeExpiryMonth(payload.creditCard.expiryMonth),
+    expiryYear: normalizeExpiryYear(payload.creditCard.expiryYear),
+    ccv: digitsOnly(payload.creditCard.ccv),
+  }
+  const creditCardHolderInfo = {
+    name: holder.name.trim(),
+    email: holder.email.trim(),
+    cpfCnpj: digitsOnly(holder.cpfCnpj),
+    postalCode: digitsOnly(holder.postalCode),
+    addressNumber: holder.addressNumber.trim() || "S/N",
+    addressComplement: holder.addressComplement?.trim() || undefined,
+    phone,
+    mobilePhone: holder.mobilePhone ? digitsOnly(holder.mobilePhone) : undefined,
   }
 
+  const token = await tokenizeAsaasCreditCard({
+    customerId,
+    creditCard,
+    creditCardHolderInfo,
+    remoteIp,
+  })
+
+  await updateAsaasSubscriptionCreditCard(asaasSubId, {
+    creditCardToken: token.creditCardToken,
+    remoteIp,
+  })
+
+  await markCardSetupComplete(barbershopId)
+
+  return {
+    asaasSubscriptionId: asaasSubId,
+    creditCardLast4: token.creditCardNumber ?? null,
+    creditCardBrand: token.creditCardBrand ?? null,
+  }
+}
+
+/**
+ * @deprecated Fluxo legado — redireciona para fatura Asaas. Preferir registerTrialCardInApp.
+ */
+export async function startTrialCardSetup(barbershopId: string): Promise<CheckoutResult> {
+  const asaasSubId = await ensureTrialAsaasSubscription(barbershopId)
   const payments = await listSubscriptionPayments(asaasSubId, "PENDING")
   const payment = payments[0]
 

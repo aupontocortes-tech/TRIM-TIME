@@ -1,3 +1,7 @@
+import type {
+  AsaasCreditCardHolderInput,
+  AsaasCreditCardInput,
+} from "@/lib/asaas/card-types"
 import { getAsaasApiBaseUrl, getAsaasApiKey } from "@/lib/asaas/config"
 
 export type AsaasBillingType = "CREDIT_CARD" | "PIX" | "BOLETO" | "UNDEFINED"
@@ -177,6 +181,58 @@ export async function listSubscriptionPayments(
 
 export async function getAsaasPayment(paymentId: string): Promise<AsaasPayment> {
   return asaasFetch<AsaasPayment>(`/payments/${paymentId}`)
+}
+
+export type CreditCardTokenizeResult = {
+  creditCardToken: string
+  creditCardNumber?: string
+  creditCardBrand?: string
+}
+
+export async function tokenizeAsaasCreditCard(input: {
+  customerId: string
+  creditCard: AsaasCreditCardInput
+  creditCardHolderInfo: AsaasCreditCardHolderInput
+  remoteIp: string
+}): Promise<CreditCardTokenizeResult> {
+  const res = await asaasFetch<{
+    creditCardToken?: string
+    creditCardNumber?: string
+    creditCardBrand?: string
+  }>("/creditCard/tokenizeCreditCard", {
+    method: "POST",
+    body: JSON.stringify({
+      customer: input.customerId,
+      creditCard: input.creditCard,
+      creditCardHolderInfo: input.creditCardHolderInfo,
+      remoteIp: input.remoteIp,
+    }),
+  })
+  if (!res.creditCardToken) {
+    throw new AsaasApiError("Token do cartão não retornado pelo Asaas.", 500)
+  }
+  return {
+    creditCardToken: res.creditCardToken,
+    creditCardNumber: res.creditCardNumber,
+    creditCardBrand: res.creditCardBrand,
+  }
+}
+
+/** Atualiza cartão da assinatura sem cobrança imediata. */
+export async function updateAsaasSubscriptionCreditCard(
+  subscriptionId: string,
+  input: {
+    creditCardToken: string
+    remoteIp: string
+  }
+): Promise<AsaasSubscription> {
+  return asaasFetch<AsaasSubscription>(`/subscriptions/${subscriptionId}/creditCard`, {
+    method: "PUT",
+    body: JSON.stringify({
+      creditCardToken: input.creditCardToken,
+      remoteIp: input.remoteIp,
+    }),
+  })
 }
 
 export { AsaasApiError }
