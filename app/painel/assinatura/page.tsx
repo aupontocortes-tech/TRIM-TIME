@@ -10,7 +10,7 @@ import { Loader2, CreditCard, QrCode, ArrowLeft, CheckCircle2 } from "lucide-rea
 import type { SubscriptionPlan, SubscriptionStatus } from "@/lib/db/types"
 import type { PlanCatalog } from "@/lib/plan-catalog"
 import { TrialBillingTrust } from "@/components/onboarding/trial-billing-trust"
-import { TrialCardForm } from "@/components/billing/trial-card-form"
+import { SignupBillingFlow } from "@/components/billing/signup-billing-flow"
 import { TRIAL_DAYS } from "@/lib/plans"
 
 type BillingSubscription = {
@@ -112,37 +112,31 @@ function AssinaturaContent() {
     void load()
   }
 
-  const handleSubscribeEarly = async () => {
+  const handleCancelTrial = async () => {
     if (
       !confirm(
-        `A primeira mensalidade será cobrada já (pelo cartão já cadastrado). Os ${trialLengthDays} dias grátis deixam de se aplicar. Continuar?`
+        `Cancelar o teste grátis? Você não será cobrado. O acesso ao painel completo será limitado após confirmar.`
       )
     )
       return
-    setCheckoutLoading(true)
+    setCancelLoading(true)
     setErr(null)
     try {
-      const r = await fetch("/api/billing/subscribe-early", {
+      const r = await fetch("/api/billing/cancel-trial", {
         method: "POST",
         credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan: selectedPlan }),
       })
       const j = await r.json()
       if (!r.ok) {
-        setErr(j.error || "Erro ao iniciar cobrança")
+        setErr(j.error || "Erro ao cancelar teste")
         return
       }
-      if (j.paymentUrl) {
-        window.location.href = j.paymentUrl
-        return
-      }
-      setMsg("Cobrança acionada. Aguarde a confirmação no Asaas.")
+      setMsg("Teste cancelado. Não haverá cobrança automática no seu cartão.")
       void load()
     } catch {
       setErr("Erro de rede")
     } finally {
-      setCheckoutLoading(false)
+      setCancelLoading(false)
     }
   }
 
@@ -286,10 +280,6 @@ function AssinaturaContent() {
     ? new Date(subscription.next_payment).toLocaleDateString("pt-BR")
     : "—"
 
-  /** Durante o período de teste, apenas o plano Pro pode ser cobrado antecipadamente. */
-  const subscribeEarlyPlans: SubscriptionPlan[] =
-    trialActive && subscription?.status === "trial" ? ["pro"] : PLAN_ORDER
-
   const isOnboardingCheckout =
     !billingExempt && (setupCard || needsCard) && !cardComplete
 
@@ -303,11 +293,11 @@ function AssinaturaContent() {
         </Button>
         <div>
           <h1 className="text-2xl font-bold">
-            {isOnboardingCheckout ? "Ative seu teste grátis" : "Minha assinatura"}
+            {isOnboardingCheckout ? "Ative seu plano" : "Minha assinatura"}
           </h1>
           <p className="text-sm text-muted-foreground">
             {isOnboardingCheckout
-              ? `Plano Pro por ${trialLengthDays} dias — cadastre o cartão para liberar o painel.`
+              ? "Teste grátis no Pro ou contrate agora — cadastre o cartão para liberar o painel."
               : "Plano, cobrança mensal e pagamento via Asaas (cartão ou PIX)."}
           </p>
         </div>
@@ -331,7 +321,9 @@ function AssinaturaContent() {
         <div className="space-y-3">
           <div className="flex items-center gap-2 text-sm text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 border rounded-lg p-3">
             <CheckCircle2 className="w-5 h-5 shrink-0" />
-            Cartão cadastrado. Aproveite seus {trialLengthDays} dias grátis no plano Pro — só haverá cobrança se você aceitar um plano depois.
+            {subscription?.status === "past_due"
+              ? "Cartão cadastrado. Aguardando confirmação do pagamento para liberar o plano contratado."
+              : `Cartão cadastrado. Teste grátis no plano Pro por ${trialLengthDays} dias — cobrança automática após o teste, salvo se você cancelar antes.`}
           </div>
           {(setupCard || isOnboardingCheckout) && (
             <Button asChild className="w-full">
@@ -342,20 +334,27 @@ function AssinaturaContent() {
       ) : null}
 
       {(needsCard || setupCard) && !cardComplete ? (
-        billingEnabled ? (
+        billingEnabled && catalog ? (
           <Card className="border-primary shadow-md">
             <CardHeader>
               <CardTitle>Cadastre seu cartão para começar</CardTitle>
               <CardDescription>
-                Último passo do cadastro. Pagamento seguro pela Asaas, direto aqui no Trim Time — sem débito
-                imediato.
+                Último passo do cadastro. Escolha teste grátis ou contrate agora — pagamento seguro no Trim Time.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <TrialBillingTrust trialDays={trialLengthDays} />
-              <TrialCardForm onSuccess={handleCardFormSuccess} onError={setErr} />
+              <SignupBillingFlow
+                catalog={catalog}
+                trialDays={trialLengthDays}
+                onSuccess={handleCardFormSuccess}
+                onError={setErr}
+              />
             </CardContent>
           </Card>
+        ) : billingEnabled ? (
+          <div className="flex justify-center py-12">
+            <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+          </div>
         ) : (
           <Card className="border-amber-500/40 bg-amber-500/5">
             <CardHeader>
@@ -388,36 +387,23 @@ function AssinaturaContent() {
       subscription?.status === "trial" &&
       trialDaysLeft > 0 &&
       catalog ? (
-        <Card className="border-blue-500/40 bg-blue-500/5">
+        <Card className="border-muted">
           <CardHeader>
-            <CardTitle>Preferir cobrança agora?</CardTitle>
+            <CardTitle className="text-base">Teste grátis ativo</CardTitle>
             <CardDescription>
-              Durante o teste você usa o plano Pro. Você pode manter os dias grátis até o fim ou gerar já a
-              primeira fatura no Asaas (somente plano Pro enquanto o período gratuito estiver ativo).
+              Cobrança automática de R$ {catalog.plans.pro.price}/mês ({catalog.plans.pro.name}) em{" "}
+              {trialDaysLeft} dia(s), se você não cancelar antes.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex flex-wrap gap-2">
-              {subscribeEarlyPlans.map((p) => (
-                <Button
-                  key={p}
-                  type="button"
-                  size="sm"
-                  variant={selectedPlan === p ? "default" : "outline"}
-                  onClick={() => setSelectedPlan(p)}
-                >
-                  {catalog.plans[p].name} — R$ {catalog.plans[p].price}
-                </Button>
-              ))}
-            </div>
+          <CardContent>
             <Button
-              className="w-full"
-              variant="secondary"
-              disabled={checkoutLoading}
-              onClick={() => void handleSubscribeEarly()}
+              variant="outline"
+              className="w-full text-destructive border-destructive/30 hover:bg-destructive/10"
+              disabled={cancelLoading}
+              onClick={() => void handleCancelTrial()}
             >
-              {checkoutLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-              Cobrar primeira mensalidade agora
+              {cancelLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+              Cancelar teste grátis (sem cobrança)
             </Button>
           </CardContent>
         </Card>
@@ -428,8 +414,8 @@ function AssinaturaContent() {
           <CardHeader>
             <CardTitle>Seu teste grátis terminou</CardTitle>
             <CardDescription>
-              Deseja continuar? Escolha Básico, Pro ou Premium. A cobrança só acontece se você clicar em
-              &quot;Sim, quero continuar&quot;. Se recusar, não cobramos nada.
+              Conta criada antes da renovação automática. Escolha um plano para continuar ou recuse — sem
+              cobrança se recusar.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">

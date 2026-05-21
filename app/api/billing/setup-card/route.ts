@@ -2,9 +2,11 @@ import { NextResponse } from "next/server"
 import {
   getTrialCardSetupPrefill,
   isBillingEnabled,
-  registerTrialCardInApp,
+  registerCardInApp,
   startTrialCardSetup,
 } from "@/lib/asaas/billing-service"
+import { parseSignupBillingMode } from "@/lib/billing/signup-mode"
+import type { SubscriptionPlan } from "@/lib/db/types"
 import { getAsaasEnvironment } from "@/lib/asaas/config"
 import type { TrialCardSetupPayload } from "@/lib/asaas/card-types"
 import { getClientIpFromRequest } from "@/lib/request-client-ip"
@@ -104,8 +106,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: parsed }, { status: 400 })
     }
 
+    const b = body as Record<string, unknown>
+    const modeParsed = parseSignupBillingMode(b.mode, b.plan)
+    if (typeof modeParsed === "string") {
+      return NextResponse.json({ error: modeParsed }, { status: 400 })
+    }
+
     const remoteIp = getClientIpFromRequest(req)
-    const result = await registerTrialCardInApp(barbershopId, parsed, remoteIp)
+    const result = await registerCardInApp(barbershopId, parsed, remoteIp, {
+      mode: modeParsed.mode,
+      plan: (modeParsed.plan ?? undefined) as SubscriptionPlan | undefined,
+    })
     return NextResponse.json({
       ok: true,
       in_app: true,

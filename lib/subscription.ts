@@ -66,7 +66,7 @@ export function requiresCardSetup(
   return !hasCardSetup(subscription)
 }
 
-/** Trial acabou, cartão já cadastrado, ainda não aceitou nem recusou contratar. */
+/** Trial acabou sem renovação automática aceita no cadastro (contas antigas). */
 export function needsTrialDecision(
   subscription: Subscription | null,
   exemptFromBillingRules = false
@@ -75,7 +75,8 @@ export function needsTrialDecision(
   if (!subscription) return false
   if (!isTrialExpired(subscription)) return false
   if (!hasCardSetup(subscription)) return false
-  if (subscription.post_trial_choice) return false
+  if (subscription.post_trial_choice === "accepted") return false
+  if (subscription.post_trial_choice === "declined") return false
   return true
 }
 
@@ -83,9 +84,10 @@ export function getEffectivePlan(subscription: Subscription | null): Subscriptio
   if (!subscription) return null
 
   if (subscription.status === "trial") {
-    if (!isTrialActive(subscription)) return null
+    if (isTrialActive(subscription)) return subscription.plan
+    if (subscription.post_trial_choice === "accepted") return subscription.plan
     if (needsTrialDecision(subscription)) return null
-    return subscription.plan
+    return null
   }
 
   if (subscription.post_trial_choice === "declined") return null

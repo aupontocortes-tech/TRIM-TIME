@@ -5,6 +5,10 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Loader2, CreditCard, Lock } from "lucide-react"
+import type { SignupBillingMode } from "@/lib/billing/signup-mode"
+import type { SubscriptionPlan } from "@/lib/db/types"
+import type { PlanCatalog } from "@/lib/plan-catalog"
+
 type Prefill = {
   name: string
   email: string
@@ -14,6 +18,10 @@ type Prefill = {
 }
 
 type TrialCardFormProps = {
+  mode?: SignupBillingMode
+  plan?: SubscriptionPlan
+  trialDays?: number
+  catalog?: PlanCatalog | null
   onSuccess: () => void
   onError?: (message: string) => void
 }
@@ -37,7 +45,14 @@ function formatCardNumber(value: string): string {
   return d.replace(/(\d{4})(?=\d)/g, "$1 ").trim()
 }
 
-export function TrialCardForm({ onSuccess, onError }: TrialCardFormProps) {
+export function TrialCardForm({
+  mode = "trial",
+  plan = "pro",
+  trialDays = 7,
+  catalog,
+  onSuccess,
+  onError,
+}: TrialCardFormProps) {
   const [loadingPrefill, setLoadingPrefill] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [err, setErr] = useState<string | null>(null)
@@ -98,6 +113,8 @@ export function TrialCardForm({ onSuccess, onError }: TrialCardFormProps) {
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          mode,
+          plan: mode === "immediate" ? plan : undefined,
           creditCard: {
             holderName,
             number: cardNumber.replace(/\D/g, ""),
@@ -289,7 +306,9 @@ export function TrialCardForm({ onSuccess, onError }: TrialCardFormProps) {
 
       <Button type="submit" className="w-full" disabled={submitting}>
         {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CreditCard className="w-4 h-4 mr-2" />}
-        Cadastrar cartão e iniciar teste
+        {mode === "immediate"
+          ? `Cadastrar cartão e ativar ${catalog?.plans[plan]?.name ?? "plano"}`
+          : `Cadastrar cartão e iniciar teste grátis (${trialDays} dias)`}
       </Button>
     </form>
   )

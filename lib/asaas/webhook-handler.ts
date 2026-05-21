@@ -112,7 +112,12 @@ export async function handleAsaasWebhook(payload: WebhookPayload): Promise<void>
   if (!sub) return
 
   const extRef = (fullPayment as { externalReference?: string }).externalReference ?? ""
-  if (extRef.endsWith(":card_setup") || extRef.includes(":card_setup")) {
+  if (
+    extRef.endsWith(":card_setup") ||
+    extRef.includes(":card_setup") ||
+    extRef.endsWith(":trial_auto") ||
+    extRef.includes(":trial_auto")
+  ) {
     await markCardSetupComplete(sub.barbershopId)
     return
   }

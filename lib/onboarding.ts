@@ -9,14 +9,14 @@ export const SIGNUP_STEPS: { id: SignupFlowStep; label: string }[] = [
   { id: "dados", label: "Seus dados" },
   { id: "otp", label: "Verificação" },
   { id: "barbearia", label: "Barbearia" },
-  { id: "assinatura", label: "Ativar teste" },
+  { id: "assinatura", label: "Ativar plano" },
 ]
 
 export function trialTrustBullets(trialDays: number = TRIAL_DAYS): readonly string[] {
   return [
-    "Você não será cobrado agora.",
-    `A cobrança só ocorrerá após os ${trialDays} dias gratuitos, se você aceitar continuar.`,
-    "Cancele quando quiser.",
+    "R$ 0 hoje — nenhuma cobrança agora.",
+    `Após ${trialDays} dias, cobrança automática no cartão (Plano Pro).`,
+    `Cancele até o dia ${trialDays} em Assinatura — sem cobrança.`,
   ] as const
 }
 

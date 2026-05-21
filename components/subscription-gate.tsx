@@ -90,7 +90,7 @@ export function SubscriptionGate({ children }: { children: React.ReactNode }) {
               Cadastre seu cartão para começar
             </CardTitle>
             <CardDescription>
-              Você está a um passo de usar o painel com <strong>{trialDays} dias grátis</strong> no plano Pro.
+              Escolha <strong>teste grátis</strong> ({trialDays} dias no Pro) ou <strong>contratar agora</strong> — depois cadastre o cartão.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
