@@ -361,7 +361,7 @@ function CadastroPageContent() {
                   <p className="text-sm font-semibold text-foreground">
                     {barbeariaStep === "dados" &&
                       (oauthVerified
-                        ? "E-mail confirmado com Google/Facebook. Complete nome, celular e nome da barbearia."
+                        ? "E-mail confirmado com Google. Complete nome, celular e nome da barbearia."
                         : "Comece com o básico: nome, e-mail, celular e senha.")}
                     {barbeariaStep === "otp" &&
                       "Enviamos um código de 6 dígitos para o seu e-mail. Digite só os números abaixo — não precisa clicar em nenhum link do e-mail (apps de e-mail teste costumam mostrar um botão de link; ignore). Confira também Spam."}
@@ -535,7 +535,7 @@ function CadastroPageContent() {
                     </>
                   ) : (
                     <p className="text-xs text-muted-foreground rounded-md border border-border/80 bg-muted/30 px-3 py-2">
-                      E-mail confirmado com rede social — senha opcional neste passo.
+                      E-mail confirmado com Google — senha opcional neste passo.
                     </p>
                   )}
                 </FieldGroup>

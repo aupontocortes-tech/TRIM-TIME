@@ -308,7 +308,7 @@ export default function BarbeariaPage() {
   const [formLoginLegacy, setFormLoginLegacy] = useState({ emailOuTelefone: "", senha: "" })
   const [showSenhaLogin, setShowSenhaLogin] = useState(false)
   const [erroLogin, setErroLogin] = useState("")
-  /** Voltou do Google/Facebook no cadastro — falta nome/WhatsApp antes de concluir. */
+  /** Voltou do Google no cadastro — falta nome/WhatsApp antes de concluir. */
   const [oauthPendingComplete, setOauthPendingComplete] = useState(false)
 
   /** Dados públicos da barbearia (API) — nome, contato, unidades */
@@ -436,7 +436,7 @@ export default function BarbeariaPage() {
       data: { session },
     } = await supabase.auth.getSession()
     if (!session?.access_token) {
-      return { error: "Sessão social expirada. Tente Google/Facebook de novo ou use o código por e-mail." }
+      return { error: "Sessão do Google expirada. Tente de novo ou use o código por e-mail." }
     }
     const res = await fetch(
       `/api/public/barbershops/${encodeURIComponent(slug)}/auth/magic/complete`,
@@ -507,7 +507,7 @@ export default function BarbeariaPage() {
                 setOauthPendingComplete(true)
                 setAuthPhase("cadastro")
                 setErroCadastro(
-                  "E-mail confirmado com Google/Facebook. Informe nome e WhatsApp e toque em «Concluir cadastro»."
+                  "E-mail confirmado com Google. Informe nome e WhatsApp e toque em «Concluir cadastro»."
                 )
                 setAuthLoading(false)
               }
@@ -1647,9 +1647,8 @@ export default function BarbeariaPage() {
               </div>
               <h1 className="text-xl font-bold text-foreground text-center mb-1">Cadastre-se</h1>
               <p className="text-sm text-muted-foreground text-center mb-6">
-                {displayNome} — confirme o acesso com <strong className="text-foreground">Google</strong>,{" "}
-                <strong className="text-foreground">Facebook</strong> ou um{" "}
-                <strong className="text-foreground">código de 6 dígitos</strong> no e-mail.
+                {displayNome} — confirme o acesso com o botão <strong className="text-foreground">Google</strong>{" "}
+                abaixo ou com um <strong className="text-foreground">código de 6 dígitos</strong> no e-mail.
               </p>
               {!oauthPendingComplete ? (
                 <ClientOAuthButtons
@@ -1867,7 +1866,7 @@ export default function BarbeariaPage() {
               <p className="text-sm text-muted-foreground text-center mb-6">
                 {loginLegacy
                   ? "Para agendar é preciso estar logado. Conta antiga com e-mail e senha."
-                  : "Entre com Google, Facebook ou código de 6 dígitos no e-mail. Contas antigas com senha: opção abaixo."}
+                  : "Entre com Google (botão abaixo) ou código de 6 dígitos no e-mail. Contas antigas com senha: opção abaixo."}
               </p>
               {!loginLegacy ? (
                 <ClientOAuthButtons slug={slug} mode="login" disabled={authLoading} />

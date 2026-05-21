@@ -89,7 +89,7 @@ export async function POST(request: Request) {
     }
     if (!passwordPlain || passwordPlain.length < 6) {
       return NextResponse.json(
-        { error: "Informe uma senha com pelo menos 6 caracteres (ou conclua o cadastro com Google/Facebook)." },
+        { error: "Informe uma senha com pelo menos 6 caracteres (ou conclua o cadastro com Google)." },
         { status: 400 }
       )
     }

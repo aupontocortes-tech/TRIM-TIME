@@ -1,21 +1,15 @@
 "use client"
 
 import { useState } from "react"
-import { Button } from "@/components/ui/button"
 import { createClient } from "@/lib/supabase/client"
 import {
   loadClientOAuthRegisterDraft,
   saveClientOAuthRegisterDraft,
 } from "@/lib/client-oauth-storage"
 import { clientPhoneDigits } from "@/lib/client-phone-utils"
+import { GoogleSignInButton, OAuthDivider } from "@/components/auth/google-sign-in-button"
 
-type Provider = "google" | "facebook"
 type ClientOAuthMode = "login" | "register"
-
-const LABELS: Record<Provider, string> = {
-  google: "Continuar com Google",
-  facebook: "Continuar com Facebook",
-}
 
 export function ClientOAuthButtons({
   slug,
@@ -32,17 +26,19 @@ export function ClientOAuthButtons({
   registerTelefone?: string
   onNeedRegisterData?: () => void
 }) {
-  const [loading, setLoading] = useState<Provider | null>(null)
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
 
-  const start = async (provider: Provider) => {
+  const startGoogle = async () => {
     setError("")
     if (mode === "register") {
       const nome = registerNome?.trim() ?? ""
       const tel = registerTelefone?.trim() ?? ""
       if (!nome || clientPhoneDigits(tel).length < 10) {
         onNeedRegisterData?.()
-        setError("Preencha nome e WhatsApp antes de usar Google ou Facebook (ou preencha após voltar do login social).")
+        setError(
+          "Preencha nome e WhatsApp acima antes do Google (ou complete após voltar do login)."
+        )
         return
       }
       saveClientOAuthRegisterDraft(slug, { nome, telefone: tel })
@@ -51,53 +47,40 @@ export function ClientOAuthButtons({
       if (draft) saveClientOAuthRegisterDraft(slug, draft)
     }
 
-    setLoading(provider)
+    setLoading(true)
     try {
       const supabase = createClient()
       const redirectTo = `${window.location.origin}/auth/callback?flow=client&slug=${encodeURIComponent(slug)}&mode=${mode}`
       const { data, error: oauthErr } = await supabase.auth.signInWithOAuth({
-        provider,
+        provider: "google",
         options: { redirectTo },
       })
       if (oauthErr) {
-        setError(oauthErr.message || "Não foi possível abrir o login social.")
-        setLoading(null)
+        setError(oauthErr.message || "Não foi possível abrir o login com Google.")
+        setLoading(false)
         return
       }
       if (data?.url) window.location.assign(data.url)
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Erro ao iniciar login social.")
-      setLoading(null)
+      setError(e instanceof Error ? e.message : "Erro ao iniciar login com Google.")
+      setLoading(false)
     }
   }
 
   return (
     <div className="space-y-2">
+      <GoogleSignInButton
+        onClick={() => void startGoogle()}
+        disabled={disabled}
+        loading={loading}
+        label={mode === "register" ? "Cadastrar com Google" : "Entrar com Google"}
+      />
       {error ? (
         <p className="text-sm text-destructive rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2">
           {error}
         </p>
       ) : null}
-      {(["google", "facebook"] as const).map((provider) => (
-        <Button
-          key={provider}
-          type="button"
-          variant="outline"
-          className="w-full border-border"
-          disabled={disabled || loading !== null}
-          onClick={() => void start(provider)}
-        >
-          {loading === provider ? "Abrindo…" : LABELS[provider]}
-        </Button>
-      ))}
-      <div className="relative py-1">
-        <div className="absolute inset-0 flex items-center">
-          <span className="w-full border-t border-border" />
-        </div>
-        <div className="relative flex justify-center text-xs uppercase">
-          <span className="bg-card px-2 text-muted-foreground">ou código por e-mail</span>
-        </div>
-      </div>
+      <OAuthDivider label="ou código por e-mail" />
     </div>
   )
 }

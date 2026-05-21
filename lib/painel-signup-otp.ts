@@ -146,7 +146,7 @@ export async function sendPainelSignupOtp(
   }
 }
 
-/** E-mail já verificado (ex.: OAuth Google/Facebook) — emite token de cadastro sem OTP. */
+/** E-mail já verificado (ex.: OAuth Google) — emite token de cadastro sem OTP. */
 export async function createPainelSignupTokenForEmail(
   rawEmail: string
 ): Promise<
