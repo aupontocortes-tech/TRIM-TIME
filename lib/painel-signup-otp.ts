@@ -146,6 +146,57 @@ export async function sendPainelSignupOtp(
   }
 }
 
+/** E-mail já verificado (ex.: OAuth Google/Facebook) — emite token de cadastro sem OTP. */
+export async function createPainelSignupTokenForEmail(
+  rawEmail: string
+): Promise<
+  | { ok: true; signup_token: string; expires_at: string; email_canonical: string }
+  | { error: string; status: number }
+> {
+  const models = painelSignupPrismaOrNull()
+  if (!models) {
+    return { error: PRISMA_UPGRADE_MSG, status: 503 }
+  }
+  const { signupToken } = models
+
+  const authEmail = normalizeSignupEmail(rawEmail)
+  const emailCanon = canonicalSignupEmail(authEmail)
+
+  const conflict = await conflictForBarbershopSignup(prisma, {
+    email: emailCanon,
+    phone: null,
+  })
+  if (conflict === "email") {
+    return {
+      error: "Já existe uma conta cadastrada com este e-mail (ou um Gmail equivalente).",
+      status: 409,
+    }
+  }
+
+  const opaque = crypto.randomBytes(32).toString("hex")
+  const exp = new Date(Date.now() + TOKEN_TTL_MS)
+
+  await signupToken.updateMany({
+    where: { email: emailCanon, usedAt: null },
+    data: { usedAt: new Date() },
+  })
+
+  await signupToken.create({
+    data: {
+      email: emailCanon,
+      token: opaque,
+      expiresAt: exp,
+    },
+  })
+
+  return {
+    ok: true,
+    signup_token: opaque,
+    expires_at: exp.toISOString(),
+    email_canonical: emailCanon,
+  }
+}
+
 export async function verifyPainelSignupOtp(
   rawEmail: string,
   rawCode: string

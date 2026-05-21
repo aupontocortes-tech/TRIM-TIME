@@ -56,6 +56,13 @@ import {
 } from "@/components/ui/dialog"
 import { isSlotPastGraceFromYmd } from "@/lib/appointment-reminder-time"
 import { normalizePublicOtpCode } from "@/lib/public-otp-code"
+import { createClient } from "@/lib/supabase/client"
+import { ClientOAuthButtons } from "@/components/auth/client-oauth-buttons"
+import {
+  clearClientOAuthRegisterDraft,
+  loadClientOAuthRegisterDraft,
+  saveClientOAuthRegisterDraft,
+} from "@/lib/client-oauth-storage"
 
 // Dados mockados da barbearia (viriam do banco de dados pelo slug)
 const barbeariaData = {
@@ -301,6 +308,8 @@ export default function BarbeariaPage() {
   const [formLoginLegacy, setFormLoginLegacy] = useState({ emailOuTelefone: "", senha: "" })
   const [showSenhaLogin, setShowSenhaLogin] = useState(false)
   const [erroLogin, setErroLogin] = useState("")
+  /** Voltou do Google/Facebook no cadastro — falta nome/WhatsApp antes de concluir. */
+  const [oauthPendingComplete, setOauthPendingComplete] = useState(false)
 
   /** Dados públicos da barbearia (API) — nome, contato, unidades */
   const [publicMeta, setPublicMeta] = useState<PublicShopPayload | null>(null)
@@ -401,43 +410,156 @@ export default function BarbeariaPage() {
     setOtpError("")
   }, [authPhase, otpLockUntil, otpUiNow])
 
+  const applyLoggedInClient = (c: ClienteAgendamento) => {
+    setClienteLogado(c)
+    const saved = loadSavedClientProfile(slug)
+    setDadosCliente({
+      nome: c.nome,
+      telefone: c.telefone,
+      email: c.email,
+      cpf: c.cpf ? formatCpfDisplay(c.cpf) : "",
+      foto: c.photo_url?.trim() || saved?.foto?.trim() || "",
+      fotoPosicao: saved?.fotoPosicao ?? 50,
+    })
+    setAuthPhase("logado")
+    setOauthPendingComplete(false)
+    clearClientOAuthRegisterDraft(slug)
+  }
+
+  const completeClientOAuthSession = async (
+    mode: "register" | "login",
+    nome?: string,
+    telefone?: string
+  ): Promise<{ ok: true } | { error: string }> => {
+    const supabase = createClient()
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+    if (!session?.access_token) {
+      return { error: "Sessão social expirada. Tente Google/Facebook de novo ou use o código por e-mail." }
+    }
+    const res = await fetch(
+      `/api/public/barbershops/${encodeURIComponent(slug)}/auth/magic/complete`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          mode,
+          nome: nome?.trim(),
+          telefone: telefone?.trim(),
+        }),
+      }
+    )
+    const data = (await res.json().catch(() => ({}))) as { error?: string; client?: ClienteAgendamento }
+    if (!res.ok || !data.client) {
+      return { error: data.error?.trim() || "Não foi possível concluir o acesso." }
+    }
+    applyLoggedInClient(data.client)
+    return { ok: true }
+  }
+
   useEffect(() => {
     let cancelled = false
 
-    fetch(`/api/public/barbershops/${encodeURIComponent(slug)}/auth/session`, {
-      credentials: "include",
-      cache: "no-store",
-    })
-      .then((r) => (r.ok ? r.json() : { client: null }))
-      .then((data: { client?: ClienteAgendamento | null }) => {
-        if (cancelled) return
-        const c = data?.client ?? null
-        if (c) {
-          setClienteLogado(c)
-          setAuthPhase("logado")
-          const saved = loadSavedClientProfile(slug)
-          setDadosCliente({
-            nome: c.nome,
-            telefone: c.telefone,
-            email: c.email,
-            cpf: c.cpf ? formatCpfDisplay(c.cpf) : "",
-            foto: c.photo_url?.trim() || saved?.foto?.trim() || "",
-            fotoPosicao: saved?.fotoPosicao ?? 50,
-          })
+    const run = async () => {
+      if (typeof window !== "undefined") {
+        const params = new URLSearchParams(window.location.search)
+        const oauthErr = params.get("client_oauth_error")
+        if (oauthErr) {
+          window.history.replaceState({}, "", window.location.pathname)
+          if (!cancelled) {
+            setErroLogin(
+              oauthErr === "failed"
+                ? "Não foi possível concluir o login social. Tente de novo ou use o código por e-mail."
+                : "Resposta incompleta do provedor. Tente de novo."
+            )
+            setAuthPhase("login")
+          }
           return
         }
-        setClienteLogado(null)
-        setAuthPhase("cadastro")
+
+        if (params.get("client_oauth") === "1") {
+          const mode = params.get("mode") === "register" ? "register" : "login"
+          window.history.replaceState({}, "", window.location.pathname)
+          if (!cancelled) setAuthLoading(true)
+
+          let nome = ""
+          let telefone = ""
+          if (mode === "register") {
+            const draft = loadClientOAuthRegisterDraft(slug)
+            nome = draft?.nome?.trim() ?? ""
+            telefone = draft?.telefone?.trim() ?? ""
+            if (!nome || clientPhoneDigits(telefone).length < 10) {
+              const supabase = createClient()
+              const {
+                data: { session },
+              } = await supabase.auth.getSession()
+              const em = session?.user?.email?.trim() ?? ""
+              if (!cancelled) {
+                setFormCadastro((p) => ({
+                  ...p,
+                  email: em || p.email,
+                }))
+                setOauthPendingComplete(true)
+                setAuthPhase("cadastro")
+                setErroCadastro(
+                  "E-mail confirmado com Google/Facebook. Informe nome e WhatsApp e toque em «Concluir cadastro»."
+                )
+                setAuthLoading(false)
+              }
+              return
+            }
+          }
+
+          const result = await completeClientOAuthSession(mode, nome, telefone)
+          if (!cancelled) {
+            if ("error" in result) {
+              if (mode === "login") {
+                setErroLogin(result.error)
+                setAuthPhase("login")
+              } else {
+                setErroCadastro(result.error)
+                setAuthPhase("cadastro")
+              }
+            }
+            setAuthLoading(false)
+          }
+          return
+        }
+      }
+
+      fetch(`/api/public/barbershops/${encodeURIComponent(slug)}/auth/session`, {
+        credentials: "include",
+        cache: "no-store",
       })
-      .catch(() => {
-        if (cancelled) return
-        setClienteLogado(null)
-        setAuthPhase("cadastro")
-      })
+        .then((r) => (r.ok ? r.json() : { client: null }))
+        .then((data: { client?: ClienteAgendamento | null }) => {
+          if (cancelled) return
+          const c = data?.client ?? null
+          if (c) {
+            applyLoggedInClient(c)
+            return
+          }
+          setClienteLogado(null)
+          setAuthPhase("cadastro")
+        })
+        .catch(() => {
+          if (cancelled) return
+          setClienteLogado(null)
+          setAuthPhase("cadastro")
+        })
+    }
+
+    void run()
 
     return () => {
       cancelled = true
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- completeClientOAuthSession estável por slug
   }, [slug])
 
   /** Lembrete push já ativado nesta aba — esconde o botão após refresh. */
@@ -745,8 +867,41 @@ export default function BarbeariaPage() {
     }
   }
 
+  const handleOAuthRegisterComplete = async () => {
+    setErroCadastro("")
+    setAuthLoading(true)
+    const digits = formCadastro.telefone.replace(/\D/g, "")
+    if (digits.length < 10) {
+      setErroCadastro("Informe um telefone válido com DDD")
+      setAuthLoading(false)
+      return
+    }
+    if (!formCadastro.nome.trim()) {
+      setErroCadastro("Informe seu nome completo")
+      setAuthLoading(false)
+      return
+    }
+    saveClientOAuthRegisterDraft(slug, {
+      nome: formCadastro.nome.trim(),
+      telefone: formCadastro.telefone,
+    })
+    const result = await completeClientOAuthSession(
+      "register",
+      formCadastro.nome,
+      formCadastro.telefone
+    )
+    if ("error" in result) {
+      setErroCadastro(result.error)
+    }
+    setAuthLoading(false)
+  }
+
   const handleCadastro = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (oauthPendingComplete) {
+      await handleOAuthRegisterComplete()
+      return
+    }
     setErroCadastro("")
     setOtpError("")
     setAuthLoading(true)
@@ -1492,9 +1647,22 @@ export default function BarbeariaPage() {
               </div>
               <h1 className="text-xl font-bold text-foreground text-center mb-1">Cadastre-se</h1>
               <p className="text-sm text-muted-foreground text-center mb-6">
-                {displayNome} — para agendar é obrigatório confirmar o acesso. Informe nome, WhatsApp e e-mail;
-                enviamos um código numérico por e-mail (6 dígitos).
+                {displayNome} — confirme o acesso com <strong className="text-foreground">Google</strong>,{" "}
+                <strong className="text-foreground">Facebook</strong> ou um{" "}
+                <strong className="text-foreground">código de 6 dígitos</strong> no e-mail.
               </p>
+              {!oauthPendingComplete ? (
+                <ClientOAuthButtons
+                  slug={slug}
+                  mode="register"
+                  disabled={authLoading}
+                  registerNome={formCadastro.nome}
+                  registerTelefone={formCadastro.telefone}
+                  onNeedRegisterData={() =>
+                    setErroCadastro("Preencha nome e WhatsApp acima antes do login social.")
+                  }
+                />
+              ) : null}
               <form onSubmit={handleCadastro} className="space-y-4">
                 {erroCadastro && (
                   <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
@@ -1532,6 +1700,7 @@ export default function BarbeariaPage() {
                     placeholder="seu@email.com"
                     className="mt-1 bg-card border-border"
                     autoComplete="email"
+                    readOnly={oauthPendingComplete}
                     required
                   />
                 </div>
@@ -1540,7 +1709,13 @@ export default function BarbeariaPage() {
                   disabled={authLoading}
                   className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
                 >
-                  {authLoading ? "Enviando código..." : "Receber código por e-mail"}
+                  {authLoading
+                    ? oauthPendingComplete
+                      ? "Concluindo..."
+                      : "Enviando código..."
+                    : oauthPendingComplete
+                    ? "Concluir cadastro"
+                    : "Receber código por e-mail"}
                 </Button>
               </form>
               <p className="text-center text-sm text-muted-foreground mt-4">
@@ -1692,8 +1867,11 @@ export default function BarbeariaPage() {
               <p className="text-sm text-muted-foreground text-center mb-6">
                 {loginLegacy
                   ? "Para agendar é preciso estar logado. Conta antiga com e-mail e senha."
-                  : "Para agendar é preciso confirmar o acesso. Enviamos um código numérico no e-mail (via Supabase). Contas antigas com senha: opção abaixo."}
+                  : "Entre com Google, Facebook ou código de 6 dígitos no e-mail. Contas antigas com senha: opção abaixo."}
               </p>
+              {!loginLegacy ? (
+                <ClientOAuthButtons slug={slug} mode="login" disabled={authLoading} />
+              ) : null}
               <form onSubmit={handleLogin} className="space-y-4">
                 {erroLogin && (
                   <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">

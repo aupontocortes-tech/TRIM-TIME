@@ -1,3 +1,4 @@
+import crypto from "node:crypto"
 import { NextResponse } from "next/server"
 import { cookies } from "next/headers"
 import { getBarbershopIdFromRequest } from "@/lib/tenant"
@@ -73,16 +74,24 @@ export async function POST(request: Request) {
       password?: string
       painel_signup_token?: string
     }
-    const passwordRaw = body.password
-    if (!body.name?.trim() || !body.email?.trim() || !passwordRaw?.trim()) {
+    if (!body.name?.trim() || !body.email?.trim()) {
+      return NextResponse.json({ error: "Nome e e-mail são obrigatórios" }, { status: 400 })
+    }
+
+    const emailCanonEarly = canonicalSignupEmail(normalizeSignupEmail(body.email))
+    let passwordPlain = String(body.password ?? "").trim()
+    if (!passwordPlain) {
+      const jar = await cookies()
+      const proof = verifyPainelSignupSession(jar.get(PAINEL_SIGNUP_COOKIE)?.value)
+      if (proof && proof.e === emailCanonEarly && proof.x > Date.now()) {
+        passwordPlain = crypto.randomBytes(24).toString("base64url")
+      }
+    }
+    if (!passwordPlain || passwordPlain.length < 6) {
       return NextResponse.json(
-        { error: "Nome, email e senha são obrigatórios" },
+        { error: "Informe uma senha com pelo menos 6 caracteres (ou conclua o cadastro com Google/Facebook)." },
         { status: 400 }
       )
-    }
-    const passwordPlain = passwordRaw.trim()
-    if (passwordPlain.length < 6) {
-      return NextResponse.json({ error: "A senha deve ter pelo menos 6 caracteres" }, { status: 400 })
     }
 
     const hasTokenModel =

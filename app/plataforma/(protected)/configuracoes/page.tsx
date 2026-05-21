@@ -11,7 +11,8 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
-import { ChevronDown, CreditCard, Loader2, MessageCircle } from "lucide-react"
+import Link from "next/link"
+import { ChevronDown, ChevronRight, CreditCard, Loader2, MessageCircle, Gauge } from "lucide-react"
 import type { SubscriptionPlan } from "@/lib/db/types"
 import { PLAN_LABELS, PLAN_PRICES, TRIAL_DAYS } from "@/lib/plans"
 
@@ -36,6 +37,53 @@ function formatPhoneSummary(digits: string) {
     if (local.length === 11) return `+55 (${local.slice(0, 2)}) ${local.slice(2, 7)}-${local.slice(7)}`
   }
   return d
+}
+
+function ConfigLinkCard({
+  title,
+  description,
+  icon: Icon,
+  summary,
+  href,
+}: {
+  title: string
+  description: string
+  icon: typeof MessageCircle
+  summary: string
+  href: string
+}) {
+  return (
+    <Card className="bg-zinc-950 border-[#D4AF37]/35 text-white overflow-hidden hover:border-[#D4AF37]/55 transition-colors">
+      <CardHeader className="pb-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start gap-3 min-w-0">
+            <div
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[#D4AF37]/40"
+              style={{ backgroundColor: `${GOLD}14` }}
+            >
+              <Icon className="w-5 h-5" style={{ color: GOLD }} />
+            </div>
+            <div className="min-w-0">
+              <CardTitle className="text-white text-lg">{title}</CardTitle>
+              <CardDescription className="text-zinc-400 mt-1">{description}</CardDescription>
+              <p className="text-xs text-zinc-500 mt-2 truncate">{summary}</p>
+            </div>
+          </div>
+          <Button
+            asChild
+            variant="outline"
+            size="sm"
+            className="shrink-0 border-[#D4AF37]/40 text-[#D4AF37] hover:bg-[#D4AF37]/10 hover:text-[#D4AF37]"
+          >
+            <Link href={href}>
+              Abrir
+              <ChevronRight className="w-4 h-4 ml-1" />
+            </Link>
+          </Button>
+        </div>
+      </CardHeader>
+    </Card>
+  )
 }
 
 function ConfigSection({
@@ -231,6 +279,8 @@ export default function PlataformaConfiguracoesPage() {
 
   const plansSummary = `Trial ${trialDays}d ${PLAN_LABELS[trialPlan]} · Básico R$ ${prices.basic} · Pro R$ ${prices.pro} · Premium R$ ${prices.premium}`
 
+  const infraSummary = "Uso dos planos FREE — Resend, Supabase e barbearias no mês"
+
   if (loading) {
     return (
       <div className="flex justify-center py-20">
@@ -244,13 +294,21 @@ export default function PlataformaConfiguracoesPage() {
       <div>
         <h1 className="text-2xl font-bold text-white">Configurações da plataforma</h1>
         <p className="text-zinc-400 text-sm mt-1">
-          Ajustes globais da landing, contato e assinaturas. Novas opções podem ser adicionadas aqui no futuro.
+          Ajustes globais da landing, contato, assinaturas e monitoramento dos limites da infraestrutura.
         </p>
       </div>
 
       {err ? <Alert tone="err">{err}</Alert> : null}
 
       <div className="grid gap-6">
+        <ConfigLinkCard
+          title="Uso e limites (FREE)"
+          description="Resend, Supabase e cadastros — semáforo verde, amarelo e vermelho."
+          icon={Gauge}
+          summary={infraSummary}
+          href="/plataforma/configuracoes/uso-limites"
+        />
+
         <ConfigSection
           title="Tirar dúvidas"
           description="WhatsApp dos botões “Fale conosco” e “Tirar dúvidas” na página de vendas."

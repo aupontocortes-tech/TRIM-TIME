@@ -44,7 +44,10 @@ export type SendSupabaseEmailOtpResult =
 /**
  * Obtém OTP do Supabase Auth e entrega por e-mail (Resend, se configurado, senão template Invite do Supabase).
  */
-export async function sendSupabaseEmailOtp(email: string): Promise<SendSupabaseEmailOtpResult> {
+export async function sendSupabaseEmailOtp(
+  email: string,
+  opts?: { subject?: string; intro?: string }
+): Promise<SendSupabaseEmailOtpResult> {
   let admin
   try {
     admin = createServiceRoleClient()
@@ -98,8 +101,8 @@ export async function sendSupabaseEmailOtp(email: string): Promise<SendSupabaseE
     const mailed = await sendOtpCodeEmail({
       to: email,
       code: otp,
-      subject: "Código de cadastro — Trim Time",
-      intro: "Seu código para cadastrar sua barbearia no Trim Time:",
+      subject: opts?.subject ?? "Código de cadastro — Trim Time",
+      intro: opts?.intro ?? "Seu código para cadastrar sua barbearia no Trim Time:",
     })
     if (mailed.ok) {
       return { ok: true, otp }

@@ -3,20 +3,12 @@ import { prisma } from "@/lib/prisma"
 import { findClientByPhoneDigits } from "@/lib/client-by-phone"
 import { clientPhoneDigits } from "@/lib/client-phone-utils"
 import { getClientPasswordHash, getActiveBarbershopBySlug } from "@/lib/public-booking"
+import { sendClientBookingEmailOtp } from "@/lib/client-booking-otp"
 import { createAnonServerAuthClient } from "@/lib/supabase/server"
 
 export const dynamic = "force-dynamic"
 
-/**
- * O código no e-mail é gerado pelo Supabase Auth (em geral 6 dígitos; pode ser alfanumérico ou mais longo no painel).
- * A tela pública do cliente usa 6 dígitos; a API de verificação aceita até 10 caracteres.
- * Ajuste no painel: Dashboard → Authentication →
- * Providers → Email (OTP length / mailer), ou Management API PATCH /v1/projects/{ref}/config/auth
- * com `"mailer_otp_length": 6` (e opcionalmente `mailer_otp_exp`).
- *
- * Placeholder na tabela de auditoria / rate limit; o código real vem no e-mail.
- */
-const OTP_AUDIT_PLACEHOLDER = "****"
+/** Código real em `client_otp_codes` + entrega via Resend (se configurado) ou Supabase Auth. */
 
 /** Alinhado ao e-mail no Supabase (ex.: “expira em 10 minutos”). Só afeta linha de auditoria/rate limit local. */
 const OTP_TTL_MS = 10 * 60 * 1000
@@ -183,59 +175,73 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
 
     const expiresAt = new Date(now.getTime() + OTP_TTL_MS)
 
-    const audit = await prisma.clientOtpCode.create({
+    const sent = await sendClientBookingEmailOtp(email, shop.name)
+    if ("error" in sent) {
+      let supabase
+      try {
+        supabase = createAnonServerAuthClient()
+      } catch {
+        return NextResponse.json(
+          {
+            error:
+              sent.error ||
+              "Supabase não configurado (NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY).",
+          },
+          { status: sent.status >= 500 ? 500 : sent.status }
+        )
+      }
+
+      const metadata: Record<string, string> = {
+        intent,
+        barbershop_slug: slug,
+      }
+      if (intent === "register") {
+        metadata.nome = nome
+        metadata.telefone = telefone
+      }
+
+      const { error: authErr } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          shouldCreateUser: intent === "register",
+          data: metadata,
+        },
+      })
+
+      if (authErr) {
+        const throttled = isSupabaseOtpThrottleMessage(authErr.message)
+        return NextResponse.json(
+          { error: friendlyOtpSendError(authErr.message) },
+          { status: throttled ? 429 : 400 }
+        )
+      }
+
+      await prisma.clientOtpCode.create({
+        data: {
+          barbershopId: shop.id,
+          email,
+          code: "****",
+          expiresAt,
+          intent,
+          nome: intent === "register" ? nome : null,
+          telefone: intent === "register" ? telefone : null,
+        },
+      })
+
+      return NextResponse.json({ ok: true, expires_in_seconds: Math.floor(OTP_TTL_MS / 1000) })
+    }
+
+    await prisma.clientOtpCode.create({
       data: {
         barbershopId: shop.id,
         email,
-        code: OTP_AUDIT_PLACEHOLDER,
+        code: sent.otp,
         expiresAt,
         intent,
         nome: intent === "register" ? nome : null,
         telefone: intent === "register" ? telefone : null,
       },
     })
-
-    let supabase
-    try {
-      supabase = createAnonServerAuthClient()
-    } catch {
-      await prisma.clientOtpCode.delete({ where: { id: audit.id } }).catch(() => {})
-      return NextResponse.json(
-        {
-          error:
-            "Supabase não configurado (NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY).",
-        },
-        { status: 500 }
-      )
-    }
-
-    const metadata: Record<string, string> = {
-      intent,
-      barbershop_slug: slug,
-    }
-    if (intent === "register") {
-      metadata.nome = nome
-      metadata.telefone = telefone
-    }
-
-    const { error: authErr } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        shouldCreateUser: intent === "register",
-        data: metadata,
-      },
-    })
-
-    if (authErr) {
-      const throttled = isSupabaseOtpThrottleMessage(authErr.message)
-      if (!throttled) {
-        await prisma.clientOtpCode.delete({ where: { id: audit.id } }).catch(() => {})
-      }
-      return NextResponse.json(
-        { error: friendlyOtpSendError(authErr.message) },
-        { status: throttled ? 429 : 400 }
-      )
-    }
 
     return NextResponse.json({ ok: true, expires_in_seconds: Math.floor(OTP_TTL_MS / 1000) })
   } catch (e) {

@@ -12,6 +12,7 @@ import { BrandLogo } from "@/components/brand-logo"
 import { SignupProgress } from "@/components/onboarding/signup-progress"
 import type { SignupFlowStep } from "@/lib/onboarding"
 import { TRIAL_DAYS, TRIAL_OFFER_HEADLINE } from "@/lib/plans"
+import { PainelOAuthButtons } from "@/components/auth/painel-oauth-buttons"
 
 function CadastroPageContent() {
   const router = useRouter()
@@ -35,6 +36,35 @@ function CadastroPageContent() {
   const [signupToken, setSignupToken] = useState("")
   const [otpSending, setOtpSending] = useState(false)
   const [emailCanonicalDisplay, setEmailCanonicalDisplay] = useState("")
+  const [oauthVerified, setOauthVerified] = useState(false)
+
+  useEffect(() => {
+    if (tipo !== "barbearia") return
+    const emailParam = searchParams.get("email")
+    if (emailParam) {
+      setFormData((prev) => ({ ...prev, email: emailParam.trim() }))
+    }
+    if (searchParams.get("oauth") !== "1") return
+
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await fetch("/api/auth/painel-signup/session", { credentials: "include" })
+        const j = await res.json().catch(() => ({}))
+        if (cancelled || !res.ok || !j.ok) return
+        if (typeof j.signup_token === "string") setSignupToken(j.signup_token)
+        if (typeof j.email_canonical === "string") setEmailCanonicalDisplay(j.email_canonical)
+        setOauthVerified(true)
+        setBarbeariaStep("dados")
+        setError("")
+      } catch {
+        /* ignore */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [tipo, searchParams])
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -59,13 +89,15 @@ function CadastroPageContent() {
       setError("Informe seu e-mail.")
       return
     }
-    if (formData.password !== formData.confirmPassword) {
-      setError("As senhas não coincidem.")
-      return
-    }
-    if (formData.password.length < 6) {
-      setError("A senha deve ter pelo menos 6 caracteres.")
-      return
+    if (!oauthVerified) {
+      if (formData.password !== formData.confirmPassword) {
+        setError("As senhas não coincidem.")
+        return
+      }
+      if (formData.password.length < 6) {
+        setError("A senha deve ter pelo menos 6 caracteres.")
+        return
+      }
     }
     const telDig = formData.telefone.replace(/\D/g, "")
     if (telDig.length < 10) {
@@ -73,6 +105,10 @@ function CadastroPageContent() {
       return
     }
     setError("")
+    if (oauthVerified && signupToken) {
+      setBarbeariaStep("barbearia")
+      return
+    }
     setOtpSending(true)
     try {
       const res = await fetch("/api/auth/painel-signup/otp/send", {
@@ -154,7 +190,7 @@ function CadastroPageContent() {
           name: formData.nomeBarbearia.trim(),
           email: formData.email.trim(),
           phone: digits || undefined,
-          password: formData.password,
+          ...(formData.password.trim() ? { password: formData.password } : {}),
           painel_signup_token: signupToken,
         }),
       })
@@ -324,7 +360,9 @@ function CadastroPageContent() {
                 >
                   <p className="text-sm font-semibold text-foreground">
                     {barbeariaStep === "dados" &&
-                      "Comece com o básico: nome, e-mail, celular e senha."}
+                      (oauthVerified
+                        ? "E-mail confirmado com Google/Facebook. Complete nome, celular e nome da barbearia."
+                        : "Comece com o básico: nome, e-mail, celular e senha.")}
                     {barbeariaStep === "otp" &&
                       "Enviamos um código de 6 dígitos para o seu e-mail. Digite só os números abaixo — não precisa clicar em nenhum link do e-mail (apps de e-mail teste costumam mostrar um botão de link; ignore). Confira também Spam."}
                     {barbeariaStep === "barbearia" &&
@@ -411,6 +449,10 @@ function CadastroPageContent() {
               )}
 
               {tipo === "barbearia" && barbeariaStep === "dados" && (
+                <>
+              {!oauthVerified ? (
+                <PainelOAuthButtons flow="signup" disabled={isLoading || otpSending} />
+              ) : null}
                 <FieldGroup>
                   <Field>
                     <FieldLabel htmlFor="nome">Seu nome</FieldLabel>
@@ -433,6 +475,7 @@ function CadastroPageContent() {
                       placeholder="seu@email.com"
                       value={formData.email}
                       onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                      readOnly={oauthVerified}
                       required
                       className="bg-input border-border text-foreground placeholder:text-muted-foreground"
                     />
@@ -451,41 +494,52 @@ function CadastroPageContent() {
                     />
                   </Field>
 
-                  <Field>
-                    <FieldLabel htmlFor="password">Senha</FieldLabel>
-                    <div className="relative">
-                      <Input
-                        id="password"
-                        type={showPassword ? "text" : "password"}
-                        placeholder="••••••••"
-                        value={formData.password}
-                        onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                        required
-                        className="bg-input border-border text-foreground placeholder:text-muted-foreground pr-10"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                      >
-                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                    </div>
-                  </Field>
+                  {!oauthVerified ? (
+                    <>
+                      <Field>
+                        <FieldLabel htmlFor="password">Senha</FieldLabel>
+                        <div className="relative">
+                          <Input
+                            id="password"
+                            type={showPassword ? "text" : "password"}
+                            placeholder="••••••••"
+                            value={formData.password}
+                            onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                            required
+                            className="bg-input border-border text-foreground placeholder:text-muted-foreground pr-10"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowPassword(!showPassword)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                          >
+                            {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
+                        </div>
+                      </Field>
 
-                  <Field>
-                    <FieldLabel htmlFor="confirmPassword">Confirmar Senha</FieldLabel>
-                    <Input
-                      id="confirmPassword"
-                      type="password"
-                      placeholder="••••••••"
-                      value={formData.confirmPassword}
-                      onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                      required
-                      className="bg-input border-border text-foreground placeholder:text-muted-foreground"
-                    />
-                  </Field>
+                      <Field>
+                        <FieldLabel htmlFor="confirmPassword">Confirmar Senha</FieldLabel>
+                        <Input
+                          id="confirmPassword"
+                          type="password"
+                          placeholder="••••••••"
+                          value={formData.confirmPassword}
+                          onChange={(e) =>
+                            setFormData({ ...formData, confirmPassword: e.target.value })
+                          }
+                          required
+                          className="bg-input border-border text-foreground placeholder:text-muted-foreground"
+                        />
+                      </Field>
+                    </>
+                  ) : (
+                    <p className="text-xs text-muted-foreground rounded-md border border-border/80 bg-muted/30 px-3 py-2">
+                      E-mail confirmado com rede social — senha opcional neste passo.
+                    </p>
+                  )}
                 </FieldGroup>
+                </>
               )}
 
               {tipo === "barbearia" && barbeariaStep === "otp" && (

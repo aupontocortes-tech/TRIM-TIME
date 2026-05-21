@@ -6,7 +6,10 @@ import { clientPhoneDigits } from "@/lib/client-phone-utils"
 import { buildClientNotes, parseClientNotes } from "@/lib/client-auth-notes"
 import { getClientPasswordHash, getActiveBarbershopBySlug, toPublicClientSession } from "@/lib/public-booking"
 import { publicClientCookieName, signPublicClientSession } from "@/lib/public-client-session"
-import { createAnonServerAuthClient } from "@/lib/supabase/server"
+import {
+  clientOtpCodeMatches,
+  verifyClientBookingOtpWithSupabase,
+} from "@/lib/client-booking-otp"
 import { isPublicOtpLengthValid, normalizePublicOtpCode } from "@/lib/public-otp-code"
 
 export const dynamic = "force-dynamic"
@@ -46,67 +49,54 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       )
     }
 
-    let supabase
-    try {
-      supabase = createAnonServerAuthClient()
-    } catch {
-      return NextResponse.json({ error: "Supabase não configurado (URL e ANON_KEY)." }, { status: 500 })
-    }
-
-    const { data: authData, error: authErr } = await supabase.auth.verifyOtp({
-      email,
-      token,
-      type: "email",
-    })
-
-    if (authErr || !authData.user) {
-      const raw = authErr?.message?.toLowerCase() ?? ""
-      let error =
-        "Código inválido ou expirado. Confira os dígitos, peça um novo código ou use outro navegador (antivírus às vezes consome o link)."
-      if (raw.includes("expired") || raw.includes("otp_expired")) {
-        error = "Código expirado. Peça um novo em «Receber código»."
-      }
-      return NextResponse.json(
-        {
-          error,
-          ...(process.env.NODE_ENV === "development" && authErr?.message
-            ? { debug: authErr.message }
-            : {}),
-        },
-        { status: 401 }
-      )
-    }
-
-    const user = authData.user
-    const userEmail = user.email ? normalizeEmail(user.email) : ""
-    if (!userEmail || userEmail !== email) {
-      return NextResponse.json({ error: "E-mail não confere com o código." }, { status: 400 })
-    }
-
     const audit = await prisma.clientOtpCode.findFirst({
       where: { barbershopId: shop.id, email },
       orderBy: { createdAt: "desc" },
-      select: { intent: true, nome: true, telefone: true },
+      select: { id: true, code: true, expiresAt: true, intent: true, nome: true, telefone: true },
     })
 
-    const meta = (user.user_metadata || {}) as Record<string, unknown>
-    const metaSlugFromUser = asStr(meta.barbershop_slug)
-    const metaSlug = metaSlugFromUser || (audit ? slug : "")
-    if (!metaSlug) {
+    if (!audit) {
       return NextResponse.json(
         {
           error:
-            "Peça um novo código nesta mesma barbearia (dados da sessão incompletos). Se persistir, saia e entre de novo no link.",
+            "Não há envio registrado para este e-mail. Peça um novo código nesta barbearia.",
         },
         { status: 400 }
       )
     }
-    if (metaSlug !== slug) {
-      return NextResponse.json({ error: "Este código não é válido para esta barbearia." }, { status: 403 })
+
+    const dbCodeOk =
+      clientOtpCodeMatches(audit.code, token) && audit.expiresAt.getTime() > Date.now()
+
+    let meta: Record<string, unknown> = {}
+    let resolvedIntent: "login" | "register" =
+      audit.intent === "login" ? "login" : "register"
+
+    if (!dbCodeOk) {
+      const supa = await verifyClientBookingOtpWithSupabase(email, token)
+      if ("error" in supa) {
+        return NextResponse.json({ error: supa.error }, { status: 401 })
+      }
+      const user = supa.user
+      const userEmail = user.email ? normalizeEmail(user.email) : ""
+      if (!userEmail || userEmail !== email) {
+        return NextResponse.json({ error: "E-mail não confere com o código." }, { status: 400 })
+      }
+      meta = (user.user_metadata || {}) as Record<string, unknown>
+      const metaSlugFromUser = asStr(meta.barbershop_slug)
+      const metaSlug = metaSlugFromUser || slug
+      if (metaSlug !== slug) {
+        return NextResponse.json({ error: "Este código não é válido para esta barbearia." }, { status: 403 })
+      }
+      resolvedIntent =
+        meta.intent === "login"
+          ? "login"
+          : meta.intent === "register"
+            ? "register"
+            : resolvedIntent
     }
-    const metaIntent: "login" | "register" =
-      meta.intent === "login" ? "login" : meta.intent === "register" ? "register" : audit?.intent === "login" ? "login" : "register"
-    if (metaIntent !== intent) {
+
+    if (resolvedIntent !== intent) {
       return NextResponse.json(
         { error: "Use a mesma tela (cadastro ou entrar) em que pediu o código." },
         { status: 400 }
@@ -140,8 +130,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       return NextResponse.json({ ok: true, client: toPublicClientSession(client) })
     }
 
-    const nome = asStr(meta.nome) || (audit?.nome?.trim() ?? "")
-    const telefone = asStr(meta.telefone) || (audit?.telefone?.trim() ?? "")
+    const nome = asStr(meta.nome) || (audit.nome?.trim() ?? "")
+    const telefone = asStr(meta.telefone) || (audit.telefone?.trim() ?? "")
     if (!nome || !telefone) {
       return NextResponse.json(
         { error: "Dados do cadastro incompletos. Volte ao cadastro e peça um novo código." },

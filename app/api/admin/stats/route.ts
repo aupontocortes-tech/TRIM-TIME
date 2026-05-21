@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireSuperAdmin } from "@/lib/admin-auth"
+import { REAL_BARBERSHOP_WHERE, REAL_SUBSCRIPTION_WHERE } from "@/lib/tenant-metrics"
 
 export const dynamic = "force-dynamic"
 
@@ -20,13 +21,13 @@ export async function GET() {
       activeSubs,
     ] = await Promise.all([
       prisma.barbershop.count(),
-      prisma.barbershop.count({ where: { NOT: { role: "super_admin" } } }),
+      prisma.barbershop.count({ where: REAL_BARBERSHOP_WHERE }),
       prisma.client.count(),
       prisma.appointment.count(),
       prisma.subscription.groupBy({ by: ["plan"], _count: { _all: true } }),
       prisma.financialLedgerEntry.aggregate({ _sum: { amount: true } }),
       prisma.subscription.count({
-        where: { status: { in: ["trial", "active"] } },
+        where: { status: { in: ["trial", "active"] }, ...REAL_SUBSCRIPTION_WHERE },
       }),
     ])
 

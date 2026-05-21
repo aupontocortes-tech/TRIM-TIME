@@ -1,8 +1,8 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { Suspense, useState, useEffect } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
@@ -10,14 +10,25 @@ import { FieldGroup, Field, FieldLabel } from "@/components/ui/field"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Eye, EyeOff, ArrowLeft } from "lucide-react"
 import { BrandLogo } from "@/components/brand-logo"
+import { PainelOAuthButtons } from "@/components/auth/painel-oauth-buttons"
 
 /** Dados salvos só neste aparelho (localStorage). Não use em computadores compartilhados. */
 const SAVED_LOGIN_KEY = "trimtime_saved_login_v1"
 
 type SavedLogin = { email: string }
 
-export default function LoginPage() {
+const OAUTH_ERRORS: Record<string, string> = {
+  oauth_denied: "Login social cancelado. Tente de novo ou use e-mail e senha.",
+  oauth_failed: "Não foi possível concluir o login social. Tente e-mail e senha.",
+  oauth_session: "Sessão social inválida. Tente novamente.",
+  oauth_missing_code: "Resposta incompleta do provedor. Tente de novo.",
+  suspended: "Conta suspensa. Entre em contato com o suporte.",
+  account_exists: "Já existe conta com este e-mail. Entre com e-mail e senha.",
+}
+
+function LoginPageContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [rememberDevice, setRememberDevice] = useState(false)
@@ -26,6 +37,13 @@ export default function LoginPage() {
     password: ""
   })
   const [error, setError] = useState("")
+
+  useEffect(() => {
+    const oauthErr = searchParams.get("error")
+    if (oauthErr && OAUTH_ERRORS[oauthErr]) {
+      setError(OAUTH_ERRORS[oauthErr])
+    }
+  }, [searchParams])
 
   useEffect(() => {
     try {
@@ -119,6 +137,7 @@ export default function LoginPage() {
           </CardHeader>
 
           <CardContent className="pt-6">
+            <PainelOAuthButtons flow="login" disabled={isLoading} />
             <form onSubmit={handleSubmit} className="space-y-4">
               {error && (
                 <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
@@ -214,5 +233,13 @@ export default function LoginPage() {
         </Card>
       </div>
     </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginPageContent />
+    </Suspense>
   )
 }
