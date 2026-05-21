@@ -3,6 +3,7 @@ import {
   getTrialCardSetupPrefill,
   isBillingEnabled,
   registerTrialCardInApp,
+  startTrialCardSetup,
 } from "@/lib/asaas/billing-service"
 import { getAsaasEnvironment } from "@/lib/asaas/config"
 import type { TrialCardSetupPayload } from "@/lib/asaas/card-types"
@@ -88,11 +89,14 @@ export async function POST(req: Request) {
       body = await req.json().catch(() => null)
     }
 
+    /** Cliente antigo (botão sem formulário) ainda em cache — redireciona para fatura Asaas. */
     if (!body) {
-      return NextResponse.json(
-        { error: "Envie os dados do cartão em JSON (cadastro no app)." },
-        { status: 400 }
-      )
+      const result = await startTrialCardSetup(barbershopId)
+      return NextResponse.json({
+        ok: true,
+        legacy_redirect: true,
+        paymentUrl: result.paymentUrl,
+      })
     }
 
     const parsed = parseCardBody(body)

@@ -64,9 +64,7 @@ export function TrialCardForm({ onSuccess, onError }: TrialCardFormProps) {
       const r = await fetch("/api/billing/setup-card", { credentials: "include" })
       const j = await r.json()
       if (!r.ok) {
-        const msg = j.error || "Não foi possível carregar o formulário"
-        setErr(msg)
-        onError?.(msg)
+        setErr(j.error || "Não foi possível carregar seus dados. Preencha o formulário abaixo.")
         return
       }
       setIsSandbox(j.environment === "sandbox")
@@ -80,9 +78,7 @@ export function TrialCardForm({ onSuccess, onError }: TrialCardFormProps) {
         setHolderName(p.name)
       }
     } catch {
-      const msg = "Erro de rede ao carregar formulário"
-      setErr(msg)
-      onError?.(msg)
+      setErr("Erro de rede ao carregar dados. Preencha o formulário abaixo.")
     } finally {
       setLoadingPrefill(false)
     }

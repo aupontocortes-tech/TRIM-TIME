@@ -92,6 +92,12 @@ function AssinaturaContent() {
   }, [load])
 
   useEffect(() => {
+    if ((needsCard || setupCard) && !cardComplete && billingEnabled) {
+      setErr(null)
+    }
+  }, [needsCard, setupCard, cardComplete, billingEnabled])
+
+  useEffect(() => {
     if (!cardReturn) return
     fetch("/api/billing/confirm-card", { method: "POST", credentials: "include" })
       .then(() => load())
