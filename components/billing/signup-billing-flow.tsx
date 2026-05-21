@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
+import { PlanPicker } from "@/components/billing/plan-picker"
 import { TrialBillingTrust } from "@/components/onboarding/trial-billing-trust"
 import { TrialCardForm } from "@/components/billing/trial-card-form"
 import type { SignupBillingMode } from "@/lib/billing/signup-mode"
@@ -11,8 +11,6 @@ import type { PlanCatalog } from "@/lib/plan-catalog"
 import { TRIAL_PLAN } from "@/lib/plans"
 import { cn } from "@/lib/utils"
 import { ArrowLeft, Sparkles, Zap } from "lucide-react"
-
-const PLAN_ORDER: SubscriptionPlan[] = ["basic", "pro", "premium"]
 
 type Props = {
   catalog: PlanCatalog
@@ -46,18 +44,26 @@ export function SignupBillingFlow({ catalog, trialDays, onSuccess, onError }: Pr
         {mode === "trial" ? (
           <TrialBillingTrust trialDays={trialDays} />
         ) : (
-          <div className="rounded-xl border border-primary/30 bg-primary/5 px-4 py-4 text-sm space-y-2">
-            <p className="font-semibold text-foreground">
-              Contratar agora — {catalog.plans[selectedPlan].name}
-            </p>
-            <ul className="space-y-1 text-muted-foreground">
-              <li>✓ Acesso completo imediato ao plano escolhido</li>
-              <li>
-                ✓ Cobrança de <strong className="text-foreground">R$ {catalog.plans[selectedPlan].price}/mês</strong>{" "}
-                após confirmar o cartão
-              </li>
-              <li>✓ Sem período de teste grátis neste caminho</li>
-            </ul>
+          <div className="space-y-4">
+            <div className="rounded-xl border border-primary/30 bg-primary/5 px-4 py-4 text-sm space-y-3">
+              <p className="font-semibold text-foreground">Contratar agora</p>
+              <p className="text-muted-foreground text-xs">
+                Confirme o plano (Básico, Pro ou Premium). A cobrança usa o valor do plano escolhido.
+              </p>
+              <PlanPicker
+                catalog={catalog}
+                value={selectedPlan}
+                onChange={setSelectedPlan}
+                compact
+              />
+              <p className="text-xs text-muted-foreground pt-1 border-t border-border/60">
+                Cobrança de{" "}
+                <strong className="text-foreground">
+                  R$ {catalog.plans[selectedPlan].price}/mês
+                </strong>{" "}
+                após validar o cartão — sem teste grátis.
+              </p>
+            </div>
           </div>
         )}
 
@@ -108,63 +114,48 @@ export function SignupBillingFlow({ catalog, trialDays, onSuccess, onError }: Pr
           </div>
         </button>
 
-        <button
-          type="button"
-          onClick={() => setMode("immediate")}
+        <div
           className={cn(
-            "text-left rounded-xl border-2 p-4 transition-colors",
+            "rounded-xl border-2 transition-colors overflow-hidden",
             mode === "immediate"
               ? "border-primary bg-primary/5 shadow-sm"
-              : "border-border hover:border-primary/40"
+              : "border-border"
           )}
         >
-          <div className="flex items-start gap-3">
-            <Zap
-              className={cn(
-                "w-5 h-5 shrink-0 mt-0.5",
-                mode === "immediate" ? "text-primary" : "text-muted-foreground"
-              )}
-            />
-            <div className="space-y-1 min-w-0">
-              <p className="font-semibold">Contratar agora</p>
-              <p className="text-sm text-muted-foreground">
-                Escolha o plano e comece hoje — cobrança após o cartão
-              </p>
+          <button
+            type="button"
+            onClick={() => setMode("immediate")}
+            className="w-full text-left p-4 hover:bg-muted/30 transition-colors"
+          >
+            <div className="flex items-start gap-3">
+              <Zap
+                className={cn(
+                  "w-5 h-5 shrink-0 mt-0.5",
+                  mode === "immediate" ? "text-primary" : "text-muted-foreground"
+                )}
+              />
+              <div className="space-y-1 min-w-0">
+                <p className="font-semibold">Contratar agora</p>
+                <p className="text-sm text-muted-foreground">
+                  Escolha Básico, Pro ou Premium — cobrança após cadastrar o cartão
+                </p>
+              </div>
             </div>
-          </div>
-        </button>
+          </button>
+
+          {mode === "immediate" ? (
+            <div className="px-4 pb-4 pt-0 border-t border-primary/20 space-y-3">
+              <p className="text-sm font-medium pt-3">Escolha seu plano</p>
+              <PlanPicker catalog={catalog} value={selectedPlan} onChange={setSelectedPlan} />
+            </div>
+          ) : null}
+        </div>
       </div>
 
-      {mode === "immediate" ? (
-        <Card>
-          <CardContent className="pt-4 pb-4">
-            <p className="text-sm font-medium mb-3">Escolha seu plano</p>
-            <div className="grid gap-2">
-              {PLAN_ORDER.map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  onClick={() => setSelectedPlan(p)}
-                  className={cn(
-                    "flex items-center justify-between rounded-lg border px-3 py-2.5 text-sm transition-colors",
-                    selectedPlan === p
-                      ? "border-primary bg-primary/5"
-                      : "border-border hover:border-primary/30"
-                  )}
-                >
-                  <span className="font-medium">{catalog.plans[p].name}</span>
-                  <span className="text-primary font-semibold">
-                    R$ {catalog.plans[p].price}/mês
-                  </span>
-                </button>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      ) : null}
-
       <Button type="button" className="w-full" onClick={() => setStep("card")}>
-        Continuar
+        {mode === "immediate"
+          ? `Continuar com plano ${catalog.plans[selectedPlan].name}`
+          : "Continuar com teste grátis"}
       </Button>
     </div>
   )
