@@ -34,23 +34,26 @@ export function ClientOAuthButtons({
     if (mode === "register") {
       const nome = registerNome?.trim() ?? ""
       const tel = registerTelefone?.trim() ?? ""
-      if (!nome || clientPhoneDigits(tel).length < 10) {
-        onNeedRegisterData?.()
-        setError(
-          "Preencha nome e WhatsApp acima antes do Google (ou complete após voltar do login)."
-        )
-        return
+      if (nome && clientPhoneDigits(tel).length >= 10) {
+        saveClientOAuthRegisterDraft(slug, { nome, telefone: tel })
       }
-      saveClientOAuthRegisterDraft(slug, { nome, telefone: tel })
-    } else {
-      const draft = loadClientOAuthRegisterDraft(slug)
-      if (draft) saveClientOAuthRegisterDraft(slug, draft)
     }
 
     setLoading(true)
     try {
       const supabase = createClient()
-      const redirectTo = `${window.location.origin}/auth/callback?flow=client&slug=${encodeURIComponent(slug)}&mode=${mode}`
+      const params = new URLSearchParams({
+        flow: "client",
+        slug,
+        mode,
+      })
+      if (mode === "register") {
+        const nome = registerNome?.trim() ?? ""
+        const tel = registerTelefone?.trim() ?? ""
+        if (nome) params.set("nome", nome)
+        if (tel) params.set("telefone", tel)
+      }
+      const redirectTo = `${window.location.origin}/auth/callback?${params.toString()}`
       const { data, error: oauthErr } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: { redirectTo },

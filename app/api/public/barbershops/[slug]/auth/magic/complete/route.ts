@@ -1,10 +1,8 @@
 import { NextResponse } from "next/server"
-import { cookies } from "next/headers"
-import { getActiveBarbershopBySlug, toPublicClientSession } from "@/lib/public-booking"
-import { createServiceRoleClient } from "@/lib/supabase/server"
-import { prisma } from "@/lib/prisma"
-import { publicClientCookieName, signPublicClientSession } from "@/lib/public-client-session"
-import { clientPhoneDigits, findClientByPhoneDigits } from "@/lib/client-by-phone"
+import { getActiveBarbershopBySlug } from "@/lib/public-booking"
+import { createServiceRoleClient, createClient } from "@/lib/supabase/server"
+import { completeClientOAuthForBarbershop } from "@/lib/client-oauth-complete"
+import { appendClientSessionCookie } from "@/lib/client-oauth-callback"
 
 type Body = {
   mode?: "register" | "login"
@@ -28,101 +26,51 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     const bearer = authHeader?.startsWith("Bearer ") ? authHeader.slice(7).trim() : ""
     const body = (await request.json().catch(() => ({}))) as Body
     const mode: "register" | "login" = body.mode === "register" ? "register" : "login"
-    if (!bearer) {
-      return NextResponse.json({ error: "Token de autenticação ausente" }, { status: 401 })
+
+    let email: string | null = null
+
+    if (bearer) {
+      const supabase = createServiceRoleClient()
+      const userResp = await supabase.auth.getUser(bearer)
+      email = userResp.data.user?.email?.trim().toLowerCase() ?? null
+    } else {
+      const supabase = await createClient()
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+      email = session?.user?.email?.trim().toLowerCase() ?? null
     }
 
-    const supabase = createServiceRoleClient()
-    const userResp = await supabase.auth.getUser(bearer)
-    const user = userResp.data.user
-    if (!user?.email) {
-      return NextResponse.json({ error: "Sessão Supabase inválida" }, { status: 401 })
+    if (!email) {
+      return NextResponse.json(
+        { error: "Sessão do Google inválida ou expirada. Tente entrar com Google de novo." },
+        { status: 401 }
+      )
     }
 
-    const email = user.email.trim().toLowerCase()
-    const nomeMeta = asStr(user.user_metadata?.nome)
-    const telefoneMeta = asStr(user.user_metadata?.telefone)
-    const nomeBody = asStr(body.nome)
-    const telefoneBody = asStr(body.telefone)
-    const nome = nomeBody || nomeMeta
-    const telefone = telefoneBody || telefoneMeta
-
-    let client = await prisma.client.findFirst({
-      where: { barbershopId: shop.id, email },
-      select: { id: true, name: true, email: true, phone: true, photoUrl: true, cpf: true, notes: true },
+    const result = await completeClientOAuthForBarbershop({
+      barbershopId: shop.id,
+      email,
+      mode,
+      nome: asStr(body.nome),
+      telefone: asStr(body.telefone),
     })
 
-    if (!client && mode === "login") {
-      return NextResponse.json({ error: "Este e-mail ainda não está cadastrado nesta barbearia." }, { status: 404 })
+    if (!result.ok) {
+      const status =
+        result.code === "not_registered"
+          ? 404
+          : result.code === "phone_conflict"
+            ? 409
+            : result.code === "incomplete_register" || result.code === "invalid_phone"
+              ? 400
+              : 404
+      return NextResponse.json({ error: result.error }, { status })
     }
 
-    if (mode === "register") {
-      if (!nome || !telefone) {
-        return NextResponse.json(
-          { error: "Dados incompletos. Solicite um novo link pelo cadastro." },
-          { status: 400 }
-        )
-      }
-      const digits = clientPhoneDigits(telefone)
-      if (digits.length < 10) {
-        return NextResponse.json({ error: "Telefone inválido no cadastro." }, { status: 400 })
-      }
-
-      const byPhone = await findClientByPhoneDigits(shop.id, telefone)
-      if (byPhone && byPhone.email && byPhone.email.trim().toLowerCase() !== email) {
-        return NextResponse.json(
-          { error: "Este telefone já está vinculado a outro e-mail." },
-          { status: 409 }
-        )
-      }
-
-      if (client) {
-        client = await prisma.client.update({
-          where: { id: client.id },
-          data: {
-            name: nome,
-            phone: telefone,
-            email,
-          },
-          select: { id: true, name: true, email: true, phone: true, photoUrl: true, cpf: true, notes: true },
-        })
-      } else if (byPhone) {
-        client = await prisma.client.update({
-          where: { id: byPhone.id },
-          data: {
-            name: nome,
-            phone: telefone,
-            email,
-          },
-          select: { id: true, name: true, email: true, phone: true, photoUrl: true, cpf: true, notes: true },
-        })
-      } else {
-        client = await prisma.client.create({
-          data: {
-            barbershopId: shop.id,
-            name: nome,
-            email,
-            phone: telefone,
-          },
-          select: { id: true, name: true, email: true, phone: true, photoUrl: true, cpf: true, notes: true },
-        })
-      }
-    }
-
-    if (!client) {
-      return NextResponse.json({ error: "Cliente não encontrado." }, { status: 404 })
-    }
-
-    const cookieStore = await cookies()
-    cookieStore.set(publicClientCookieName(slug), signPublicClientSession({ clientId: client.id, slug }), {
-      path: "/",
-      maxAge: 60 * 60 * 24 * 30,
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-    })
-
-    return NextResponse.json({ ok: true, client: toPublicClientSession(client) })
+    const res = NextResponse.json({ ok: true, client: result.client })
+    appendClientSessionCookie(res, slug, result.client.id)
+    return res
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Erro ao concluir autenticação" },

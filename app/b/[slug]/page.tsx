@@ -56,7 +56,6 @@ import {
 } from "@/components/ui/dialog"
 import { isSlotPastGraceFromYmd } from "@/lib/appointment-reminder-time"
 import { normalizePublicOtpCode } from "@/lib/public-otp-code"
-import { createClient } from "@/lib/supabase/client"
 import { ClientOAuthButtons } from "@/components/auth/client-oauth-buttons"
 import {
   clearClientOAuthRegisterDraft,
@@ -431,21 +430,11 @@ export default function BarbeariaPage() {
     nome?: string,
     telefone?: string
   ): Promise<{ ok: true } | { error: string }> => {
-    const supabase = createClient()
-    const {
-      data: { session },
-    } = await supabase.auth.getSession()
-    if (!session?.access_token) {
-      return { error: "Sessão do Google expirada. Tente de novo ou use o código por e-mail." }
-    }
     const res = await fetch(
       `/api/public/barbershops/${encodeURIComponent(slug)}/auth/magic/complete`,
       {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
-        },
+        headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
           mode,
@@ -469,64 +458,39 @@ export default function BarbeariaPage() {
       if (typeof window !== "undefined") {
         const params = new URLSearchParams(window.location.search)
         const oauthErr = params.get("client_oauth_error")
-        if (oauthErr) {
+        const oauthMsg = params.get("oauth_error_msg")?.trim()
+        const needProfile = params.get("oauth_need_profile") === "1"
+        const emailParam = params.get("email")?.trim()
+
+        if (oauthErr || needProfile) {
           window.history.replaceState({}, "", window.location.pathname)
           if (!cancelled) {
-            setErroLogin(
-              oauthErr === "failed"
-                ? "Não foi possível concluir o login social. Tente de novo ou use o código por e-mail."
-                : "Resposta incompleta do provedor. Tente de novo."
-            )
-            setAuthPhase("login")
-          }
-          return
-        }
-
-        if (params.get("client_oauth") === "1") {
-          const mode = params.get("mode") === "register" ? "register" : "login"
-          window.history.replaceState({}, "", window.location.pathname)
-          if (!cancelled) setAuthLoading(true)
-
-          let nome = ""
-          let telefone = ""
-          if (mode === "register") {
-            const draft = loadClientOAuthRegisterDraft(slug)
-            nome = draft?.nome?.trim() ?? ""
-            telefone = draft?.telefone?.trim() ?? ""
-            if (!nome || clientPhoneDigits(telefone).length < 10) {
-              const supabase = createClient()
-              const {
-                data: { session },
-              } = await supabase.auth.getSession()
-              const em = session?.user?.email?.trim() ?? ""
-              if (!cancelled) {
-                setFormCadastro((p) => ({
-                  ...p,
-                  email: em || p.email,
-                }))
-                setOauthPendingComplete(true)
-                setAuthPhase("cadastro")
-                setErroCadastro(
-                  "E-mail confirmado com Google. Informe nome e WhatsApp e toque em «Concluir cadastro»."
-                )
-                setAuthLoading(false)
-              }
+            if (needProfile) {
+              setFormCadastro((p) => ({
+                ...p,
+                email: emailParam || p.email,
+              }))
+              setOauthPendingComplete(true)
+              setAuthPhase("cadastro")
+              setErroCadastro(
+                "E-mail confirmado com Google. Informe nome e WhatsApp e toque em «Concluir cadastro»."
+              )
               return
             }
-          }
 
-          const result = await completeClientOAuthSession(mode, nome, telefone)
-          if (!cancelled) {
-            if ("error" in result) {
-              if (mode === "login") {
-                setErroLogin(result.error)
-                setAuthPhase("login")
-              } else {
-                setErroCadastro(result.error)
-                setAuthPhase("cadastro")
-              }
-            }
-            setAuthLoading(false)
+            const msg =
+              oauthMsg ||
+              (oauthErr === "not_registered"
+                ? "Este e-mail ainda não está cadastrado aqui. Use «Cadastre-se» ou crie conta com Google."
+                : oauthErr === "denied"
+                  ? "Login com Google cancelado."
+                  : oauthErr === "phone_conflict"
+                    ? "Este telefone já está em outro e-mail nesta barbearia."
+                    : oauthErr === "session"
+                      ? "Sessão do Google expirada. Tente de novo."
+                      : "Não foi possível entrar com Google. Tente de novo ou use o código por e-mail.")
+            setErroLogin(msg)
+            setAuthPhase(oauthErr === "not_registered" ? "cadastro" : "login")
           }
           return
         }
