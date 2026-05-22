@@ -2,10 +2,7 @@
 
 import { useState } from "react"
 import { createClient } from "@/lib/supabase/client"
-import {
-  loadClientOAuthRegisterDraft,
-  saveClientOAuthRegisterDraft,
-} from "@/lib/client-oauth-storage"
+import { saveClientOAuthRegisterDraft } from "@/lib/client-oauth-storage"
 import { clientPhoneDigits } from "@/lib/client-phone-utils"
 import { GoogleSignInButton, OAuthDivider } from "@/components/auth/google-sign-in-button"
 
@@ -17,7 +14,6 @@ export function ClientOAuthButtons({
   disabled,
   registerNome,
   registerTelefone,
-  onNeedRegisterData,
 }: {
   slug: string
   mode: ClientOAuthMode
@@ -31,29 +27,38 @@ export function ClientOAuthButtons({
 
   const startGoogle = async () => {
     setError("")
-    if (mode === "register") {
-      const nome = registerNome?.trim() ?? ""
-      const tel = registerTelefone?.trim() ?? ""
-      if (nome && clientPhoneDigits(tel).length >= 10) {
-        saveClientOAuthRegisterDraft(slug, { nome, telefone: tel })
-      }
+    const nome = registerNome?.trim() ?? ""
+    const tel = registerTelefone?.trim() ?? ""
+    if (mode === "register" && nome && clientPhoneDigits(tel).length >= 10) {
+      saveClientOAuthRegisterDraft(slug, { nome, telefone: tel })
     }
 
     setLoading(true)
     try {
-      const supabase = createClient()
-      const params = new URLSearchParams({
-        flow: "client",
-        slug,
-        mode,
-      })
-      if (mode === "register") {
-        const nome = registerNome?.trim() ?? ""
-        const tel = registerTelefone?.trim() ?? ""
-        if (nome) params.set("nome", nome)
-        if (tel) params.set("telefone", tel)
+      const prep = await fetch(
+        `/api/public/barbershops/${encodeURIComponent(slug)}/auth/oauth/prepare`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            mode,
+            ...(nome ? { nome } : {}),
+            ...(tel ? { telefone: tel } : {}),
+          }),
+        }
+      )
+      if (!prep.ok) {
+        const j = await prep.json().catch(() => ({}))
+        throw new Error(
+          typeof (j as { error?: string }).error === "string"
+            ? (j as { error: string }).error
+            : "Não foi possível iniciar o login com Google."
+        )
       }
-      const redirectTo = `${window.location.origin}/auth/callback?${params.toString()}`
+
+      const supabase = createClient()
+      const redirectTo = `${window.location.origin}/auth/callback?flow=client`
       const { data, error: oauthErr } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: { redirectTo },

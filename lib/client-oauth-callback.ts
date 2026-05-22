@@ -1,4 +1,4 @@
-import type { SupabaseClient } from "@supabase/supabase-js"
+import type { User } from "@supabase/supabase-js"
 import { NextResponse } from "next/server"
 import { completeClientOAuthBySlug } from "@/lib/client-oauth-complete"
 import { publicClientCookieName, signPublicClientSession } from "@/lib/public-client-session"
@@ -15,35 +15,28 @@ export function appendClientSessionCookie(res: NextResponse, slug: string, clien
   })
 }
 
-export function copyResponseCookies(from: NextResponse, to: NextResponse) {
-  from.cookies.getAll().forEach((c) => {
-    to.cookies.set(c.name, c.value)
-  })
-}
-
-/** Define para onde redirecionar e se deve gravar cookie do cliente (após exchangeCodeForSession). */
 export async function resolveClientOAuthRedirect(
-  supabase: SupabaseClient,
   origin: string,
   slug: string,
   mode: ClientOAuthCallbackMode,
+  user: User | null | undefined,
   profile?: { nome?: string; telefone?: string }
 ): Promise<{ url: URL; clientId?: string }> {
   const barbershopPath = `/b/${encodeURIComponent(slug)}`
   const base = new URL(barbershopPath, origin)
 
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser()
-
-  if (error || !user?.email) {
+  const email = user?.email?.trim().toLowerCase()
+  if (!email) {
     base.searchParams.set("client_oauth_error", "session")
+    base.searchParams.set(
+      "oauth_error_msg",
+      "Não foi possível confirmar o e-mail do Google. Tente de novo."
+    )
     return { url: base }
   }
 
   const result = await completeClientOAuthBySlug(slug, {
-    email: user.email,
+    email,
     mode,
     nome: profile?.nome,
     telefone: profile?.telefone,
@@ -55,7 +48,7 @@ export async function resolveClientOAuthRedirect(
     }
     if (result.code === "incomplete_register") {
       base.searchParams.set("oauth_need_profile", "1")
-      base.searchParams.set("email", user.email.trim())
+      base.searchParams.set("email", email)
       return { url: base }
     }
     const errCode =
