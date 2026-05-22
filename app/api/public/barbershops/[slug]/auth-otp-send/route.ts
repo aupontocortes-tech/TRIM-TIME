@@ -235,7 +235,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       data: {
         barbershopId: shop.id,
         email,
-        code: sent.otp,
+        /** Auditoria/rate limit; validação do código via Supabase Auth (OTP tem 6+ dígitos). */
+        code: "****",
         expiresAt,
         intent,
         nome: intent === "register" ? nome : null,
@@ -245,9 +246,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
 
     return NextResponse.json({ ok: true, expires_in_seconds: Math.floor(OTP_TTL_MS / 1000) })
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Erro ao enviar código" },
-      { status: 500 }
-    )
+    const raw = e instanceof Error ? e.message : ""
+    const friendly =
+      raw.includes("too long for the column") || raw.includes("clientOtpCode.create")
+        ? "Erro ao registrar o envio do código. Tente de novo em instantes ou use «Entrar com Google»."
+        : raw || "Erro ao enviar código"
+    console.error("[client otp send]", e)
+    return NextResponse.json({ error: friendly }, { status: 500 })
   }
 }

@@ -126,7 +126,7 @@ model ClientOtpCode {
   barbershopId String     @map("barbershop_id") @db.Uuid
   barbershop   Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
   email        String
-  code         String     @db.VarChar(4)
+  code         String     @db.VarChar(16)
   expiresAt    DateTime   @map("expires_at") @db.Timestamptz
   intent       String     @default("register") @db.VarChar(16)
   nome         String?

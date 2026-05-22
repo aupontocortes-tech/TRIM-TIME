@@ -1,7 +1,8 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { Suspense, useEffect, useState } from "react"
 import Link from "next/link"
+import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { 
@@ -84,10 +85,17 @@ function LandingWhatsappHeaderButton({
   )
 }
 
-export default function LandingPage() {
+function LandingPageContent() {
+  const searchParams = useSearchParams()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [whatsappUrl, setWhatsappUrl] = useState<string | null>(null)
   const [planPrices, setPlanPrices] = useState(PLAN_PRICES)
+
+  const oauthBookingMsg =
+    searchParams.get("error") === "oauth_slug"
+      ? searchParams.get("oauth_msg")?.trim() ||
+        "O login com Google não encontrou a barbearia. Abra de novo o link de agendamento (começa com /b/…) que a barbearia enviou — não use só a página inicial do Trim Time."
+      : null
 
   useEffect(() => {
     fetch("/api/public/landing-config")
@@ -115,6 +123,13 @@ export default function LandingPage() {
 
   return (
     <div className="min-h-screen bg-background">
+      {oauthBookingMsg ? (
+        <div className="fixed top-0 left-0 right-0 z-[60] px-4 pt-3 pointer-events-none">
+          <div className="max-w-3xl mx-auto rounded-lg border border-amber-500/40 bg-amber-500/15 px-4 py-3 text-sm text-foreground shadow-lg pointer-events-auto">
+            {oauthBookingMsg}
+          </div>
+        </div>
+      ) : null}
       {/* Header */}
       <header className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-md border-b border-border">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -694,5 +709,13 @@ export default function LandingPage() {
         </div>
       </footer>
     </div>
+  )
+}
+
+export default function LandingPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-background" />}>
+      <LandingPageContent />
+    </Suspense>
   )
 }

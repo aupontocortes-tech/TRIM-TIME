@@ -1,11 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-import { createSupabaseRouteHandlerClient } from "@/lib/supabase/route-handler"
 import { handlePainelOAuthCallback, type PainelOAuthFlow } from "@/lib/painel-oauth"
-import {
-  appendClientSessionCookie,
-  resolveClientOAuthRedirect,
-} from "@/lib/client-oauth-callback"
+import { handleClientOAuthCallbackGet } from "@/lib/auth/client-oauth-callback-handler"
 import {
   clearClientOAuthPendingOnResponse,
   readClientOAuthPendingFromRequest,
@@ -47,57 +43,24 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${origin}/login?error=oauth_missing_code`)
   }
 
-  if (flowParam === "client") {
-    if (!clientSlug) {
-      return NextResponse.redirect(`${origin}/?error=oauth_slug`)
-    }
-
+  if (flowParam === "client" && clientSlug) {
     const mode =
       url.searchParams.get("mode") === "register"
         ? "register"
         : pending?.mode === "register"
           ? "register"
           : "login"
-    const nome = url.searchParams.get("nome")?.trim() || pending?.nome
-    const telefone = url.searchParams.get("telefone")?.trim() || pending?.telefone
+    return handleClientOAuthCallbackGet(request, clientSlug, mode)
+  }
 
-    const holder = NextResponse.redirect(clientErrorRedirect(origin, clientSlug, "pending"))
-    const supabase = createSupabaseRouteHandlerClient(request, holder)
-    const { error: exchangeErr } = await supabase.auth.exchangeCodeForSession(code)
-
-    if (exchangeErr) {
-      console.warn("[oauth client] exchange:", exchangeErr.message)
-      const hint =
-        exchangeErr.message.toLowerCase().includes("redirect") ||
-        exchangeErr.message.toLowerCase().includes("url")
-          ? "Confira em Supabase → URL Configuration se existe https://trimtime.pro/auth/callback (ou /**)."
-          : exchangeErr.message
-      const failUrl = clientErrorRedirect(origin, clientSlug, "failed", hint)
-      const res = NextResponse.redirect(failUrl)
-      holder.cookies.getAll().forEach((c) => res.cookies.set(c.name, c.value))
-      clearClientOAuthPendingOnResponse(res)
-      return res
-    }
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    const sessionFallback = user?.email ? user : (await supabase.auth.getSession()).data.session?.user
-
-    const { url: target, clientId } = await resolveClientOAuthRedirect(
-      origin,
-      clientSlug,
-      mode,
-      sessionFallback,
-      { nome, telefone }
+  if (flowParam === "client" && !clientSlug) {
+    const fallback = new URL("/", origin)
+    fallback.searchParams.set("error", "oauth_slug")
+    fallback.searchParams.set(
+      "oauth_msg",
+      "Não foi possível identificar a barbearia após o Google. Abra de novo o link de agendamento que você recebeu e tente outra vez."
     )
-    const response = NextResponse.redirect(target)
-    holder.cookies.getAll().forEach((c) => response.cookies.set(c.name, c.value))
-    clearClientOAuthPendingOnResponse(response)
-    if (clientId) {
-      appendClientSessionCookie(response, clientSlug, clientId)
-    }
-    return response
+    return NextResponse.redirect(fallback)
   }
 
   const supabase = await createClient()

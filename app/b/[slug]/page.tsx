@@ -57,6 +57,7 @@ import {
 import { isSlotPastGraceFromYmd } from "@/lib/appointment-reminder-time"
 import { normalizePublicOtpCode } from "@/lib/public-otp-code"
 import { ClientOAuthButtons } from "@/components/auth/client-oauth-buttons"
+import { ClientUnitPicker } from "@/components/booking/client-unit-picker"
 import {
   clearClientOAuthRegisterDraft,
   loadClientOAuthRegisterDraft,
@@ -431,7 +432,7 @@ export default function BarbeariaPage() {
     telefone?: string
   ): Promise<{ ok: true } | { error: string }> => {
     const res = await fetch(
-      `/api/public/barbershops/${encodeURIComponent(slug)}/auth/magic/complete`,
+      `/api/public/barbershops/${encodeURIComponent(slug)}/auth-magic-complete`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -486,6 +487,8 @@ export default function BarbeariaPage() {
                   ? "Login com Google cancelado."
                   : oauthErr === "phone_conflict"
                     ? "Este telefone já está em outro e-mail nesta barbearia."
+                    : oauthErr === "shop_not_found"
+                      ? "Barbearia não encontrada. Confira se o link de agendamento está correto."
                     : oauthErr === "session"
                       ? "Sessão do Google expirada. Tente de novo."
                       : "Não foi possível entrar com Google. Tente de novo ou use o código por e-mail.")
@@ -755,7 +758,7 @@ export default function BarbeariaPage() {
             telefone: formCadastro.telefone,
           }
         : { intent: "login" as const, email: normalized }
-    const res = await fetch(`/api/public/barbershops/${encodeURIComponent(slug)}/auth/otp/send`, {
+    const res = await fetch(`/api/public/barbershops/${encodeURIComponent(slug)}/auth-otp-send`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -783,7 +786,7 @@ export default function BarbeariaPage() {
     setAuthLoading(true)
     setOtpError("")
     try {
-      const res = await fetch(`/api/public/barbershops/${encodeURIComponent(slug)}/auth/otp/verify`, {
+      const res = await fetch(`/api/public/barbershops/${encodeURIComponent(slug)}/auth-otp-verify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -1193,7 +1196,9 @@ export default function BarbeariaPage() {
     .filter(Boolean)
     .join(" - ")
   const displayCityLine = cityStateUnit || cityStateBase || null
-  const needsUnitChoice = !!(publicMeta?.units && publicMeta.units.length > 1)
+  const shopUnits = publicMeta?.units ?? []
+  const showUnitPicker = shopUnits.length > 0
+  const hasMultipleUnits = shopUnits.length > 1
   /** Com resumo de agendamento ativo, só o card de gestão; no modo remarcar, reabre o wizard. */
   const showAgendamentoWizard = !bookingSummary || isRemarcando
 
@@ -1317,7 +1322,7 @@ export default function BarbeariaPage() {
   const podeAvancar = () => {
     switch (etapa) {
       case 1: {
-        if (needsUnitChoice && !selectedUnitId) return false
+        if (hasMultipleUnits && !selectedUnitId) return false
         return servicosSelecionados.length > 0
       }
       case 2: return profissionalSelecionado !== null
@@ -2235,34 +2240,6 @@ export default function BarbeariaPage() {
         </div>
       </div>
 
-      {needsUnitChoice ? (
-        <div className="max-w-2xl mx-auto px-4 mb-6">
-          <Card className="border-primary/20 bg-card/80">
-            <CardContent className="p-4 space-y-2">
-              <div className="flex items-center gap-2 text-foreground font-medium text-sm">
-                <Building2 className="w-4 h-4 text-primary" />
-                Escolha a unidade
-              </div>
-              <p className="text-xs text-muted-foreground">
-                O agendamento será vinculado à unidade selecionada.
-              </p>
-              <select
-                className="w-full mt-1 rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
-                value={selectedUnitId ?? ""}
-                onChange={(e) => persistUnit(e.target.value)}
-              >
-                <option value="">Selecione…</option>
-                {publicMeta!.units.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.name}
-                  </option>
-                ))}
-              </select>
-            </CardContent>
-          </Card>
-        </div>
-      ) : null}
-
       {authPhase === "logado" && bookingSummary && !agendamentoConfirmado && !isRemarcando ? (
         <div className="max-w-2xl mx-auto px-4 mb-6 space-y-3">
           {erroAgendamento ? (
@@ -2327,6 +2304,17 @@ export default function BarbeariaPage() {
 
       {showAgendamentoWizard ? (
       <>
+      {showUnitPicker ? (
+        <div className="max-w-2xl mx-auto px-4 mb-4">
+          <ClientUnitPicker
+            units={shopUnits}
+            selectedUnitId={selectedUnitId}
+            onConfirm={persistUnit}
+            hoursHint={displayHorarioFuncionamento}
+          />
+        </div>
+      ) : null}
+
       {/* Indicador de Etapas */}
       <div className="max-w-2xl mx-auto px-4 mb-6">
         <div className="flex items-center justify-between">

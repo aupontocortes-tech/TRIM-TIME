@@ -4,7 +4,7 @@
   "short_name": "Trim Time",
   "description": "Gestão da sua barbearia: agenda, clientes e configurações",
   "start_url": "/painel",
-  "scope": "/",
+  "scope": "/painel",
   "display": "standalone",
   "background_color": "#0a0a0a",
   "theme_color": "#c9a227",

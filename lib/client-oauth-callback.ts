@@ -44,7 +44,13 @@ export async function resolveClientOAuthRedirect(
 
   if (!result.ok) {
     if (result.code === "shop_not_found") {
-      return { url: new URL("/", origin) }
+      const lost = new URL(barbershopPath, origin)
+      lost.searchParams.set("client_oauth_error", "shop_not_found")
+      lost.searchParams.set(
+        "oauth_error_msg",
+        "Barbearia não encontrada. Confira se o link de agendamento está correto."
+      )
+      return { url: lost }
     }
     if (result.code === "incomplete_register") {
       base.searchParams.set("oauth_need_profile", "1")

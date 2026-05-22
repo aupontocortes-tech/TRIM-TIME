@@ -36,7 +36,7 @@ export function ClientOAuthButtons({
     setLoading(true)
     try {
       const prep = await fetch(
-        `/api/public/barbershops/${encodeURIComponent(slug)}/auth/oauth/prepare`,
+        `/api/public/barbershops/${encodeURIComponent(slug)}/auth-oauth-prepare`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -58,7 +58,8 @@ export function ClientOAuthButtons({
       }
 
       const supabase = createClient()
-      const redirectTo = `${window.location.origin}/auth/callback?flow=client`
+      const slugEnc = encodeURIComponent(slug.trim())
+      const redirectTo = `${window.location.origin}/auth/callback/client/${slugEnc}?mode=${mode}`
       const { data, error: oauthErr } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: { redirectTo },

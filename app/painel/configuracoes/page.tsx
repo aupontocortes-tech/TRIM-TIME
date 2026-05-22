@@ -26,6 +26,7 @@ import {
 } from "@/lib/barbershop-settings-ui"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { formatCpfDisplay } from "@/lib/cpf"
+import { publicBookingUrl } from "@/lib/booking-public-url"
 import { compressImageToJpegDataUrl } from "@/lib/client-image-compress"
 import { MAX_PROFILE_PHOTO_DATA_URL_CHARS } from "@/lib/photo-data-url"
 import { Button } from "@/components/ui/button"
@@ -560,7 +561,7 @@ export default function ConfiguracoesPage() {
 
   const resolveFullBookingUrl = useCallback(() => {
     const o = typeof window !== "undefined" ? window.location.origin : origin
-    return o && barbershop?.slug ? `${o}/b/${barbershop.slug}` : ""
+    return barbershop?.slug ? publicBookingUrl(barbershop.slug, o) : ""
   }, [origin, barbershop?.slug])
 
   useEffect(() => {
@@ -586,8 +587,9 @@ export default function ConfiguracoesPage() {
     }
   }, [qrDialogOpen, resolveFullBookingUrl])
 
-  const linkAgendamento =
-    origin && barbershop?.slug ? `${origin}/b/${barbershop.slug}` : barbershop?.slug ? `/b/${barbershop.slug}` : "—"
+  const linkAgendamento = barbershop?.slug
+    ? publicBookingUrl(barbershop.slug, origin)
+    : "—"
 
   const waDigitsOnly = waPhone.replace(/\D/g, "")
   const waApiConnected =
