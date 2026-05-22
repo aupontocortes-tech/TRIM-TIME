@@ -5,29 +5,7 @@ import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { 
-  Scissors, 
-  Calendar, 
-  TrendingUp, 
-  Users, 
-  Clock, 
-  Shield,
-  Bell,
-  Star,
-  Check,
-  Menu,
-  X,
-  Sparkles,
-  ChevronRight,
-  MessageCircle,
-  Gift,
-  Building2,
-  ListOrdered,
-  Wallet,
-  BarChart3,
-  Smartphone,
-  UserPlus,
-} from "lucide-react"
+import { Star, Check, Menu, X, Sparkles, ChevronRight } from "lucide-react"
 import {
   PLAN_PRICES,
   PLAN_LABELS,
@@ -37,6 +15,8 @@ import {
 } from "@/lib/plans"
 import { BrandLogo } from "@/components/brand-logo"
 import { TrimTimeWordmark } from "@/components/trim-time-wordmark"
+import { LandingFeaturesCarousel } from "@/components/landing/landing-features-carousel"
+import { LANDING_FEATURES } from "@/lib/landing-features"
 
 function WhatsappIcon({ className }: { className?: string }) {
   return (
@@ -308,36 +288,7 @@ function LandingPageContent() {
             </div>
 
             <div className="flex-1 w-full max-w-lg lg:max-w-none">
-              <div className="relative">
-                <div className="absolute -inset-4 bg-primary/20 rounded-3xl blur-3xl opacity-30" />
-                <Card className="relative bg-card border-border overflow-hidden">
-                  <CardContent className="p-0">
-                    <div className="bg-secondary/50 px-4 py-3 border-b border-border flex items-center justify-between">
-                      <span className="text-sm font-medium text-foreground">Agenda do Dia</span>
-                      <span className="text-xs text-muted-foreground">Sua visão como barbeiro — Hoje, 15 de março</span>
-                    </div>
-                    <div className="p-4 space-y-3">
-                      {[
-                        { time: "09:00", client: "Carlos Silva", service: "Corte + Barba", status: "confirmed" },
-                        { time: "10:00", client: "João Pedro", service: "Corte Degradê", status: "confirmed" },
-                        { time: "11:00", client: "Rafael Santos", service: "Barba", status: "pending" },
-                        { time: "14:00", client: "Lucas Oliveira", service: "Corte Social", status: "confirmed" },
-                      ].map((appointment, i) => (
-                        <div key={i} className="flex items-center gap-4 p-3 rounded-lg bg-secondary/30 border border-border/50">
-                          <div className="text-center min-w-[50px]">
-                            <p className="text-sm font-semibold text-primary">{appointment.time}</p>
-                          </div>
-                          <div className="flex-1">
-                            <p className="text-sm font-medium text-foreground">{appointment.client}</p>
-                            <p className="text-xs text-muted-foreground">{appointment.service}</p>
-                          </div>
-                          <div className={`w-2 h-2 rounded-full ${appointment.status === 'confirmed' ? 'bg-green-500' : 'bg-yellow-500'}`} />
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
+              <LandingFeaturesCarousel />
             </div>
           </div>
         </div>
@@ -356,93 +307,25 @@ function LandingPageContent() {
           </div>
 
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[
-              {
-                icon: Calendar,
-                title: "Seu Link Exclusivo",
-                description: "Receba um link (trimtime.com/b/sua-barbearia) e compartilhe com seus clientes. O cliente entra, escolhe serviço e horário, e agenda. Você tem acesso à agenda com horário, nome do cliente e tudo sobre cada agendamento."
-              },
-              {
-                icon: TrendingUp,
-                title: "Gestão Financeira",
-                description: "Controle de faturamento, relatórios de vendas diárias e mensais. Saiba exatamente quanto sua barbearia está faturando."
-              },
-              {
-                icon: Users,
-                title: "Gestão de Clientes",
-                description: "Histórico completo de cada cliente, preferências, frequência de visitas e muito mais."
-              },
-              {
-                icon: Clock,
-                title: "Controle de Horários",
-                description: "Defina seus horários de trabalho, folgas e pausas. O sistema organiza automaticamente."
-              },
-              {
-                icon: Shield,
-                title: "Segurança Total",
-                description: "Seus dados protegidos com a mais alta tecnologia. Backups automáticos e criptografia."
-              },
-              {
-                icon: Scissors,
-                title: "Multi-Barbeiros",
-                description: "Adicione quantos profissionais precisar. Cada um com sua própria agenda e comissões."
-              },
-              {
-                icon: Bell,
-                title: "Lembretes e confirmações automáticas",
-                description: "O cliente recebe lembretes antes do horário marcado para não esquecer do agendamento. Confirmação automática ao agendar e opção de lembrete por push, e-mail ou WhatsApp, reduzindo faltas e deixando sua agenda mais previsível."
-              },
-              {
-                icon: MessageCircle,
-                title: "WhatsApp Business",
-                description: "Integração com a API oficial do WhatsApp para confirmações, lembretes e mensagens pós-atendimento — seus clientes são avisados no app que já usam todo dia."
-              },
-              {
-                icon: ListOrdered,
-                title: "Lista de espera",
-                description: "Quando um horário abre, o sistema avisa quem estava na fila. Menos buracos na agenda e clientes que não desistem de cortar com você."
-              },
-              {
-                icon: Wallet,
-                title: "Comissão por barbeiro",
-                description: "Defina o percentual de cada profissional e acompanhe quanto cada um gerou. Ideal para equipes com mais de um cadeira."
-              },
-              {
-                icon: Gift,
-                title: "Programa de fidelidade",
-                description: "Pontos por visita para seus clientes voltarem. Recompense quem agenda com frequência e fortaleça o relacionamento com a barbearia."
-              },
-              {
-                icon: Building2,
-                title: "Várias unidades",
-                description: "Gerencie mais de uma loja na mesma conta: cada unidade com agenda, contato e endereço, sem misturar os agendamentos."
-              },
-              {
-                icon: BarChart3,
-                title: "Dashboard e relatórios",
-                description: "Visão clara do negócio: agendamentos, faturamento e desempenho. Relatórios que ajudam a decidir preço, equipe e horários de pico."
-              },
-              {
-                icon: Smartphone,
-                title: "App no celular do cliente",
-                description: "Seu link vira experiência de app no celular do cliente (PWA): ele agenda, recebe lembretes e pode instalar na tela inicial sem baixar da loja."
-              },
-              {
-                icon: UserPlus,
-                title: "Equipe por convite",
-                description: "Envie link de cadastro para novos barbeiros. Eles entram com foto, dados e app próprio para ver a própria agenda e comissão."
-              },
-            ].map((feature, i) => (
-              <Card key={i} className="bg-card border-border hover:border-primary/50 transition-colors group">
+            {LANDING_FEATURES.map((feature) => {
+              const Icon = feature.icon
+              return (
+              <Card key={feature.title} className="bg-card border-border hover:border-primary/50 transition-colors group">
                 <CardContent className="p-6">
-                  <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4 group-hover:bg-primary/20 transition-colors">
-                    <feature.icon className="w-6 h-6 text-primary" />
+                  <div
+                    className={[
+                      "w-12 h-12 rounded-lg flex items-center justify-center mb-4 ring-1 transition-colors group-hover:scale-105",
+                      feature.accent.bg,
+                      feature.accent.ring,
+                    ].join(" ")}
+                  >
+                    <Icon className={["w-6 h-6", feature.accent.icon].join(" ")} />
                   </div>
                   <h3 className="text-lg font-semibold text-foreground mb-2">{feature.title}</h3>
                   <p className="text-muted-foreground text-sm">{feature.description}</p>
                 </CardContent>
               </Card>
-            ))}
+            )})}
           </div>
         </div>
       </section>
