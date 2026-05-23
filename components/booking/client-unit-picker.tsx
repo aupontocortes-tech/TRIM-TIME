@@ -19,35 +19,63 @@ import {
 import { normalizeGoogleMapsUrl } from "@/lib/google-maps-url"
 import { cn } from "@/lib/utils"
 
-function UnitLocationBlock({
+function UnitAddressLine({
   unit,
   className,
 }: {
   unit: UnitPickerAddressFields
   className?: string
 }) {
-  const mapsUrl = normalizeGoogleMapsUrl(unit.maps_url)
-  const addressLine = formatUnitAddressLine(unit)
-
   return (
-    <div className={cn("mt-1 space-y-1", className)}>
-      <p className="text-xs text-muted-foreground flex gap-1 leading-snug">
-        <MapPin className="w-3.5 h-3.5 shrink-0 mt-0.5 text-muted-foreground/80" aria-hidden />
-        <span>{addressLine}</span>
-      </p>
-      {mapsUrl ? (
-        <a
-          href={mapsUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={(e) => e.stopPropagation()}
-          className="text-xs font-medium text-primary hover:underline underline-offset-2 pl-5"
-        >
-          Ver rota no Google Maps
-        </a>
-      ) : null}
-    </div>
+    <p className={cn("text-xs text-muted-foreground flex gap-1 leading-snug mt-1", className)}>
+      <MapPin className="w-3.5 h-3.5 shrink-0 mt-0.5 text-muted-foreground/80" aria-hidden />
+      <span>{formatUnitAddressLine(unit)}</span>
+    </p>
   )
+}
+
+/** Card “Selecionada”: mostra endereço; toque abre o Google Maps quando houver link. */
+function SelectedUnitCard({
+  unit,
+  borderClass,
+}: {
+  unit: ClientUnitPickerUnit
+  borderClass: string
+}) {
+  const mapsUrl = normalizeGoogleMapsUrl(unit.maps_url)
+  const className = cn(
+    "rounded-xl border-2 p-3 mb-3 w-full text-left transition-colors",
+    borderClass,
+    "bg-card",
+    mapsUrl && "hover:bg-secondary/40 active:scale-[0.99] cursor-pointer"
+  )
+
+  const body = (
+    <>
+      <p className="font-semibold text-sm text-foreground">{unit.name}</p>
+      <UnitAddressLine unit={unit} />
+      {mapsUrl ? (
+        <p className="text-[11px] text-primary font-medium mt-2">Toque para abrir no Google Maps</p>
+      ) : null}
+    </>
+  )
+
+  if (mapsUrl) {
+    return (
+      <a
+        href={mapsUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={className}
+        aria-label={`Abrir localização de ${unit.name} no Google Maps`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {body}
+      </a>
+    )
+  }
+
+  return <div className={className}>{body}</div>
 }
 
 export type ClientUnitPickerUnit = {
@@ -130,7 +158,7 @@ export function ClientUnitPicker({
                 <p className="text-sm font-semibold text-foreground mt-1 truncate">
                   {selectedUnit.name}
                 </p>
-                <UnitLocationBlock unit={selectedUnit} />
+                <UnitAddressLine unit={selectedUnit} />
               </>
             ) : (
               <p className="text-xs text-muted-foreground mt-1">
@@ -204,7 +232,7 @@ export function ClientUnitPicker({
                       <p className="font-semibold text-foreground text-sm leading-tight">
                         {unit.name}
                       </p>
-                      <UnitLocationBlock unit={unit} />
+                      <UnitAddressLine unit={unit} />
                       {hoursHint ? (
                         <p className={cn("text-[11px] mt-1.5 font-medium", accent.badge)}>
                           {hoursHint}
@@ -240,21 +268,14 @@ export function ClientUnitPicker({
               <p className="text-[11px] font-semibold text-primary uppercase tracking-wide mb-1.5">
                 Selecionada
               </p>
-              <div
-                className={cn(
-                  "rounded-xl border-2 p-3 mb-3",
+              <SelectedUnitCard
+                unit={draftUnit}
+                borderClass={
                   unitPickerAccent(
-                    Math.max(
-                      0,
-                      units.findIndex((u) => u.id === draftUnit.id)
-                    )
-                  ).border,
-                  "bg-card"
-                )}
-              >
-                <p className="font-semibold text-sm text-foreground">{draftUnit.name}</p>
-                <UnitLocationBlock unit={draftUnit} />
-              </div>
+                    Math.max(0, units.findIndex((u) => u.id === draftUnit.id))
+                  ).border
+                }
+              />
             </div>
           ) : null}
 
