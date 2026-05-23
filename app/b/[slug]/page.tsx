@@ -304,10 +304,9 @@ export default function BarbeariaPage() {
   const [otpResendNotBefore, setOtpResendNotBefore] = useState<number | null>(null)
   const [otpUiNow, setOtpUiNow] = useState(() => Date.now())
 
-  // Login sem senha: e-mail → código. Legado: e-mail/telefone + senha
-  const [formLogin, setFormLogin] = useState({ email: "" })
-  const [loginLegacy, setLoginLegacy] = useState(false)
-  const [formLoginLegacy, setFormLoginLegacy] = useState({ emailOuTelefone: "", senha: "" })
+  const [formLogin, setFormLogin] = useState({ email: "", senha: "" })
+  /** Alternativa ao e-mail+senha: código de 6 dígitos no e-mail. */
+  const [loginWithEmailCode, setLoginWithEmailCode] = useState(false)
   const [showSenhaLogin, setShowSenhaLogin] = useState(false)
   const [erroLogin, setErroLogin] = useState("")
   /** Voltou do Google no cadastro — falta nome/WhatsApp antes de concluir. */
@@ -939,10 +938,20 @@ export default function BarbeariaPage() {
     setOtpError("")
     setAuthLoading(true)
     try {
-      if (loginLegacy) {
+      const email = formLogin.email.trim().toLowerCase()
+
+      if (!loginWithEmailCode) {
         const body = {
-          emailOuTelefone: formLoginLegacy.emailOuTelefone.trim(),
-          senha: formLoginLegacy.senha,
+          emailOuTelefone: email || formLogin.email.trim(),
+          senha: formLogin.senha,
+        }
+        if (!body.emailOuTelefone) {
+          setErroLogin("Informe o e-mail")
+          return
+        }
+        if (!body.senha) {
+          setErroLogin("Informe a senha")
+          return
         }
         const res = await fetch(`/api/public/barbershops/${encodeURIComponent(slug)}/auth/login`, {
           method: "POST",
@@ -952,7 +961,7 @@ export default function BarbeariaPage() {
         })
         const data = (await res.json().catch(() => ({}))) as { error?: string; client?: ClienteAgendamento }
         if (!res.ok || !data.client) {
-          setErroLogin(data.error || "Email/telefone ou senha incorretos")
+          setErroLogin(data.error || "E-mail ou senha incorretos")
           return
         }
         setClienteLogado(data.client)
@@ -968,7 +977,6 @@ export default function BarbeariaPage() {
         return
       }
 
-      const email = formLogin.email.trim().toLowerCase()
       if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         setErroLogin("Informe um e-mail válido")
         return
@@ -1007,7 +1015,8 @@ export default function BarbeariaPage() {
     setOtpLockUntil(null)
     setOtpResendNotBefore(null)
     setOtpIntent("register")
-    setFormLogin({ email: "" })
+    setFormLogin({ email: "", senha: "" })
+    setLoginWithEmailCode(false)
     setFormCadastro({ nome: "", telefone: "", email: "" })
     setEtapa(1)
     setServicosSelecionados([])
@@ -1835,99 +1844,99 @@ export default function BarbeariaPage() {
               </div>
               <h1 className="text-xl font-bold text-foreground text-center mb-1">Entrar</h1>
               <p className="text-sm text-muted-foreground text-center mb-6">
-                {loginLegacy
-                  ? "Para agendar é preciso estar logado. Use o e-mail e a senha da sua conta."
-                  : "Use o Google (recomendado) ou receba um código de 6 dígitos no e-mail. Não pedimos senha nesta tela ao usar Google."}
+                {loginWithEmailCode
+                  ? "Informe o e-mail para receber um código de 6 dígitos (contas sem senha)."
+                  : "Entre com Google, ou use o e-mail e a senha da sua conta."}
               </p>
-              {!loginLegacy ? (
-                <>
-                  <ClientOAuthButtons slug={slug} mode="login" disabled={authLoading} />
-                  <p className="text-xs text-muted-foreground text-center mt-2 leading-snug">
-                    Ao tocar em Google, você será redirecionado para a página do Google para
-                    autorizar — a senha é digitada lá, não aqui.
-                  </p>
-                </>
-              ) : null}
-              <form onSubmit={handleLogin} className="space-y-4">
+              <ClientOAuthButtons slug={slug} mode="login" disabled={authLoading} />
+              {!loginWithEmailCode ? (
+                <p className="text-xs text-muted-foreground text-center mt-2 mb-4 leading-snug">
+                  Com Google, a senha é digitada na página do Google.
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground text-center mt-2 mb-4">ou código por e-mail</p>
+              )}
+              <form
+                onSubmit={handleLogin}
+                className="space-y-4"
+                method="post"
+                autoComplete="on"
+                name="trimtime-client-login"
+              >
                 {erroLogin && (
                   <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
                     {erroLogin}
                   </div>
                 )}
-                {!loginLegacy ? (
+                <div>
+                  <Label className="text-foreground" htmlFor="client-login-email">
+                    E-mail
+                  </Label>
+                  <Input
+                    id="client-login-email"
+                    name="email"
+                    type="email"
+                    value={formLogin.email}
+                    onChange={(e) => setFormLogin((p) => ({ ...p, email: e.target.value }))}
+                    placeholder="seu@email.com"
+                    className="mt-1 bg-card border-border"
+                    autoComplete="username email"
+                    required
+                  />
+                </div>
+                {!loginWithEmailCode ? (
                   <div>
-                    <Label className="text-foreground">E-mail</Label>
-                    <Input
-                      type="email"
-                      value={formLogin.email}
-                      onChange={(e) => setFormLogin((p) => ({ ...p, email: e.target.value }))}
-                      placeholder="seu@email.com"
-                      className="mt-1 bg-card border-border"
-                      autoComplete="email"
-                      required
-                    />
-                  </div>
-                ) : (
-                  <>
-                    <div>
-                      <Label className="text-foreground">E-mail ou telefone</Label>
+                    <Label className="text-foreground" htmlFor="client-login-password">
+                      Senha
+                    </Label>
+                    <div className="relative">
                       <Input
-                        value={formLoginLegacy.emailOuTelefone}
-                        onChange={(e) =>
-                          setFormLoginLegacy((p) => ({ ...p, emailOuTelefone: e.target.value }))
-                        }
-                        placeholder="seu@email.com ou (11) 99999-9999"
-                        className="mt-1 bg-card border-border"
+                        id="client-login-password"
+                        name="password"
+                        type={showSenhaLogin ? "text" : "password"}
+                        value={formLogin.senha}
+                        onChange={(e) => setFormLogin((p) => ({ ...p, senha: e.target.value }))}
+                        placeholder="Sua senha"
+                        className="mt-1 bg-card border-border pr-10"
+                        autoComplete="current-password"
                         required
                       />
+                      <button
+                        type="button"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                        onClick={() => setShowSenhaLogin(!showSenhaLogin)}
+                        aria-label={showSenhaLogin ? "Ocultar senha" : "Mostrar senha"}
+                      >
+                        {showSenhaLogin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
                     </div>
-                    <div>
-                      <Label className="text-foreground">Senha</Label>
-                      <div className="relative">
-                        <Input
-                          type={showSenhaLogin ? "text" : "password"}
-                          value={formLoginLegacy.senha}
-                          onChange={(e) => setFormLoginLegacy((p) => ({ ...p, senha: e.target.value }))}
-                          placeholder="Sua senha"
-                          className="mt-1 bg-card border-border pr-10"
-                          required
-                        />
-                        <button
-                          type="button"
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-                          onClick={() => setShowSenhaLogin(!showSenhaLogin)}
-                        >
-                          {showSenhaLogin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </button>
-                      </div>
-                    </div>
-                  </>
-                )}
+                  </div>
+                ) : null}
                 <Button
                   type="submit"
                   disabled={authLoading}
                   className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
                 >
                   {authLoading
-                    ? loginLegacy
-                      ? "Entrando..."
-                      : "Enviando código..."
-                    : loginLegacy
-                    ? "Entrar"
-                    : "Receber código por e-mail"}
+                    ? loginWithEmailCode
+                      ? "Enviando código..."
+                      : "Entrando..."
+                    : loginWithEmailCode
+                      ? "Receber código por e-mail"
+                      : "Entrar"}
                 </Button>
               </form>
               <button
                 type="button"
-                className="w-full text-center text-xs text-muted-foreground hover:text-foreground mt-2 underline-offset-2 hover:underline"
+                className="w-full text-center text-sm text-primary font-medium hover:underline mt-3"
                 onClick={() => {
                   setErroLogin("")
-                  setLoginLegacy((v) => !v)
+                  setLoginWithEmailCode((v) => !v)
                 }}
               >
-                {loginLegacy
-                  ? "Voltar para Google ou código por e-mail"
-                  : "Tenho conta antiga com e-mail e senha"}
+                {loginWithEmailCode
+                  ? "Voltar para entrar com senha"
+                  : "Entrar com código no e-mail (sem senha)"}
               </button>
               <p className="text-center text-sm text-muted-foreground mt-4">
                 Não tem conta?{" "}

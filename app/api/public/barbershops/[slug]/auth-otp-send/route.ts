@@ -137,7 +137,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       if (byEmail) {
         if (getClientPasswordHash(byEmail.notes)) {
           return NextResponse.json(
-            { error: "Esta conta usa senha. Use «Conta antiga com senha» em Entrar." },
+            { error: "Esta conta usa senha. Em Entrar, use e-mail e senha (não o código)." },
             { status: 409 }
           )
         }
@@ -167,7 +167,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       }
       if (getClientPasswordHash(client.notes)) {
         return NextResponse.json(
-          { error: "Esta conta usa senha. Use «Conta antiga com senha» abaixo." },
+          { error: "Esta conta usa senha. Em Entrar, use e-mail e senha (não o código)." },
           { status: 403 }
         )
       }
