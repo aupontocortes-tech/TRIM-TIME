@@ -251,6 +251,10 @@ function mergeBarbershopSettings(
   if (inc.city !== undefined) base.city = inc.city
   if (inc.state !== undefined) base.state = inc.state
   if (inc.cep !== undefined) base.cep = inc.cep
+  if (inc.maps_url !== undefined) {
+    if (inc.maps_url) base.maps_url = inc.maps_url
+    else delete base.maps_url
+  }
   if (inc.opening_hours !== undefined) {
     const oldH =
       base.opening_hours && typeof base.opening_hours === "object" && !Array.isArray(base.opening_hours)

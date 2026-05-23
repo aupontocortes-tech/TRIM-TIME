@@ -4,6 +4,7 @@ import { requireBarbershopId } from "@/lib/tenant"
 import { resolveEffectivePlanForActiveSession } from "@/lib/barbershop-effective-plan-server"
 import { hasFeature } from "@/lib/plans"
 import type { BarbershopUnit } from "@/lib/db/types"
+import { normalizeGoogleMapsUrl } from "@/lib/google-maps-url"
 
 function optStr(v: unknown): string | null {
   if (v === undefined || v === null) return null
@@ -33,6 +34,7 @@ export async function PATCH(
       city?: string | null
       state?: string | null
       cep?: string | null
+      maps_url?: string | null
     }
 
     const updates: Record<string, unknown> = {
@@ -45,6 +47,9 @@ export async function PATCH(
     if (body.city !== undefined) updates.city = optStr(body.city)
     if (body.state !== undefined) updates.state = optStr(body.state)
     if (body.cep !== undefined) updates.cep = optStr(body.cep)
+    if (body.maps_url !== undefined) {
+      updates.maps_url = normalizeGoogleMapsUrl(body.maps_url)
+    }
 
     const supabase = createServiceRoleClient()
     const { data, error } = await supabase

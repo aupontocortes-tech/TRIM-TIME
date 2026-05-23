@@ -193,6 +193,7 @@ type PublicUnit = {
   city: string | null
   state: string | null
   cep: string | null
+  maps_url: string | null
 }
 
 type PublicShopPayload = {
@@ -204,6 +205,7 @@ type PublicShopPayload = {
   city: string | null
   state: string | null
   cep: string | null
+  maps_url?: string | null
   opening_hours?: BarbershopSettings["opening_hours"] | null
   booking_rules?: BarbershopBookingRules | null
   /** Plano Pro/Premium: lista de espera ativa. */

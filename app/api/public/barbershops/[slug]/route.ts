@@ -6,6 +6,7 @@ import type { BarbershopSettings } from "@/lib/db/types"
 import { resolveEffectivePlanForBarbershop } from "@/lib/barbershop-effective-plan-server"
 import { hasFeature } from "@/lib/plans"
 import { getWaitlistAcceptDeadlineMinutes } from "@/lib/waitlist-service"
+import { normalizeGoogleMapsUrl } from "@/lib/google-maps-url"
 
 /**
  * Dados públicos da barbearia (sem auth) — nome, contato/endereço da conta + unidades ativas.
@@ -39,6 +40,7 @@ export async function GET(
             city: true,
             state: true,
             cep: true,
+            mapsUrl: true,
           },
           orderBy: { createdAt: "asc" },
         },
@@ -61,6 +63,7 @@ export async function GET(
     }
 
     const settings = (b.settings as BarbershopSettings | null) ?? null
+    const shopMapsUrl = normalizeGoogleMapsUrl(settings?.maps_url)
 
     const plan = await resolveEffectivePlanForBarbershop(b.id)
     const waitlist_enabled = !!(plan && hasFeature(plan, "waiting_list"))
@@ -86,13 +89,23 @@ export async function GET(
       city: settings?.city ?? null,
       state: settings?.state ?? null,
       cep: settings?.cep ?? null,
+      maps_url: shopMapsUrl,
       opening_hours: settings?.opening_hours ?? null,
       booking_rules: settings?.booking_rules ?? null,
       waitlist_enabled,
       waitlist_accept_deadline_minutes: waitlist_enabled
         ? getWaitlistAcceptDeadlineMinutes(settings)
         : null,
-      units: b.units,
+      units: b.units.map((u) => ({
+        id: u.id,
+        name: u.name,
+        phone: u.phone,
+        address: u.address ?? settings?.address ?? null,
+        city: u.city ?? settings?.city ?? null,
+        state: u.state ?? settings?.state ?? null,
+        cep: u.cep ?? settings?.cep ?? null,
+        maps_url: normalizeGoogleMapsUrl(u.mapsUrl) ?? shopMapsUrl,
+      })),
       services: serviceRows.map((r) => {
         const s = serviceDbRowToApi(r)
         return {

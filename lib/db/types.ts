@@ -58,6 +58,8 @@ export type BarbershopSettings = {
   city?: string
   state?: string
   cep?: string
+  /** Link do Google Maps (localização exata da barbearia). */
+  maps_url?: string
   opening_hours?: Record<string, BarbershopOpeningDay>
   booking_rules?: BarbershopBookingRules
   notification_settings?: BarbershopNotificationSettings
@@ -96,6 +98,7 @@ export interface BarbershopUnit {
   city?: string | null
   state?: string | null
   cep?: string | null
+  maps_url?: string | null
   active: boolean
   created_at: string
   updated_at: string

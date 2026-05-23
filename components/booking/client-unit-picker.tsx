@@ -11,12 +11,60 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
-import { cn } from "@/lib/utils"
 import {
   formatUnitAddressLine,
   unitPickerAccent,
   type UnitPickerAddressFields,
 } from "@/lib/unit-picker-accent"
+import { normalizeGoogleMapsUrl } from "@/lib/google-maps-url"
+import { cn } from "@/lib/utils"
+
+function UnitLocationBlock({
+  unit,
+  className,
+  onMapsClick,
+}: {
+  unit: UnitPickerAddressFields
+  className?: string
+  onMapsClick?: () => void
+}) {
+  const mapsUrl = normalizeGoogleMapsUrl(unit.maps_url)
+  const addressLine = formatUnitAddressLine(unit)
+
+  if (mapsUrl) {
+    return (
+      <a
+        href={mapsUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={(e) => {
+          e.stopPropagation()
+          onMapsClick?.()
+        }}
+        className={cn(
+          "text-xs mt-1 flex gap-1 leading-snug text-primary font-medium hover:underline underline-offset-2",
+          className
+        )}
+      >
+        <MapPin className="w-3.5 h-3.5 shrink-0 mt-0.5" aria-hidden />
+        <span>
+          {addressLine !== "Endereço não informado" &&
+          addressLine !== "Localização no Google Maps"
+            ? `${addressLine} · `
+            : ""}
+          Ver rota no Google Maps
+        </span>
+      </a>
+    )
+  }
+
+  return (
+    <p className={cn("text-xs text-muted-foreground mt-1 flex gap-1 leading-snug", className)}>
+      <MapPin className="w-3.5 h-3.5 shrink-0 mt-0.5 text-muted-foreground/80" aria-hidden />
+      <span>{addressLine}</span>
+    </p>
+  )
+}
 
 export type ClientUnitPickerUnit = {
   id: string
@@ -98,9 +146,7 @@ export function ClientUnitPicker({
                 <p className="text-sm font-semibold text-foreground mt-1 truncate">
                   {selectedUnit.name}
                 </p>
-                <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2 leading-snug">
-                  {formatUnitAddressLine(selectedUnit)}
-                </p>
+                <UnitLocationBlock unit={selectedUnit} />
               </>
             ) : (
               <p className="text-xs text-muted-foreground mt-1">
@@ -149,8 +195,6 @@ export function ClientUnitPicker({
             {units.map((unit, index) => {
               const accent = unitPickerAccent(index)
               const isSelected = draftId === unit.id
-              const address = formatUnitAddressLine(unit)
-
               return (
                 <button
                   key={unit.id}
@@ -176,10 +220,7 @@ export function ClientUnitPicker({
                       <p className="font-semibold text-foreground text-sm leading-tight">
                         {unit.name}
                       </p>
-                      <p className="text-xs text-muted-foreground mt-1 flex gap-1 leading-snug">
-                        <MapPin className="w-3.5 h-3.5 shrink-0 mt-0.5 text-muted-foreground/80" />
-                        <span>{address}</span>
-                      </p>
+                      <UnitLocationBlock unit={unit} />
                       {hoursHint ? (
                         <p className={cn("text-[11px] mt-1.5 font-medium", accent.badge)}>
                           {hoursHint}
@@ -228,10 +269,7 @@ export function ClientUnitPicker({
                 )}
               >
                 <p className="font-semibold text-sm text-foreground">{draftUnit.name}</p>
-                <p className="text-xs text-muted-foreground mt-1 flex gap-1">
-                  <MapPin className="w-3.5 h-3.5 shrink-0" />
-                  <span>{formatUnitAddressLine(draftUnit)}</span>
-                </p>
+                <UnitLocationBlock unit={draftUnit} />
               </div>
             </div>
           ) : null}

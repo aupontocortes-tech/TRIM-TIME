@@ -46,6 +46,7 @@ export type UnitPickerAddressFields = {
   city: string | null
   state: string | null
   cep: string | null
+  maps_url?: string | null
 }
 
 export function formatUnitAddressLine(u: UnitPickerAddressFields): string {
@@ -53,5 +54,7 @@ export function formatUnitAddressLine(u: UnitPickerAddressFields): string {
   const cityState = [u.city, u.state].filter(Boolean).join(" - ")
   const cep = u.cep?.trim() ? `CEP ${u.cep.trim()}` : ""
   const parts = [line1, cityState, cep].filter((p) => p.length > 0)
-  return parts.length > 0 ? parts.join(" · ") : "Endereço não informado"
+  if (parts.length > 0) return parts.join(" · ")
+  if (u.maps_url?.trim()) return "Localização no Google Maps"
+  return "Endereço não informado"
 }

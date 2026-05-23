@@ -11,6 +11,7 @@ import {
   repairMissingPrincipalWhenSingleMismatchedUnit,
   seedPrimaryUnitIfNoUnits,
 } from "@/lib/barbershop-units-seed"
+import { normalizeGoogleMapsUrl } from "@/lib/google-maps-url"
 
 function optStr(v: unknown): string | null {
   if (v === undefined || v === null) return null
@@ -70,6 +71,7 @@ export async function POST(request: Request) {
       city?: string | null
       state?: string | null
       cep?: string | null
+      maps_url?: string | null
     }
     const name = body.name?.trim()
     if (!name) {
@@ -105,6 +107,7 @@ export async function POST(request: Request) {
         city: optStr(body.city),
         state: optStr(body.state),
         cep: optStr(body.cep),
+        mapsUrl: normalizeGoogleMapsUrl(body.maps_url),
         active: true,
         ...(existingCount === 0 && principalName && name === principalName
           ? { createdAt: bs!.createdAt }
@@ -121,6 +124,7 @@ export async function POST(request: Request) {
       city: row.city,
       state: row.state,
       cep: row.cep,
+      maps_url: row.mapsUrl,
       active: row.active,
       created_at: row.createdAt.toISOString(),
       updated_at: row.updatedAt.toISOString(),

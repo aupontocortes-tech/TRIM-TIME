@@ -195,6 +195,8 @@ model BarbershopUnit {
   city         String?  @map("city")
   state        String?  @map("state")
   cep          String?  @map("cep")
+  /// Link do Google Maps (localização exata / rota).
+  mapsUrl      String?  @map("maps_url")
   active       Boolean  @default(true)
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz

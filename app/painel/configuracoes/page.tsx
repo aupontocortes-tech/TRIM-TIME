@@ -27,6 +27,8 @@ import {
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { formatCpfDisplay } from "@/lib/cpf"
 import { publicBookingUrl } from "@/lib/booking-public-url"
+import { normalizeGoogleMapsUrl } from "@/lib/google-maps-url"
+import { MapsLinkFieldLabel } from "@/components/maps-link-field-label"
 import { compressImageToJpegDataUrl } from "@/lib/client-image-compress"
 import { MAX_PROFILE_PHOTO_DATA_URL_CHARS } from "@/lib/photo-data-url"
 import { Button } from "@/components/ui/button"
@@ -91,6 +93,7 @@ type BarbeariaForm = {
   cidade: string
   estado: string
   cep: string
+  linkGoogleMaps: string
 }
 
 const emptyBarbearia: BarbeariaForm = {
@@ -101,6 +104,7 @@ const emptyBarbearia: BarbeariaForm = {
   cidade: "",
   estado: "",
   cep: "",
+  linkGoogleMaps: "",
 }
 
 const REMINDER_OFFSET_OPTIONS = [
@@ -263,6 +267,9 @@ export default function ConfiguracoesPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saveOk, setSaveOk] = useState(false)
+  const [barbeariaSaveOk, setBarbeariaSaveOk] = useState(false)
+  const [barbeariaSaveError, setBarbeariaSaveError] = useState<string | null>(null)
+  const [isSavingBarbearia, setIsSavingBarbearia] = useState(false)
   const [linkCopiado, setLinkCopiado] = useState(false)
   const [linkCompartilhado, setLinkCompartilhado] = useState(false)
   const [qrDialogOpen, setQrDialogOpen] = useState(false)
@@ -303,6 +310,7 @@ export default function ConfiguracoesPage() {
   const [newUnitCity, setNewUnitCity] = useState("")
   const [newUnitState, setNewUnitState] = useState("")
   const [newUnitCep, setNewUnitCep] = useState("")
+  const [newUnitMapsUrl, setNewUnitMapsUrl] = useState("")
   const [unitEditOpen, setUnitEditOpen] = useState(false)
   const [editingUnit, setEditingUnit] = useState<BarbershopUnit | null>(null)
   const [editUnitName, setEditUnitName] = useState("")
@@ -311,6 +319,7 @@ export default function ConfiguracoesPage() {
   const [editUnitCity, setEditUnitCity] = useState("")
   const [editUnitState, setEditUnitState] = useState("")
   const [editUnitCep, setEditUnitCep] = useState("")
+  const [editUnitMapsUrl, setEditUnitMapsUrl] = useState("")
   const [subscriptionBusy, setSubscriptionBusy] = useState(false)
   const [subscriptionError, setSubscriptionError] = useState<string | null>(null)
   const [subscriptionOk, setSubscriptionOk] = useState<string | null>(null)
@@ -344,6 +353,7 @@ export default function ConfiguracoesPage() {
       cidade: barbershop.settings?.city ?? "",
       estado: barbershop.settings?.state ?? "",
       cep: barbershop.settings?.cep ?? "",
+      linkGoogleMaps: barbershop.settings?.maps_url ?? "",
     })
     setHorarios(openingHoursFromSettings(barbershop.settings?.opening_hours))
     setBookingRules(bookingRulesFromSettings(barbershop.settings?.booking_rules))
@@ -672,6 +682,46 @@ export default function ConfiguracoesPage() {
     }
   }
 
+  const barbeariaSettingsPayload = () => ({
+    address: barbearia.endereco.trim() || undefined,
+    city: barbearia.cidade.trim() || undefined,
+    state: barbearia.estado.trim() || undefined,
+    cep: barbearia.cep.trim() || undefined,
+    maps_url: normalizeGoogleMapsUrl(barbearia.linkGoogleMaps) ?? "",
+  })
+
+  const handleSaveBarbeariaInfo = async () => {
+    if (!barbershop) return
+    setIsSavingBarbearia(true)
+    setBarbeariaSaveError(null)
+    setBarbeariaSaveOk(false)
+    try {
+      const r = await fetch("/api/barbershops", {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: barbearia.nome.trim(),
+          email: barbearia.email.trim(),
+          phone: barbearia.telefone.trim() || null,
+          settings: barbeariaSettingsPayload(),
+        }),
+      })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) {
+        setBarbeariaSaveError(typeof j.error === "string" ? j.error : "Erro ao salvar")
+        return
+      }
+      setBarbeariaSaveOk(true)
+      setTimeout(() => setBarbeariaSaveOk(false), 3000)
+      await refetch()
+    } catch {
+      setBarbeariaSaveError("Erro de rede ao salvar")
+    } finally {
+      setIsSavingBarbearia(false)
+    }
+  }
+
   const handleSave = async () => {
     if (!barbershop) return
     setIsSaving(true)
@@ -689,10 +739,7 @@ export default function ConfiguracoesPage() {
           email: barbearia.email.trim(),
           phone: barbearia.telefone.trim() || null,
           settings: {
-            address: barbearia.endereco.trim() || undefined,
-            city: barbearia.cidade.trim() || undefined,
-            state: barbearia.estado.trim() || undefined,
-            cep: barbearia.cep.trim() || undefined,
+            ...barbeariaSettingsPayload(),
             opening_hours,
             booking_rules,
           },
@@ -1109,6 +1156,7 @@ export default function ConfiguracoesPage() {
           city: newUnitCity.trim() || null,
           state: newUnitState.trim() || null,
           cep: newUnitCep.trim() || null,
+          maps_url: newUnitMapsUrl.trim() || null,
         }),
       })
       const j = await r.json().catch(() => ({}))
@@ -1122,6 +1170,7 @@ export default function ConfiguracoesPage() {
       setNewUnitCity("")
       setNewUnitState("")
       setNewUnitCep("")
+      setNewUnitMapsUrl("")
       await refetchUnits()
     } catch {
       setUnitError("Erro de rede ao criar unidade")
@@ -1138,6 +1187,7 @@ export default function ConfiguracoesPage() {
     setEditUnitCity(unit.city ?? "")
     setEditUnitState(unit.state ?? "")
     setEditUnitCep(unit.cep ?? "")
+    setEditUnitMapsUrl(unit.maps_url ?? "")
     setUnitEditOpen(true)
   }
 
@@ -1157,6 +1207,7 @@ export default function ConfiguracoesPage() {
           city: editUnitCity.trim() || null,
           state: editUnitState.trim() || null,
           cep: editUnitCep.trim() || null,
+          maps_url: editUnitMapsUrl.trim() || null,
         }),
       })
       const j = await r.json().catch(() => ({}))
@@ -1758,6 +1809,44 @@ export default function ConfiguracoesPage() {
                     className="bg-input border-border text-foreground max-w-[200px]"
                   />
                 </Field>
+                <Field>
+                  <MapsLinkFieldLabel htmlFor="linkGoogleMaps" />
+                  <Input
+                    id="linkGoogleMaps"
+                    type="url"
+                    inputMode="url"
+                    placeholder="https://maps.app.goo.gl/... ou link do Google Maps"
+                    value={barbearia.linkGoogleMaps}
+                    onChange={(e) =>
+                      setBarbearia({ ...barbearia, linkGoogleMaps: e.target.value })
+                    }
+                    className="bg-input border-border text-foreground mt-2"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1.5">
+                    O cliente verá este link na tela de agendamento para abrir a rota no Google Maps.
+                  </p>
+                </Field>
+
+                {barbeariaSaveError ? (
+                  <p className="text-sm text-destructive">{barbeariaSaveError}</p>
+                ) : null}
+                {barbeariaSaveOk ? (
+                  <p className="text-sm text-green-600 dark:text-green-400">
+                    Informações salvas com sucesso.
+                  </p>
+                ) : null}
+
+                <div className="pt-2">
+                  <Button
+                    type="button"
+                    onClick={() => void handleSaveBarbeariaInfo()}
+                    disabled={isSavingBarbearia || !barbershop}
+                    className="bg-primary text-primary-foreground hover:bg-primary/90"
+                  >
+                    <Save className="w-4 h-4 mr-2" />
+                    {isSavingBarbearia ? "Salvando…" : "Salvar informações"}
+                  </Button>
+                </div>
               </FieldGroup>
             </CardContent>
           </Card>
@@ -3249,6 +3338,17 @@ export default function ConfiguracoesPage() {
                       />
                     </Field>
                   </div>
+                  <Field>
+                    <MapsLinkFieldLabel optional />
+                    <Input
+                      className="bg-input border-border text-foreground mt-2"
+                      type="url"
+                      inputMode="url"
+                      placeholder="https://maps.app.goo.gl/..."
+                      value={newUnitMapsUrl}
+                      onChange={(e) => setNewUnitMapsUrl(e.target.value)}
+                    />
+                  </Field>
                 </FieldGroup>
                 <div className="flex flex-col sm:flex-row gap-2">
                   <Button
@@ -3393,6 +3493,17 @@ export default function ConfiguracoesPage() {
                       />
                     </Field>
                   </div>
+                  <Field>
+                    <MapsLinkFieldLabel />
+                    <Input
+                      className="bg-input border-border text-foreground mt-2"
+                      type="url"
+                      inputMode="url"
+                      placeholder="https://maps.app.goo.gl/..."
+                      value={editUnitMapsUrl}
+                      onChange={(e) => setEditUnitMapsUrl(e.target.value)}
+                    />
+                  </Field>
                   <div className="flex gap-2 pt-2">
                     <Button
                       type="button"
