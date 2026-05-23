@@ -6,13 +6,20 @@ import { isPublicOtpLengthValid, normalizePublicOtpCode } from "@/lib/public-otp
 import { createAnonServerAuthClient } from "@/lib/supabase/server"
 import type { SupabaseClient } from "@supabase/supabase-js"
 
-export type ClientBookingOtpIntent = "login" | "register"
+export type ClientBookingOtpIntent = "login" | "register" | "reset_password"
 
 export async function sendClientBookingEmailOtp(
   email: string,
-  barbershopName: string
+  barbershopName: string,
+  intent: ClientBookingOtpIntent = "login"
 ): Promise<{ ok: true; otp: string } | { error: string; status: number }> {
   const shopLabel = barbershopName.trim() || "sua barbearia"
+  if (intent === "reset_password") {
+    return sendSupabaseEmailOtp(email, {
+      subject: `Redefinir senha — ${shopLabel}`,
+      intro: `Use o código abaixo para criar uma nova senha de agendamento em ${shopLabel} no Trim Time:`,
+    })
+  }
   return sendSupabaseEmailOtp(email, {
     subject: `Código de acesso — ${shopLabel}`,
     intro: `Use o código abaixo para entrar ou se cadastrar em ${shopLabel} no Trim Time:`,

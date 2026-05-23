@@ -77,7 +77,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       nome?: string
       telefone?: string
     }
-    const intent = body.intent === "login" ? "login" : "register"
+    const intent =
+      body.intent === "login"
+        ? "login"
+        : body.intent === "reset_password"
+          ? "reset_password"
+          : "register"
     const email = normalizeEmail(String(body.email ?? ""))
     const nome = String(body.nome ?? "").trim()
     const telefone = String(body.telefone ?? "").trim()
@@ -157,6 +162,20 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
           { status: 409 }
         )
       }
+    } else if (intent === "reset_password") {
+      const client = await prisma.client.findFirst({
+        where: {
+          barbershopId: shop.id,
+          email: { equals: email, mode: "insensitive" },
+        },
+        select: { id: true },
+      })
+      if (!client) {
+        return NextResponse.json(
+          { error: "Não encontramos cadastro com este e-mail nesta barbearia." },
+          { status: 404 }
+        )
+      }
     } else {
       const client = await prisma.client.findFirst({
         where: { barbershopId: shop.id, email },
@@ -175,7 +194,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
 
     const expiresAt = new Date(now.getTime() + OTP_TTL_MS)
 
-    const sent = await sendClientBookingEmailOtp(email, shop.name)
+    const sent = await sendClientBookingEmailOtp(email, shop.name, intent)
     if ("error" in sent) {
       let supabase
       try {

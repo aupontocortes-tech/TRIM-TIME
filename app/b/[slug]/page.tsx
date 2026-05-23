@@ -252,7 +252,7 @@ export default function BarbeariaPage() {
   const otpVerifyBusyRef = useRef(false)
 
   const [authPhase, setAuthPhase] = useState<
-    "loading" | "cadastro" | "login" | "codigo" | "logado"
+    "loading" | "cadastro" | "login" | "codigo" | "redefinir_senha" | "logado"
   >("loading")
   const [clienteLogado, setClienteLogado] = useState<ClienteAgendamento | null>(null)
   const [authLoading, setAuthLoading] = useState(false)
@@ -296,7 +296,10 @@ export default function BarbeariaPage() {
   const [erroCadastro, setErroCadastro] = useState("")
 
   const [otpEmail, setOtpEmail] = useState("")
-  const [otpIntent, setOtpIntent] = useState<"register" | "login">("register")
+  const [otpIntent, setOtpIntent] = useState<"register" | "login" | "reset_password">("register")
+  const [resetSenhaForm, setResetSenhaForm] = useState({ novaSenha: "", confirmar: "" })
+  const [showNovaSenhaReset, setShowNovaSenhaReset] = useState(false)
+  const [erroRedefinirSenha, setErroRedefinirSenha] = useState("")
   const [otpCode, setOtpCode] = useState("")
   const [otpError, setOtpError] = useState("")
   const [otpInvalidCount, setOtpInvalidCount] = useState(0)
@@ -748,7 +751,10 @@ export default function BarbeariaPage() {
   const formatCpfInput = (value: string) =>
     formatCpfDisplay(value.replace(/\D/g, "").slice(0, 11))
 
-  const sendOtpEmailRequest = async (intent: "register" | "login", email: string) => {
+  const sendOtpEmailRequest = async (
+    intent: "register" | "login" | "reset_password",
+    email: string
+  ) => {
     const normalized = email.trim().toLowerCase()
     const body =
       intent === "register"
@@ -758,7 +764,9 @@ export default function BarbeariaPage() {
             nome: formCadastro.nome.trim(),
             telefone: formCadastro.telefone,
           }
-        : { intent: "login" as const, email: normalized }
+        : intent === "reset_password"
+          ? { intent: "reset_password" as const, email: normalized }
+          : { intent: "login" as const, email: normalized }
     const res = await fetch(`/api/public/barbershops/${encodeURIComponent(slug)}/auth-otp-send`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -770,7 +778,104 @@ export default function BarbeariaPage() {
     }
   }
 
+  const handleStartPasswordReset = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setErroRedefinirSenha("")
+    const email = otpEmail.trim().toLowerCase()
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setErroRedefinirSenha("Informe um e-mail válido")
+      return
+    }
+    setAuthLoading(true)
+    try {
+      await sendOtpEmailRequest("reset_password", email)
+      setOtpIntent("reset_password")
+      setOtpCode("")
+      setResetSenhaForm({ novaSenha: "", confirmar: "" })
+      setOtpInvalidCount(0)
+      setOtpLockUntil(null)
+      setOtpError("")
+      setOtpResendNotBefore(Date.now() + OTP_UI_RESEND_COOLDOWN_MS)
+      setAuthPhase("codigo")
+    } catch (err) {
+      setErroRedefinirSenha(messageFromUnknownError(err))
+    } finally {
+      setAuthLoading(false)
+    }
+  }
+
+  const handleConfirmPasswordReset = async () => {
+    if (otpLockUntil && otpUiNow < otpLockUntil) return
+    const code = normalizePublicOtpCode(otpCode)
+    if (code.length !== OTP_INPUT_MAX_LEN) {
+      setOtpError(`Digite os ${OTP_INPUT_MAX_LEN} dígitos do código.`)
+      return
+    }
+    const em = otpEmail.trim().toLowerCase()
+    if (!em) {
+      setOtpError("E-mail ausente. Volte e tente de novo.")
+      return
+    }
+    const { novaSenha, confirmar } = resetSenhaForm
+    if (novaSenha.length < 6) {
+      setOtpError("A nova senha deve ter pelo menos 6 caracteres.")
+      return
+    }
+    if (novaSenha !== confirmar) {
+      setOtpError("As senhas não coincidem.")
+      return
+    }
+    if (otpVerifyBusyRef.current || authLoading) return
+    otpVerifyBusyRef.current = true
+    setAuthLoading(true)
+    setOtpError("")
+    try {
+      const res = await fetch(
+        `/api/public/barbershops/${encodeURIComponent(slug)}/auth/password-reset/confirm`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            email: em,
+            code,
+            senha: novaSenha,
+            confirmarSenha: confirmar,
+          }),
+        }
+      )
+      const data = (await res.json().catch(() => ({}))) as { error?: string; client?: ClienteAgendamento }
+      if (!res.ok || !data.client) {
+        setOtpError(data.error?.trim() || "Não foi possível redefinir a senha.")
+        return
+      }
+      setClienteLogado(data.client)
+      setDadosCliente({
+        nome: data.client.nome,
+        telefone: data.client.telefone,
+        email: data.client.email,
+        cpf: data.client.cpf ? formatCpfDisplay(data.client.cpf) : "",
+        foto: data.client.photo_url ?? "",
+        fotoPosicao: 50,
+      })
+      setFormLogin({ email: em, senha: "" })
+      setLoginWithEmailCode(false)
+      setOtpCode("")
+      setResetSenhaForm({ novaSenha: "", confirmar: "" })
+      setAuthPhase("logado")
+    } catch {
+      setOtpError("Erro de rede. Tente novamente.")
+    } finally {
+      otpVerifyBusyRef.current = false
+      setAuthLoading(false)
+    }
+  }
+
   const handleConfirmOtp = async () => {
+    if (otpIntent === "reset_password") {
+      void handleConfirmPasswordReset()
+      return
+    }
     if (otpLockUntil && otpUiNow < otpLockUntil) return
     const code = normalizePublicOtpCode(otpCode)
     if (code.length !== OTP_INPUT_MAX_LEN) {
@@ -966,7 +1071,6 @@ export default function BarbeariaPage() {
         }
         if (!res.ok || !data.client) {
           setErroLogin(data.error || "E-mail ou senha incorretos")
-          if (data.code === "no_password") setLoginWithEmailCode(true)
           return
         }
         setClienteLogado(data.client)
@@ -1720,6 +1824,70 @@ export default function BarbeariaPage() {
     )
   }
 
+  if (authPhase === "redefinir_senha") {
+    return (
+      <>
+        <div className="min-h-screen bg-background">
+          <div className="h-32 bg-gradient-to-r from-primary/30 to-primary/10" />
+          <div className="max-w-md mx-auto px-4 -mt-8">
+            <Card className="bg-card border-border">
+              <CardContent className="p-6">
+                <div className="flex justify-center mb-4">
+                  <img src={barbearia.logo} alt="" className="w-14 h-14 rounded-xl object-contain bg-background" />
+                </div>
+                <h1 className="text-xl font-bold text-foreground text-center mb-1">Redefinir senha</h1>
+                <p className="text-sm text-muted-foreground text-center mb-6">
+                  Enviaremos um código no e-mail cadastrado. Depois você define uma nova senha (mín. 6
+                  caracteres). Vale também se sua conta foi criada com Google e você quer passar a usar
+                  senha.
+                </p>
+                <form onSubmit={handleStartPasswordReset} className="space-y-4">
+                  {erroRedefinirSenha ? (
+                    <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+                      {erroRedefinirSenha}
+                    </div>
+                  ) : null}
+                  <div>
+                    <Label className="text-foreground" htmlFor="reset-email">
+                      E-mail
+                    </Label>
+                    <Input
+                      id="reset-email"
+                      type="email"
+                      value={otpEmail}
+                      onChange={(e) => setOtpEmail(e.target.value)}
+                      placeholder="seu@email.com"
+                      className="mt-1 bg-card border-border"
+                      autoComplete="email"
+                      required
+                    />
+                  </div>
+                  <Button
+                    type="submit"
+                    disabled={authLoading}
+                    className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+                  >
+                    {authLoading ? "Enviando código..." : "Enviar código no e-mail"}
+                  </Button>
+                </form>
+                <button
+                  type="button"
+                  className="w-full text-center text-sm text-muted-foreground hover:text-foreground mt-4 underline-offset-2 hover:underline"
+                  onClick={() => {
+                    setErroRedefinirSenha("")
+                    setAuthPhase("login")
+                  }}
+                >
+                  Voltar para entrar
+                </button>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </>
+    )
+  }
+
   if (authPhase === "codigo") {
     const otpLocked = otpLockUntil != null && otpUiNow < otpLockUntil
     const lockSecLeft =
@@ -1729,7 +1897,14 @@ export default function BarbeariaPage() {
         ? Math.max(0, Math.ceil((otpResendNotBefore - otpUiNow) / 1000))
         : 0
     const codeNorm = normalizePublicOtpCode(otpCode)
-    const canConfirm = codeNorm.length === OTP_INPUT_MAX_LEN && !otpLocked && !authLoading
+    const isReset = otpIntent === "reset_password"
+    const senhaOk =
+      resetSenhaForm.novaSenha.length >= 6 && resetSenhaForm.novaSenha === resetSenhaForm.confirmar
+    const canConfirm =
+      codeNorm.length === OTP_INPUT_MAX_LEN &&
+      !otpLocked &&
+      !authLoading &&
+      (!isReset || senhaOk)
 
     return (
       <>
@@ -1741,13 +1916,26 @@ export default function BarbeariaPage() {
                 <div className="flex justify-center mb-4">
                   <img src={barbearia.logo} alt="" className="w-14 h-14 rounded-xl object-contain bg-background" />
                 </div>
-                <h1 className="text-xl font-bold text-foreground text-center mb-1">Código no e-mail</h1>
+                <h1 className="text-xl font-bold text-foreground text-center mb-1">
+                  {isReset ? "Nova senha" : "Código no e-mail"}
+                </h1>
                 <p className="text-sm text-muted-foreground text-center mb-6">
-                  Enviamos um código numérico (em geral <strong className="text-foreground">6 dígitos</strong>) para{" "}
-                  <span className="text-foreground font-medium">{otpEmail || "seu e-mail"}</span>. Digite o código e
-                  toque em <strong className="text-foreground">Confirmar</strong>. O mesmo código vale até{" "}
-                  <strong className="text-foreground">10 minutos</strong> — você pode corrigir e confirmar de novo sem
-                  pedir outro e-mail.
+                  {isReset ? (
+                    <>
+                      Código enviado para{" "}
+                      <span className="text-foreground font-medium">{otpEmail || "seu e-mail"}</span>. Digite o
+                      código, escolha a nova senha e toque em{" "}
+                      <strong className="text-foreground">Salvar senha e entrar</strong>.
+                    </>
+                  ) : (
+                    <>
+                      Enviamos um código numérico (em geral{" "}
+                      <strong className="text-foreground">6 dígitos</strong>) para{" "}
+                      <span className="text-foreground font-medium">{otpEmail || "seu e-mail"}</span>. Digite o código
+                      e toque em <strong className="text-foreground">Confirmar</strong>. O mesmo código vale até{" "}
+                      <strong className="text-foreground">10 minutos</strong>.
+                    </>
+                  )}
                 </p>
                 <div className="space-y-4 flex flex-col items-center w-full">
                   {otpLocked ? (
@@ -1790,13 +1978,62 @@ export default function BarbeariaPage() {
                     </InputOTP>
                     </div>
                   </div>
+                  {isReset ? (
+                    <div className="w-full max-w-sm space-y-3">
+                      <div>
+                        <Label htmlFor="nova-senha-reset">Nova senha</Label>
+                        <div className="relative">
+                          <Input
+                            id="nova-senha-reset"
+                            type={showNovaSenhaReset ? "text" : "password"}
+                            value={resetSenhaForm.novaSenha}
+                            onChange={(e) =>
+                              setResetSenhaForm((p) => ({ ...p, novaSenha: e.target.value }))
+                            }
+                            placeholder="Mínimo 6 caracteres"
+                            className="mt-1 bg-card border-border pr-10"
+                            autoComplete="new-password"
+                          />
+                          <button
+                            type="button"
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                            onClick={() => setShowNovaSenhaReset((v) => !v)}
+                          >
+                            {showNovaSenhaReset ? (
+                              <EyeOff className="w-4 h-4" />
+                            ) : (
+                              <Eye className="w-4 h-4" />
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                      <div>
+                        <Label htmlFor="confirmar-senha-reset">Confirmar senha</Label>
+                        <Input
+                          id="confirmar-senha-reset"
+                          type={showNovaSenhaReset ? "text" : "password"}
+                          value={resetSenhaForm.confirmar}
+                          onChange={(e) =>
+                            setResetSenhaForm((p) => ({ ...p, confirmar: e.target.value }))
+                          }
+                          placeholder="Repita a senha"
+                          className="mt-1 bg-card border-border"
+                          autoComplete="new-password"
+                        />
+                      </div>
+                    </div>
+                  ) : null}
                   <Button
                     type="button"
                     disabled={!canConfirm}
                     className="w-full max-w-[min(100%,20rem)] bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
                     onClick={() => void handleConfirmOtp()}
                   >
-                    {authLoading ? "Verificando..." : "Confirmar"}
+                    {authLoading
+                      ? "Verificando..."
+                      : isReset
+                        ? "Salvar senha e entrar"
+                        : "Confirmar"}
                   </Button>
                 </div>
                 <div className="flex flex-col gap-2 mt-6">
@@ -1822,7 +2059,13 @@ export default function BarbeariaPage() {
                       setOtpInvalidCount(0)
                       setOtpLockUntil(null)
                       setOtpResendNotBefore(null)
-                      setAuthPhase(otpIntent === "register" ? "cadastro" : "login")
+                      setAuthPhase(
+                        otpIntent === "register"
+                          ? "cadastro"
+                          : otpIntent === "reset_password"
+                            ? "redefinir_senha"
+                            : "login"
+                      )
                     }}
                   >
                     Voltar
@@ -1915,6 +2158,17 @@ export default function BarbeariaPage() {
                         {showSenhaLogin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
                     </div>
+                    <button
+                      type="button"
+                      className="text-sm text-primary font-medium hover:underline mt-1"
+                      onClick={() => {
+                        setErroLogin("")
+                        setOtpEmail(formLogin.email)
+                        setAuthPhase("redefinir_senha")
+                      }}
+                    >
+                      Esqueceu a senha?
+                    </button>
                   </div>
                 ) : null}
                 <Button
@@ -1943,6 +2197,19 @@ export default function BarbeariaPage() {
                   ? "Voltar para entrar com senha"
                   : "Entrar com código no e-mail (sem senha)"}
               </button>
+              {!loginWithEmailCode ? (
+                <button
+                  type="button"
+                  className="w-full text-center text-xs text-muted-foreground hover:text-foreground mt-2 underline-offset-2 hover:underline"
+                  onClick={() => {
+                    setErroLogin("")
+                    setOtpEmail(formLogin.email)
+                    setAuthPhase("redefinir_senha")
+                  }}
+                >
+                  Criar ou redefinir senha com código no e-mail
+                </button>
+              ) : null}
               <p className="text-center text-sm text-muted-foreground mt-4">
                 Não tem conta?{" "}
                 <button

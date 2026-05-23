@@ -131,7 +131,7 @@ export async function POST(
       return NextResponse.json(
         {
           error:
-            "Esta conta não tem senha no Trim Time (foi criada com Google ou código por e-mail). Use «Entrar com Google» ou «Entrar com código no e-mail».",
+            "Esta conta não tem senha ainda (Google ou código). Use Google, código por e-mail, ou «Criar ou redefinir senha» abaixo.",
           code: "no_password",
         },
         { status: 403 }
