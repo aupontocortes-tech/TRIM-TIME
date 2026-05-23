@@ -1836,11 +1836,17 @@ export default function BarbeariaPage() {
               <h1 className="text-xl font-bold text-foreground text-center mb-1">Entrar</h1>
               <p className="text-sm text-muted-foreground text-center mb-6">
                 {loginLegacy
-                  ? "Para agendar é preciso estar logado. Conta antiga com e-mail e senha."
-                  : "Entre com Google (botão abaixo) ou código de 6 dígitos no e-mail. Contas antigas com senha: opção abaixo."}
+                  ? "Para agendar é preciso estar logado. Use o e-mail e a senha da sua conta."
+                  : "Use o Google (recomendado) ou receba um código de 6 dígitos no e-mail. Não pedimos senha nesta tela ao usar Google."}
               </p>
               {!loginLegacy ? (
-                <ClientOAuthButtons slug={slug} mode="login" disabled={authLoading} />
+                <>
+                  <ClientOAuthButtons slug={slug} mode="login" disabled={authLoading} />
+                  <p className="text-xs text-muted-foreground text-center mt-2 leading-snug">
+                    Ao tocar em Google, você será redirecionado para a página do Google para
+                    autorizar — a senha é digitada lá, não aqui.
+                  </p>
+                </>
               ) : null}
               <form onSubmit={handleLogin} className="space-y-4">
                 {erroLogin && (
@@ -1919,7 +1925,9 @@ export default function BarbeariaPage() {
                   setLoginLegacy((v) => !v)
                 }}
               >
-                {loginLegacy ? "Voltar para código por e-mail" : "Conta antiga com senha?"}
+                {loginLegacy
+                  ? "Voltar para Google ou código por e-mail"
+                  : "Tenho conta antiga com e-mail e senha"}
               </button>
               <p className="text-center text-sm text-muted-foreground mt-4">
                 Não tem conta?{" "}
