@@ -27,6 +27,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       code?: string
       senha?: string
       confirmarSenha?: string
+      confirmar?: string
     }
     const email = normalizeEmail(String(body.email ?? ""))
     const token = normalizePublicOtpCode(String(body.code ?? ""))
@@ -53,7 +54,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       token,
       expectedIntent: "reset_password",
     })
-    if (!verified.ok) {
+    if ("error" in verified) {
       return NextResponse.json({ error: verified.error }, { status: verified.status })
     }
 

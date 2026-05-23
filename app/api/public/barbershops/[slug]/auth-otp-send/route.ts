@@ -210,7 +210,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       telefone: intent === "register" ? telefone : null,
     })
 
-    if (!dispatched.ok) {
+    if ("error" in dispatched) {
       return NextResponse.json(
         { error: friendlyOtpSendError(dispatched.error) },
         { status: dispatched.status }
