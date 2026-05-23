@@ -109,7 +109,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
 
     if (intent === "login") {
       const client = await prisma.client.findFirst({
-        where: { barbershopId: shop.id, email },
+        where: {
+          barbershopId: shop.id,
+          email: { equals: email, mode: "insensitive" },
+        },
         select: { id: true, name: true, email: true, phone: true, photoUrl: true, cpf: true, notes: true },
       })
       if (!client) {

@@ -3,8 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { findClientByPhoneDigits } from "@/lib/client-by-phone"
 import { clientPhoneDigits } from "@/lib/client-phone-utils"
 import { getClientPasswordHash, getActiveBarbershopBySlug } from "@/lib/public-booking"
-import { sendClientBookingEmailOtp } from "@/lib/client-booking-otp"
-import { createAnonServerAuthClient } from "@/lib/supabase/server"
+import { dispatchClientBookingOtp } from "@/lib/client-otp-send"
 
 export const dynamic = "force-dynamic"
 
@@ -136,7 +135,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       }
 
       const byEmail = await prisma.client.findFirst({
-        where: { barbershopId: shop.id, email },
+        where: {
+          barbershopId: shop.id,
+          email: { equals: email, mode: "insensitive" },
+        },
         select: { id: true, notes: true },
       })
       if (byEmail) {
@@ -178,7 +180,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       }
     } else {
       const client = await prisma.client.findFirst({
-        where: { barbershopId: shop.id, email },
+        where: {
+          barbershopId: shop.id,
+          email: { equals: email, mode: "insensitive" },
+        },
         select: { id: true, notes: true },
       })
       if (!client) {
@@ -194,76 +199,29 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
 
     const expiresAt = new Date(now.getTime() + OTP_TTL_MS)
 
-    const sent = await sendClientBookingEmailOtp(email, shop.name, intent)
-    if ("error" in sent) {
-      let supabase
-      try {
-        supabase = createAnonServerAuthClient()
-      } catch {
-        return NextResponse.json(
-          {
-            error:
-              sent.error ||
-              "Supabase não configurado (NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY).",
-          },
-          { status: sent.status >= 500 ? 500 : sent.status }
-        )
-      }
-
-      const metadata: Record<string, string> = {
-        intent,
-        barbershop_slug: slug,
-      }
-      if (intent === "register") {
-        metadata.nome = nome
-        metadata.telefone = telefone
-      }
-
-      const { error: authErr } = await supabase.auth.signInWithOtp({
-        email,
-        options: {
-          shouldCreateUser: intent === "register",
-          data: metadata,
-        },
-      })
-
-      if (authErr) {
-        const throttled = isSupabaseOtpThrottleMessage(authErr.message)
-        return NextResponse.json(
-          { error: friendlyOtpSendError(authErr.message) },
-          { status: throttled ? 429 : 400 }
-        )
-      }
-
-      await prisma.clientOtpCode.create({
-        data: {
-          barbershopId: shop.id,
-          email,
-          code: "****",
-          expiresAt,
-          intent,
-          nome: intent === "register" ? nome : null,
-          telefone: intent === "register" ? telefone : null,
-        },
-      })
-
-      return NextResponse.json({ ok: true, expires_in_seconds: Math.floor(OTP_TTL_MS / 1000) })
-    }
-
-    await prisma.clientOtpCode.create({
-      data: {
-        barbershopId: shop.id,
-        email,
-        /** Auditoria/rate limit; validação do código via Supabase Auth (OTP tem 6+ dígitos). */
-        code: "****",
-        expiresAt,
-        intent,
-        nome: intent === "register" ? nome : null,
-        telefone: intent === "register" ? telefone : null,
-      },
+    const dispatched = await dispatchClientBookingOtp({
+      barbershopId: shop.id,
+      slug,
+      email,
+      intent,
+      expiresAt,
+      shopName: shop.name,
+      nome: intent === "register" ? nome : null,
+      telefone: intent === "register" ? telefone : null,
     })
 
-    return NextResponse.json({ ok: true, expires_in_seconds: Math.floor(OTP_TTL_MS / 1000) })
+    if (!dispatched.ok) {
+      return NextResponse.json(
+        { error: friendlyOtpSendError(dispatched.error) },
+        { status: dispatched.status }
+      )
+    }
+
+    return NextResponse.json({
+      ok: true,
+      expires_in_seconds: Math.floor(OTP_TTL_MS / 1000),
+      delivery: dispatched.delivery,
+    })
   } catch (e) {
     const raw = e instanceof Error ? e.message : ""
     const friendly =

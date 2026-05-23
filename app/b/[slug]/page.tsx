@@ -1071,6 +1071,9 @@ export default function BarbeariaPage() {
         }
         if (!res.ok || !data.client) {
           setErroLogin(data.error || "E-mail ou senha incorretos")
+          if (data.code === "no_password") {
+            setOtpEmail(email)
+          }
           return
         }
         setClienteLogado(data.client)
@@ -1923,9 +1926,9 @@ export default function BarbeariaPage() {
                   {isReset ? (
                     <>
                       Código enviado para{" "}
-                      <span className="text-foreground font-medium">{otpEmail || "seu e-mail"}</span>. Digite o
-                      código, escolha a nova senha e toque em{" "}
-                      <strong className="text-foreground">Salvar senha e entrar</strong>.
+                      <span className="text-foreground font-medium">{otpEmail || "seu e-mail"}</span> (confira também
+                      o <strong className="text-foreground">spam</strong>). Digite o código, escolha a nova senha e
+                      toque em <strong className="text-foreground">Salvar senha e entrar</strong>.
                     </>
                   ) : (
                     <>
@@ -2112,8 +2115,20 @@ export default function BarbeariaPage() {
                 name="trimtime-client-login"
               >
                 {erroLogin && (
-                  <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
-                    {erroLogin}
+                  <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm space-y-2">
+                    <p>{erroLogin}</p>
+                    {erroLogin.includes("não tem senha") ? (
+                      <button
+                        type="button"
+                        className="text-primary font-medium underline"
+                        onClick={() => {
+                          setErroLogin("")
+                          setAuthPhase("redefinir_senha")
+                        }}
+                      >
+                        Criar senha agora com código no e-mail
+                      </button>
+                    ) : null}
                   </div>
                 )}
                 <div>
