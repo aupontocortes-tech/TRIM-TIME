@@ -22,47 +22,31 @@ import { cn } from "@/lib/utils"
 function UnitLocationBlock({
   unit,
   className,
-  onMapsClick,
 }: {
   unit: UnitPickerAddressFields
   className?: string
-  onMapsClick?: () => void
 }) {
   const mapsUrl = normalizeGoogleMapsUrl(unit.maps_url)
   const addressLine = formatUnitAddressLine(unit)
 
-  if (mapsUrl) {
-    return (
-      <a
-        href={mapsUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        onClick={(e) => {
-          e.stopPropagation()
-          onMapsClick?.()
-        }}
-        className={cn(
-          "text-xs mt-1 flex gap-1 leading-snug text-primary font-medium hover:underline underline-offset-2",
-          className
-        )}
-      >
-        <MapPin className="w-3.5 h-3.5 shrink-0 mt-0.5" aria-hidden />
-        <span>
-          {addressLine !== "Endereço não informado" &&
-          addressLine !== "Localização no Google Maps"
-            ? `${addressLine} · `
-            : ""}
-          Ver rota no Google Maps
-        </span>
-      </a>
-    )
-  }
-
   return (
-    <p className={cn("text-xs text-muted-foreground mt-1 flex gap-1 leading-snug", className)}>
-      <MapPin className="w-3.5 h-3.5 shrink-0 mt-0.5 text-muted-foreground/80" aria-hidden />
-      <span>{addressLine}</span>
-    </p>
+    <div className={cn("mt-1 space-y-1", className)}>
+      <p className="text-xs text-muted-foreground flex gap-1 leading-snug">
+        <MapPin className="w-3.5 h-3.5 shrink-0 mt-0.5 text-muted-foreground/80" aria-hidden />
+        <span>{addressLine}</span>
+      </p>
+      {mapsUrl ? (
+        <a
+          href={mapsUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          className="text-xs font-medium text-primary hover:underline underline-offset-2 pl-5"
+        >
+          Ver rota no Google Maps
+        </a>
+      ) : null}
+    </div>
   )
 }
 

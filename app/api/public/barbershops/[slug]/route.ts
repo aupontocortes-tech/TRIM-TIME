@@ -7,6 +7,7 @@ import { resolveEffectivePlanForBarbershop } from "@/lib/barbershop-effective-pl
 import { hasFeature } from "@/lib/plans"
 import { getWaitlistAcceptDeadlineMinutes } from "@/lib/waitlist-service"
 import { normalizeGoogleMapsUrl } from "@/lib/google-maps-url"
+import { loadUnitMapsUrlByBarbershopId } from "@/lib/barbershop-unit-maps"
 
 /**
  * Dados públicos da barbearia (sem auth) — nome, contato/endereço da conta + unidades ativas.
@@ -40,7 +41,6 @@ export async function GET(
             city: true,
             state: true,
             cep: true,
-            mapsUrl: true,
           },
           orderBy: { createdAt: "asc" },
         },
@@ -64,6 +64,8 @@ export async function GET(
 
     const settings = (b.settings as BarbershopSettings | null) ?? null
     const shopMapsUrl = normalizeGoogleMapsUrl(settings?.maps_url)
+
+    const unitMapsById = await loadUnitMapsUrlByBarbershopId(b.id)
 
     const plan = await resolveEffectivePlanForBarbershop(b.id)
     const waitlist_enabled = !!(plan && hasFeature(plan, "waiting_list"))
@@ -104,7 +106,7 @@ export async function GET(
         city: u.city ?? settings?.city ?? null,
         state: u.state ?? settings?.state ?? null,
         cep: u.cep ?? settings?.cep ?? null,
-        maps_url: normalizeGoogleMapsUrl(u.mapsUrl) ?? shopMapsUrl,
+        maps_url: unitMapsById.get(u.id) ?? shopMapsUrl,
       })),
       services: serviceRows.map((r) => {
         const s = serviceDbRowToApi(r)
