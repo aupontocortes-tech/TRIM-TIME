@@ -959,9 +959,14 @@ export default function BarbeariaPage() {
           credentials: "include",
           body: JSON.stringify(body),
         })
-        const data = (await res.json().catch(() => ({}))) as { error?: string; client?: ClienteAgendamento }
+        const data = (await res.json().catch(() => ({}))) as {
+          error?: string
+          code?: string
+          client?: ClienteAgendamento
+        }
         if (!res.ok || !data.client) {
           setErroLogin(data.error || "E-mail ou senha incorretos")
+          if (data.code === "no_password") setLoginWithEmailCode(true)
           return
         }
         setClienteLogado(data.client)

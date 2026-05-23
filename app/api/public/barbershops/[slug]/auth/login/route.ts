@@ -34,7 +34,7 @@ export async function POST(
     const telefoneRaw = String(body.telefone ?? "").trim()
     const nomeRaw = String(body.nome ?? "").trim()
     const emailOuTelefone = String(body.emailOuTelefone ?? "").trim()
-    const senha = String(body.senha ?? "")
+    const senha = String(body.senha ?? "").trim()
 
     /** Login simples: telefone + nome (sem senha no corpo). */
     const loginSimples = telefoneRaw.length > 0 && nomeRaw.length > 0 && !senha
@@ -88,7 +88,10 @@ export async function POST(
 
     const emailLower = emailOuTelefone.toLowerCase()
     let candidate = await prisma.client.findFirst({
-      where: { barbershopId: shop.id, email: emailLower },
+      where: {
+        barbershopId: shop.id,
+        email: { equals: emailLower, mode: "insensitive" },
+      },
       select: {
         id: true,
         name: true,
@@ -117,12 +120,28 @@ export async function POST(
       candidate = await findClientByPhoneDigits(shop.id, emailOuTelefone)
     }
     if (!candidate) {
-      return NextResponse.json({ error: "Email/telefone ou senha incorretos" }, { status: 401 })
+      return NextResponse.json(
+        { error: "Não encontramos cadastro com este e-mail ou telefone nesta barbearia.", code: "not_found" },
+        { status: 401 }
+      )
     }
 
     const hash = getClientPasswordHash(candidate.notes)
-    if (!hash || !verifyPassword(senha, hash)) {
-      return NextResponse.json({ error: "Email/telefone ou senha incorretos" }, { status: 401 })
+    if (!hash) {
+      return NextResponse.json(
+        {
+          error:
+            "Esta conta não tem senha no Trim Time (foi criada com Google ou código por e-mail). Use «Entrar com Google» ou «Entrar com código no e-mail».",
+          code: "no_password",
+        },
+        { status: 403 }
+      )
+    }
+    if (!verifyPassword(senha, hash)) {
+      return NextResponse.json(
+        { error: "Senha incorreta. Se você entra com Google, use o botão Google — a senha do Gmail não vale aqui.", code: "wrong_password" },
+        { status: 401 }
+      )
     }
 
     const cookieStore = await cookies()

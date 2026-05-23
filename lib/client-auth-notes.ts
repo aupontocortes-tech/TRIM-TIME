@@ -4,13 +4,29 @@ type ClientAuthMeta = {
   passwordHash?: string
 }
 
+function readPasswordHashFromJson(raw: string): string | null {
+  const trimmed = raw.trim()
+  if (!trimmed.startsWith("{")) return null
+  try {
+    const parsed = JSON.parse(trimmed) as ClientAuthMeta
+    const h = parsed?.passwordHash
+    return typeof h === "string" && h.trim() ? h.trim() : null
+  } catch {
+    return null
+  }
+}
+
 export function parseClientNotes(notes: string | null | undefined): {
   visibleNotes: string | null
   auth: ClientAuthMeta
 } {
   const raw = String(notes ?? "")
   if (!raw.startsWith(AUTH_PREFIX)) {
-    return { visibleNotes: raw || null, auth: {} }
+    const legacyHash = readPasswordHashFromJson(raw)
+    return {
+      visibleNotes: legacyHash ? null : raw || null,
+      auth: legacyHash ? { passwordHash: legacyHash } : {},
+    }
   }
 
   const newlineIdx = raw.indexOf("\n")
