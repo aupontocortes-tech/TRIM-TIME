@@ -19,9 +19,10 @@ export function LandingFeaturesCarousel() {
 
   useEffect(() => {
     if (!api || paused) return
+    const total = LANDING_FEATURES.length
     const timer = window.setInterval(() => {
-      if (api.canScrollNext()) api.scrollNext()
-      else api.scrollTo(0)
+      const next = (api.selectedScrollSnap() + 1) % total
+      api.scrollTo(next)
     }, AUTOPLAY_MS)
     return () => window.clearInterval(timer)
   }, [api, paused])
@@ -36,9 +37,13 @@ export function LandingFeaturesCarousel() {
       <Card className="relative bg-card border-border overflow-hidden">
         <CardContent className="p-0">
           {/* Cabeçalho igual ao card “Agenda do Dia” */}
-          <div className="bg-secondary/50 px-4 py-3 border-b border-border flex items-center justify-between">
-            <span className="text-sm font-medium text-foreground">Funcionalidades</span>
-            <span className="text-xs text-muted-foreground">
+          <div className="bg-secondary/50 px-4 py-3.5 border-b border-border flex items-center justify-center min-h-[3.25rem]">
+            <span
+              className={cn(
+                "text-center text-base sm:text-lg font-bold tracking-wide px-2 text-[var(--gold-light)]",
+                "[text-shadow:0_1px_0_var(--gold-dark),0_2px_6px_rgba(0,0,0,0.9),0_0_20px_rgba(201,162,39,0.55)]"
+              )}
+            >
               Sua visão no Trim Time
             </span>
           </div>
