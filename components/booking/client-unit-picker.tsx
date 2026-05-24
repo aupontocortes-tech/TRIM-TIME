@@ -22,14 +22,34 @@ import { cn } from "@/lib/utils"
 function UnitAddressLine({
   unit,
   className,
+  variant = "default",
 }: {
   unit: UnitPickerAddressFields
   className?: string
+  /** Rodapé “Selecionada”: texto maior e contraste alto no fundo escuro. */
+  variant?: "default" | "prominent"
 }) {
+  const prominent = variant === "prominent"
   return (
-    <p className={cn("text-xs text-muted-foreground flex gap-1 leading-snug mt-1", className)}>
-      <MapPin className="w-3.5 h-3.5 shrink-0 mt-0.5 text-muted-foreground/80" aria-hidden />
-      <span>{formatUnitAddressLine(unit)}</span>
+    <p
+      className={cn(
+        "flex gap-2 mt-1.5",
+        prominent
+          ? "text-sm text-foreground/90 leading-relaxed"
+          : "text-xs text-muted-foreground leading-snug gap-1",
+        className
+      )}
+    >
+      <MapPin
+        className={cn(
+          "shrink-0 mt-0.5",
+          prominent ? "w-4 h-4 text-primary" : "w-3.5 h-3.5 text-muted-foreground/80"
+        )}
+        aria-hidden
+      />
+      <span className={prominent ? "break-words" : undefined}>
+        {formatUnitAddressLine(unit)}
+      </span>
     </p>
   )
 }
@@ -44,18 +64,20 @@ function SelectedUnitCard({
 }) {
   const mapsUrl = normalizeGoogleMapsUrl(unit.maps_url)
   const className = cn(
-    "rounded-xl border-2 p-3 mb-3 w-full text-left transition-colors",
+    "rounded-xl border-2 p-4 w-full text-left transition-colors",
     borderClass,
-    "bg-card",
-    mapsUrl && "hover:bg-secondary/40 active:scale-[0.99] cursor-pointer"
+    "bg-muted/80 shadow-sm",
+    mapsUrl && "hover:bg-muted active:scale-[0.99] cursor-pointer"
   )
 
   const body = (
     <>
-      <p className="font-semibold text-sm text-foreground">{unit.name}</p>
-      <UnitAddressLine unit={unit} />
+      <p className="font-bold text-base text-foreground leading-tight">{unit.name}</p>
+      <UnitAddressLine unit={unit} variant="prominent" />
       {mapsUrl ? (
-        <p className="text-[11px] text-primary font-medium mt-2">Toque para abrir no Google Maps</p>
+        <p className="text-xs text-primary font-semibold mt-3">
+          Toque para abrir no Google Maps
+        </p>
       ) : null}
     </>
   )
@@ -178,7 +200,7 @@ export function ClientUnitPicker({
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetContent
           side="bottom"
-          className="max-h-[min(92dvh,640px)] rounded-t-2xl px-0 pb-0 gap-0 border-t border-border [&>button]:hidden"
+          className="max-h-[min(92dvh,640px)] rounded-t-2xl px-0 pb-0 gap-0 border-t border-border flex flex-col [&>button]:hidden"
         >
           <div className="flex justify-center pt-2 pb-1">
             <div className="w-10 h-1 rounded-full bg-muted-foreground/30" aria-hidden />
@@ -264,8 +286,8 @@ export function ClientUnitPicker({
           </div>
 
           {draftUnit ? (
-            <div className="px-4 pt-2 border-t border-border bg-background/95">
-              <p className="text-[11px] font-semibold text-primary uppercase tracking-wide mb-1.5">
+            <div className="shrink-0 px-4 pt-3 pb-2 border-t border-border bg-background shadow-[0_-6px_20px_rgba(0,0,0,0.35)]">
+              <p className="text-xs font-bold text-primary uppercase tracking-wider mb-2">
                 Selecionada
               </p>
               <SelectedUnitCard
@@ -279,7 +301,7 @@ export function ClientUnitPicker({
             </div>
           ) : null}
 
-          <SheetFooter className="px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-0 border-t-0">
+          <SheetFooter className="shrink-0 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2 border-t border-border/60 bg-background">
             <Button
               type="button"
               className="w-full h-12 text-base font-semibold bg-primary text-primary-foreground hover:bg-primary/90"
