@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Building2, Check, ChevronRight, Info, MapPin, Store, X } from "lucide-react"
+import { Building2, Check, ChevronRight, ExternalLink, Info, MapPin, Store, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Sheet,
@@ -33,7 +33,7 @@ function UnitAddressLine({
   return (
     <p
       className={cn(
-        "flex gap-2 mt-1.5",
+        "flex gap-2 mt-1.5 items-start",
         prominent
           ? "text-sm text-foreground/90 leading-relaxed"
           : "text-xs text-muted-foreground leading-snug gap-1",
@@ -54,32 +54,60 @@ function UnitAddressLine({
   )
 }
 
-/** Card “Selecionada”: mostra endereço; toque abre o Google Maps quando houver link. */
-function SelectedUnitCard({
+/** Resumo da unidade escolhida no rodapé do sheet. */
+function SelectedUnitSummary({
   unit,
-  borderClass,
+  accent,
 }: {
   unit: ClientUnitPickerUnit
-  borderClass: string
+  accent: ReturnType<typeof unitPickerAccent>
 }) {
   const mapsUrl = normalizeGoogleMapsUrl(unit.maps_url)
   const className = cn(
-    "rounded-xl border-2 p-4 w-full text-left transition-colors",
-    borderClass,
-    "bg-muted/80 shadow-sm",
-    mapsUrl && "hover:bg-muted active:scale-[0.99] cursor-pointer"
+    "block w-full rounded-xl border p-3.5 text-left transition-colors overflow-hidden",
+    "border-2 bg-card",
+    accent.border,
+    mapsUrl && "hover:bg-secondary/40 cursor-pointer"
   )
 
   const body = (
-    <>
-      <p className="font-bold text-base text-foreground leading-tight">{unit.name}</p>
-      <UnitAddressLine unit={unit} variant="prominent" />
-      {mapsUrl ? (
-        <p className="text-xs text-primary font-semibold mt-3">
-          Toque para abrir no Google Maps
-        </p>
-      ) : null}
-    </>
+    <div className="flex gap-3 items-start">
+      <div
+        className={cn(
+          "w-11 h-11 rounded-full flex items-center justify-center shrink-0",
+          accent.circle
+        )}
+      >
+        <Store className="w-5 h-5 text-white" aria-hidden />
+      </div>
+      <div className="min-w-0 flex-1">
+        <span
+          className={cn(
+            "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide mb-1.5",
+            accent.check
+          )}
+        >
+          Selecionada
+        </span>
+        <p className="font-semibold text-foreground text-sm leading-tight">{unit.name}</p>
+        <UnitAddressLine unit={unit} variant="prominent" />
+        {mapsUrl ? (
+          <p className="text-xs text-primary font-medium mt-2.5 inline-flex items-center gap-1.5">
+            <ExternalLink className="w-3.5 h-3.5 shrink-0" aria-hidden />
+            Abrir no Google Maps
+          </p>
+        ) : null}
+      </div>
+      <div
+        className={cn(
+          "w-6 h-6 rounded-full shrink-0 flex items-center justify-center mt-0.5",
+          accent.check
+        )}
+        aria-hidden
+      >
+        <Check className="w-3.5 h-3.5" strokeWidth={3} />
+      </div>
+    </div>
   )
 
   if (mapsUrl) {
@@ -286,17 +314,12 @@ export function ClientUnitPicker({
           </div>
 
           {draftUnit ? (
-            <div className="shrink-0 px-4 pt-3 pb-2 border-t border-border bg-background shadow-[0_-6px_20px_rgba(0,0,0,0.35)]">
-              <p className="text-xs font-bold text-primary uppercase tracking-wider mb-2">
-                Selecionada
-              </p>
-              <SelectedUnitCard
+            <div className="shrink-0 px-4 pt-3 pb-3 border-t border-border/80 bg-muted/20">
+              <SelectedUnitSummary
                 unit={draftUnit}
-                borderClass={
-                  unitPickerAccent(
-                    Math.max(0, units.findIndex((u) => u.id === draftUnit.id))
-                  ).border
-                }
+                accent={unitPickerAccent(
+                  Math.max(0, units.findIndex((u) => u.id === draftUnit.id))
+                )}
               />
             </div>
           ) : null}
