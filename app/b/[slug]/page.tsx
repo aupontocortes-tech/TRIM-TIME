@@ -65,6 +65,8 @@ import {
   loadClientOAuthRegisterDraft,
   saveClientOAuthRegisterDraft,
 } from "@/lib/client-oauth-storage"
+import { useLocalReminders } from "@/hooks/use-local-reminders"
+import { scheduleReminders } from "@/lib/local-reminders"
 
 // Dados mockados da barbearia (viriam do banco de dados pelo slug)
 const barbeariaData = {
@@ -312,6 +314,8 @@ export default function BarbeariaPage() {
     !!publicMeta?.waitlist_enabled,
     authPhase === "logado"
   )
+
+  useLocalReminders(authPhase === "logado")
 
   /** Atualiza a grade quando o relógio avança (só etapa Horário + data = hoje). */
   const [bookingClockTick, setBookingClockTick] = useState(0)
@@ -1496,6 +1500,18 @@ export default function BarbeariaPage() {
     saveConfirmedBooking(slug, summary)
     setBookingSummary(summary)
     setAgendamentoConfirmado(true)
+
+    if (result.appointmentIds?.[0] && od && ot) {
+      scheduleReminders({
+        appointmentId: result.appointmentIds[0],
+        appointmentDate: od,
+        appointmentTime: ot.length >= 5 ? ot.slice(0, 5) : ot,
+        barbershopName: publicMeta.name ?? "Barbearia",
+        barberName: prof.nome,
+        serviceName: servicosSelecionadosData.map((s) => s.nome).join(", "),
+        slug,
+      })
+    }
   }
 
   const confirmarAgendamento = async () => {
@@ -1598,6 +1614,18 @@ export default function BarbeariaPage() {
       setBookingSummary(summary)
       setIsRemarcando(false)
       setAgendamentoConfirmado(true)
+
+      if (summary.appointmentIds?.[0]) {
+        scheduleReminders({
+          appointmentId: summary.appointmentIds[0],
+          appointmentDate: toYMDLocal(dataSelecionada),
+          appointmentTime: horarioSelecionado,
+          barbershopName: publicMeta.name ?? "Barbearia",
+          barberName: prof.nome,
+          serviceName: servicosSelecionadosData.map((s) => s.nome).join(", "),
+          slug,
+        })
+      }
     } catch {
       setErroAgendamento("Erro ao confirmar agendamento. Tente novamente.")
     } finally {

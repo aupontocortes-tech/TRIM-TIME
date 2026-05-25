@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma"
 import type { Appointment, BarbershopSettings } from "@/lib/db/types"
 import { parseAppointmentDate } from "@/lib/appointment-prisma-helpers"
 import type { Prisma } from "@prisma/client"
+import { sendWebPushToClient } from "@/lib/web-push-send"
 
 export const WAITLIST_DEFAULT_ACCEPT_MINUTES = 15
 
@@ -141,6 +142,26 @@ export async function notifyNextWaitingForFreedSlot(
     select: { clientId: true },
   })
 
+  const client = await prisma.client.findUnique({
+    where: { id: row.clientId },
+    select: { pushSubscription: true, name: true },
+  })
+
+  const barbershop = await prisma.barbershop.findUnique({
+    where: { id: barbershopId },
+    select: { name: true, slug: true },
+  })
+
+  let pushResult: { ok: boolean; error?: string; skipped?: string } = { ok: false, skipped: "no_subscription" }
+  if (client?.pushSubscription) {
+    const timeStr = normalizeWaitlistTime(freed.time)
+    pushResult = await sendWebPushToClient(client.pushSubscription, {
+      title: "Vaga disponível! 🎉",
+      body: `Uma vaga abriu para ${timeStr} em ${freed.date}. Confirme em até 30 min!`,
+      url: barbershop?.slug ? `/b/${barbershop.slug}` : "/",
+    })
+  }
+
   await prisma.notificationLog.create({
     data: {
       barbershopId,
@@ -154,6 +175,7 @@ export async function notifyNextWaitingForFreedSlot(
         service_id: freed.serviceId,
         barber_id: freed.barberId,
         waiting_list_item_id: next.id,
+        push_result: pushResult,
       },
     },
   })

@@ -33,7 +33,27 @@ self.addEventListener("push", (event) => {
       body: data.body,
       icon: "/icon.png",
       badge: "/icon.png",
+      vibrate: [200, 100, 200, 100, 200],
+      tag: "trimtime-" + Date.now(),
+      renotify: true,
+      requireInteraction: true,
       data: { url: data.url },
+    })
+  )
+})
+
+self.addEventListener("message", (event) => {
+  if (!event.data || event.data.type !== "SHOW_LOCAL_NOTIFICATION") return
+  const { title, body, url, tag } = event.data
+  event.waitUntil(
+    self.registration.showNotification(title || "Trim Time", {
+      body: body || "",
+      icon: "/icon.png",
+      badge: "/icon.png",
+      vibrate: [200, 100, 200],
+      tag: tag || "trimtime-reminder",
+      renotify: true,
+      data: { url: url || "/" },
     })
   )
 })
