@@ -707,27 +707,31 @@ export default function AgendaPage() {
         <Card className="bg-card border-border">
           <CardHeader>
             <CardTitle className="text-foreground">Lista de espera</CardTitle>
-            <CardDescription>Fila por profissional e serviço. VIP aumenta a prioridade na mesma fila.</CardDescription>
+            <CardDescription>Fila ordenada por prioridade (VIP) e depois por ordem de entrada. Itens expiram automaticamente após 7 dias.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {waitlistLoading ? (
-              <p className="text-sm text-muted-foreground flex items-center gap-2">
-                <Loader2 className="w-4 h-4 animate-spin" /> Carregando…
-              </p>
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                <span className="ml-2 text-sm text-muted-foreground">Carregando fila…</span>
+              </div>
             ) : null}
             {waitlistError ? (
-              <p className="text-sm text-destructive">{waitlistError}</p>
+              <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">
+                {waitlistError}
+              </div>
             ) : null}
             {!waitlistLoading && !waitlistError ? (
               <div className="overflow-x-auto rounded-md border border-border">
                 <table className="w-full text-sm">
                   <thead className="bg-muted/50 text-left">
                     <tr>
+                      <th className="p-2 font-medium">#</th>
                       <th className="p-2 font-medium">Cliente</th>
                       <th className="p-2 font-medium">Serviço</th>
                       <th className="p-2 font-medium">Profissional</th>
-                      <th className="p-2 font-medium">Data pref.</th>
-                      <th className="p-2 font-medium">Horário pref.</th>
+                      <th className="p-2 font-medium">Data / Horário</th>
+                      <th className="p-2 font-medium">Aguardando</th>
                       <th className="p-2 font-medium">Status</th>
                       <th className="p-2 font-medium">VIP</th>
                       <th className="p-2 font-medium">Ações</th>
@@ -736,104 +740,142 @@ export default function AgendaPage() {
                   <tbody>
                     {waitlistRows.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="p-4 text-muted-foreground text-center">
-                          Nenhum cliente na fila.
+                        <td colSpan={9} className="p-8 text-muted-foreground text-center">
+                          Nenhum cliente na fila no momento.
                         </td>
                       </tr>
                     ) : (
-                      waitlistRows.map((row) => (
-                        <tr key={row.id} className="border-t border-border">
-                          <td className="p-2 align-top">{row.client?.name ?? "—"}</td>
-                          <td className="p-2 align-top">{row.service?.name ?? "—"}</td>
-                          <td className="p-2 align-top">{row.barber?.name ?? "—"}</td>
-                          <td className="p-2 align-top">{row.desired_date ?? "—"}</td>
-                          <td className="p-2 align-top">{row.desired_time?.slice(0, 5) ?? "—"}</td>
-                          <td className="p-2 align-top capitalize">{row.status}</td>
-                          <td className="p-2 align-top">{row.priority}</td>
-                          <td className="p-2 align-top">
-                            <div className="flex flex-wrap gap-1">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                className="h-8 text-xs"
-                                disabled={waitlistActionId === row.id}
-                                onClick={() => {
-                                  setWaitlistActionId(row.id)
-                                  void fetch(`/api/waiting-list/${row.id}/notify`, {
-                                    method: "POST",
-                                    credentials: "include",
-                                  })
-                                    .then(async (res) => {
-                                      if (!res.ok) {
-                                        const j = await res.json().catch(() => ({}))
-                                        setError(typeof j.error === "string" ? j.error : "Falha ao notificar")
-                                      } else {
-                                        setFeedback("Notificação registrada para o cliente.")
-                                      }
-                                      await carregarListaEspera()
+                      waitlistRows.map((row, idx) => {
+                        const waitingSince = row.created_at
+                          ? Math.round((Date.now() - new Date(row.created_at).getTime()) / 60_000)
+                          : null
+                        const waitingLabel = waitingSince != null
+                          ? waitingSince < 60 ? `${waitingSince} min` : `${Math.floor(waitingSince / 60)}h ${waitingSince % 60}min`
+                          : "—"
+                        const statusColors: Record<string, string> = {
+                          waiting: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
+                          notified: "bg-blue-500/15 text-blue-600 dark:text-blue-400",
+                          accepted: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
+                          expired: "bg-muted text-muted-foreground",
+                          canceled: "bg-destructive/10 text-destructive",
+                        }
+                        const statusLabels: Record<string, string> = {
+                          waiting: "Aguardando",
+                          notified: "Notificado",
+                          accepted: "Aceito",
+                          expired: "Expirado",
+                          canceled: "Cancelado",
+                        }
+                        return (
+                          <tr key={row.id} className="border-t border-border hover:bg-muted/30 transition-colors">
+                            <td className="p-2 align-top text-muted-foreground">{idx + 1}</td>
+                            <td className="p-2 align-top font-medium">{row.client?.name ?? "—"}</td>
+                            <td className="p-2 align-top">{row.service?.name ?? "—"}</td>
+                            <td className="p-2 align-top">{row.barber?.name ?? "—"}</td>
+                            <td className="p-2 align-top whitespace-nowrap">
+                              {row.desired_date ?? "—"}
+                              {row.desired_time ? ` · ${row.desired_time.slice(0, 5)}` : ""}
+                            </td>
+                            <td className="p-2 align-top text-muted-foreground">{waitingLabel}</td>
+                            <td className="p-2 align-top">
+                              <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${statusColors[row.status] ?? "bg-muted text-muted-foreground"}`}>
+                                {statusLabels[row.status] ?? row.status}
+                              </span>
+                            </td>
+                            <td className="p-2 align-top">
+                              {row.priority > 0 ? (
+                                <span className="inline-flex items-center rounded-full bg-primary/15 text-primary px-2 py-0.5 text-xs font-bold">
+                                  {row.priority}
+                                </span>
+                              ) : (
+                                <span className="text-muted-foreground text-xs">—</span>
+                              )}
+                            </td>
+                            <td className="p-2 align-top">
+                              <div className="flex flex-wrap gap-1">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 text-xs"
+                                  disabled={waitlistActionId === row.id}
+                                  onClick={() => {
+                                    setWaitlistActionId(row.id)
+                                    void fetch(`/api/waiting-list/${row.id}/notify`, {
+                                      method: "POST",
+                                      credentials: "include",
                                     })
-                                    .finally(() => setWaitlistActionId(null))
-                                }}
-                              >
-                                Notificar
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                className="h-8 text-xs"
-                                disabled={waitlistActionId === row.id}
-                                onClick={() => {
-                                  setWaitlistActionId(row.id)
-                                  void fetch(`/api/waiting-list/${row.id}`, {
-                                    method: "PATCH",
-                                    credentials: "include",
-                                    headers: { "Content-Type": "application/json" },
-                                    body: JSON.stringify({ priority: row.priority + 1 }),
-                                  })
-                                    .then(async (res) => {
-                                      if (!res.ok) {
-                                        const j = await res.json().catch(() => ({}))
-                                        setError(typeof j.error === "string" ? j.error : "Falha ao priorizar")
-                                      }
-                                      await carregarListaEspera()
+                                      .then(async (res) => {
+                                        if (!res.ok) {
+                                          const j = await res.json().catch(() => ({}))
+                                          setError(typeof j.error === "string" ? j.error : "Falha ao notificar")
+                                        } else {
+                                          setFeedback("Notificação registrada para o cliente.")
+                                        }
+                                        await carregarListaEspera()
+                                      })
+                                      .finally(() => setWaitlistActionId(null))
+                                  }}
+                                >
+                                  Notificar
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 text-xs"
+                                  disabled={waitlistActionId === row.id}
+                                  onClick={() => {
+                                    setWaitlistActionId(row.id)
+                                    void fetch(`/api/waiting-list/${row.id}`, {
+                                      method: "PATCH",
+                                      credentials: "include",
+                                      headers: { "Content-Type": "application/json" },
+                                      body: JSON.stringify({ priority: row.priority + 1 }),
                                     })
-                                    .finally(() => setWaitlistActionId(null))
-                                }}
-                              >
-                                VIP +1
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="destructive"
-                                size="sm"
-                                className="h-8 text-xs"
-                                disabled={waitlistActionId === row.id}
-                                onClick={() => {
-                                  setWaitlistActionId(row.id)
-                                  void fetch(`/api/waiting-list/${row.id}`, {
-                                    method: "PATCH",
-                                    credentials: "include",
-                                    headers: { "Content-Type": "application/json" },
-                                    body: JSON.stringify({ status: "canceled" }),
-                                  })
-                                    .then(async (res) => {
-                                      if (!res.ok) {
-                                        const j = await res.json().catch(() => ({}))
-                                        setError(typeof j.error === "string" ? j.error : "Falha ao remover")
-                                      }
-                                      await carregarListaEspera()
+                                      .then(async (res) => {
+                                        if (!res.ok) {
+                                          const j = await res.json().catch(() => ({}))
+                                          setError(typeof j.error === "string" ? j.error : "Falha ao priorizar")
+                                        }
+                                        await carregarListaEspera()
+                                      })
+                                      .finally(() => setWaitlistActionId(null))
+                                  }}
+                                >
+                                  VIP +1
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="destructive"
+                                  size="sm"
+                                  className="h-7 text-xs"
+                                  disabled={waitlistActionId === row.id}
+                                  onClick={() => {
+                                    setWaitlistActionId(row.id)
+                                    void fetch(`/api/waiting-list/${row.id}`, {
+                                      method: "PATCH",
+                                      credentials: "include",
+                                      headers: { "Content-Type": "application/json" },
+                                      body: JSON.stringify({ status: "canceled" }),
                                     })
-                                    .finally(() => setWaitlistActionId(null))
-                                }}
-                              >
-                                Remover
-                              </Button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))
+                                      .then(async (res) => {
+                                        if (!res.ok) {
+                                          const j = await res.json().catch(() => ({}))
+                                          setError(typeof j.error === "string" ? j.error : "Falha ao remover")
+                                        }
+                                        await carregarListaEspera()
+                                      })
+                                      .finally(() => setWaitlistActionId(null))
+                                  }}
+                                >
+                                  Remover
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })
                     )}
                   </tbody>
                 </table>

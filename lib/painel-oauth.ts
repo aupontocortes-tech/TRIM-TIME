@@ -5,6 +5,7 @@ import { conflictForBarbershopSignup } from "@/lib/barbershop-signup-conflicts"
 import { createPainelSignupTokenForEmail } from "@/lib/painel-signup-otp"
 import { canonicalSignupEmail, normalizeSignupEmail } from "@/lib/signup-identity"
 import { createClient } from "@/lib/supabase/server"
+import type { SupabaseClient } from "@supabase/supabase-js"
 import { appendPainelSignupCookie } from "@/lib/painel-signup-session-cookie"
 
 export type PainelOAuthFlow = "login" | "signup"

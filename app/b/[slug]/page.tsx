@@ -58,6 +58,8 @@ import { isSlotPastGraceFromYmd } from "@/lib/appointment-reminder-time"
 import { normalizePublicOtpCode } from "@/lib/public-otp-code"
 import { ClientOAuthButtons } from "@/components/auth/client-oauth-buttons"
 import { ClientUnitPicker } from "@/components/booking/client-unit-picker"
+import { useWaitlist } from "@/hooks/use-waitlist"
+import { WaitlistCard } from "@/components/booking/waitlist-card"
 import {
   clearClientOAuthRegisterDraft,
   loadClientOAuthRegisterDraft,
@@ -216,18 +218,6 @@ type PublicShopPayload = {
   barbers: { id: string; name: string; phone: string | null; photo_url?: string | null; photo_position?: number }[]
 }
 
-type ClienteListaEsperaUi = {
-  id: string
-  status: string
-  queue_position: number | null
-  queue_ahead: number | null
-  estimated_wait_minutes: number | null
-  offered_date?: string | null
-  offered_time?: string | null
-  barber?: { id?: string; name?: string }
-  service?: { id?: string; name?: string }
-}
-
 type CurrentPublicAppointmentPayload = {
   appointment: null | {
     client_id: string
@@ -281,9 +271,6 @@ export default function BarbeariaPage() {
   const [bookingLoading, setBookingLoading] = useState(false)
   const [erroAgendamento, setErroAgendamento] = useState("")
   const [waitlistDialogOpen, setWaitlistDialogOpen] = useState(false)
-  const [waitlistJoinBusy, setWaitlistJoinBusy] = useState(false)
-  const [waitlistAcceptBusy, setWaitlistAcceptBusy] = useState(false)
-  const [listaEsperaCliente, setListaEsperaCliente] = useState<ClienteListaEsperaUi | null>(null)
   const [trimPlayStage, setTrimPlayStage] = useState<"intro" | "splash" | "game">("intro")
   const [trimPlayCliente, setTrimPlayCliente] = useState<null | { id: string; nome: string }>(null)
   const [pushReminderMsg, setPushReminderMsg] = useState<string | null>(null)
@@ -319,6 +306,12 @@ export default function BarbeariaPage() {
   const [publicMeta, setPublicMeta] = useState<PublicShopPayload | null>(null)
   const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null)
   const [occupiedTimes, setOccupiedTimes] = useState<string[]>([])
+
+  const waitlist = useWaitlist(
+    slug,
+    !!publicMeta?.waitlist_enabled,
+    authPhase === "logado"
+  )
 
   /** Atualiza a grade quando o relógio avança (só etapa Horário + data = hoje). */
   const [bookingClockTick, setBookingClockTick] = useState(0)
@@ -357,7 +350,7 @@ export default function BarbeariaPage() {
 
   useEffect(() => {
     let cancelled = false
-    fetch(`/api/public/barbershops/${encodeURIComponent(slug)}`)
+    fetch(`/api/public/barbershops/${encodeURIComponent(slug)}`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((data: PublicShopPayload | null) => {
         if (!cancelled && data?.name) setPublicMeta(data)
@@ -368,24 +361,7 @@ export default function BarbeariaPage() {
     }
   }, [slug])
 
-  useEffect(() => {
-    if (!listaEsperaCliente?.id || !publicMeta?.waitlist_enabled) return
-    const poll = () => {
-      void fetch(`/api/public/barbershops/${encodeURIComponent(slug)}/waitlist`, {
-        credentials: "include",
-      })
-        .then((r) => (r.ok ? r.json() : null))
-        .then((j: { items?: ClienteListaEsperaUi[] } | null) => {
-          if (!j?.items) return
-          const row = j.items.find((x) => x.id === listaEsperaCliente.id)
-          if (row) setListaEsperaCliente((prev) => (prev ? { ...prev, ...row } : prev))
-        })
-        .catch(() => {})
-    }
-    poll()
-    const timer = window.setInterval(poll, 15_000)
-    return () => window.clearInterval(timer)
-  }, [listaEsperaCliente?.id, publicMeta?.waitlist_enabled, slug])
+  /* Polling da waitlist agora é gerenciado pelo hook useWaitlist */
 
   useEffect(() => {
     const units = publicMeta?.units
@@ -1416,6 +1392,7 @@ export default function BarbeariaPage() {
 
   useEffect(() => {
     if (!horarioSelecionado) return
+    if (occupiedTimes.includes(horarioSelecionado) && publicMeta?.waitlist_enabled) return
     if (
       occupiedTimes.includes(horarioSelecionado) ||
       horariosBloqueadosFolga.has(horarioSelecionado) ||
@@ -1428,6 +1405,7 @@ export default function BarbeariaPage() {
     occupiedTimes,
     horariosBloqueadosFolga,
     horariosBloqueadosAntecedencia,
+    publicMeta?.waitlist_enabled,
   ])
 
   const toggleServico = (id: string) => {
@@ -1464,94 +1442,60 @@ export default function BarbeariaPage() {
   const entrarNaListaEspera = async () => {
     if (!dataSelecionada || !horarioSelecionado || profissionalSelecionado === null || !publicMeta?.waitlist_enabled)
       return
-    setWaitlistJoinBusy(true)
-    try {
-      const res = await fetch(`/api/public/barbershops/${encodeURIComponent(slug)}/waitlist`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          barber_id: profissionalSelecionado,
-          service_ids: servicosSelecionados,
-          date: toYMDLocal(dataSelecionada),
-          time: horarioSelecionado,
-        }),
-      })
-      const j = (await res.json().catch(() => ({}))) as {
-        error?: string
-        item?: ClienteListaEsperaUi
-      }
-      if (!res.ok) {
-        setErroAgendamento(j.error || "Não foi possível entrar na fila.")
-        setWaitlistDialogOpen(false)
-        return
-      }
-      if (j.item) setListaEsperaCliente(j.item)
-      setWaitlistDialogOpen(false)
-    } catch {
-      setErroAgendamento("Erro ao entrar na fila.")
-      setWaitlistDialogOpen(false)
-    } finally {
-      setWaitlistJoinBusy(false)
-    }
+    const ok = await waitlist.join({
+      barber_id: profissionalSelecionado,
+      service_ids: servicosSelecionados,
+      date: toYMDLocal(dataSelecionada),
+      time: horarioSelecionado,
+    })
+    if (!ok && waitlist.error) setErroAgendamento(waitlist.error)
+    setWaitlistDialogOpen(false)
   }
 
   const aceitarVagaListaEspera = async () => {
-    if (!listaEsperaCliente?.id || !publicMeta || !profissionalSelecionado) return
-    const od = listaEsperaCliente.offered_date
-    const ot = listaEsperaCliente.offered_time
+    if (!waitlist.item?.id || !publicMeta || !profissionalSelecionado) return
+    const od = waitlist.item.offered_date
+    const ot = waitlist.item.offered_time
     if (!od || !ot) {
       setErroAgendamento("Aguarde a notificação de vaga para poder confirmar.")
       return
     }
     const prof = barbearia.profissionais.find((p) => p.id === profissionalSelecionado)
     if (!prof) return
-    setWaitlistAcceptBusy(true)
     setErroAgendamento("")
-    try {
-      const res = await fetch(
-        `/api/public/barbershops/${encodeURIComponent(slug)}/waitlist/${encodeURIComponent(listaEsperaCliente.id)}/accept`,
-        { method: "POST", credentials: "include" }
-      )
-      const j = (await res.json().catch(() => ({}))) as { error?: string; appointment_ids?: string[] }
-      if (!res.ok) {
-        setErroAgendamento(j.error || "Não foi possível confirmar o horário.")
-        return
-      }
-      const digitsTel = clientPhoneDigits(dadosCliente.telefone || clienteLogado?.telefone || "")
-      const summary: PersistedClientBookingV1 = {
-        v: 1,
-        clienteId: clienteLogado?.id ?? `guest_${Date.now()}`,
-        confirmedAt: new Date().toISOString(),
-        unitId: selectedUnitId,
-        unitName: selectedUnit?.name ?? null,
-        dataIso: `${od}T12:00:00`,
-        horario: ot.length >= 5 ? ot.slice(0, 5) : ot,
-        profissionalId: profissionalSelecionado,
-        profissionalNome: prof.nome,
-        servicos: servicosSelecionadosData.map((s) => ({
-          id: s.id,
-          nome: s.nome,
-          preco: s.preco,
-          duracao: s.duracao,
-        })),
-        nomeExibicao: dadosCliente.nome.trim() || clienteLogado?.nome || "Cliente",
-        totalPreco,
-        totalDuracao,
-        clientPhoneDigits: digitsTel.length >= 10 ? digitsTel : null,
-        bookedWithoutLogin: !clienteLogado,
-        appointmentIds: Array.isArray(j.appointment_ids) ? j.appointment_ids : undefined,
-        uiFocus: "confirmation",
-      }
-      saveConfirmedBooking(slug, summary)
-      setBookingSummary(summary)
-      setListaEsperaCliente(null)
-      setAgendamentoConfirmado(true)
-    } catch {
-      setErroAgendamento("Erro ao confirmar o horário.")
-    } finally {
-      setWaitlistAcceptBusy(false)
+    const result = await waitlist.accept()
+    if (!result.ok) {
+      if (waitlist.error) setErroAgendamento(waitlist.error)
+      return
     }
+    const digitsTel = clientPhoneDigits(dadosCliente.telefone || clienteLogado?.telefone || "")
+    const summary: PersistedClientBookingV1 = {
+      v: 1,
+      clienteId: clienteLogado?.id ?? `guest_${Date.now()}`,
+      confirmedAt: new Date().toISOString(),
+      unitId: selectedUnitId,
+      unitName: selectedUnit?.name ?? null,
+      dataIso: `${od}T12:00:00`,
+      horario: ot.length >= 5 ? ot.slice(0, 5) : ot,
+      profissionalId: profissionalSelecionado,
+      profissionalNome: prof.nome,
+      servicos: servicosSelecionadosData.map((s) => ({
+        id: s.id,
+        nome: s.nome,
+        preco: s.preco,
+        duracao: s.duracao,
+      })),
+      nomeExibicao: dadosCliente.nome.trim() || clienteLogado?.nome || "Cliente",
+      totalPreco,
+      totalDuracao,
+      clientPhoneDigits: digitsTel.length >= 10 ? digitsTel : null,
+      bookedWithoutLogin: !clienteLogado,
+      appointmentIds: result.appointmentIds,
+      uiFocus: "confirmation",
+    }
+    saveConfirmedBooking(slug, summary)
+    setBookingSummary(summary)
+    setAgendamentoConfirmado(true)
   }
 
   const confirmarAgendamento = async () => {
@@ -2413,10 +2357,10 @@ export default function BarbeariaPage() {
             <Button
               type="button"
               className="w-full sm:w-auto"
-              disabled={waitlistJoinBusy}
+              disabled={waitlist.joinBusy}
               onClick={() => void entrarNaListaEspera()}
             >
-              {waitlistJoinBusy ? <Loader2 className="w-4 h-4 animate-spin mr-2 inline" /> : null}
+              {waitlist.joinBusy ? <Loader2 className="w-4 h-4 animate-spin mr-2 inline" /> : null}
               Entrar na fila
             </Button>
           </DialogFooter>
@@ -2788,16 +2732,26 @@ export default function BarbeariaPage() {
                     const isOcupado = occupiedTimes.includes(horario)
                     const isBloqueadoFolga = horariosBloqueadosFolga.has(horario)
                     const isBloqueadoAntecedencia = horariosBloqueadosAntecedencia.has(horario)
-                    const isBloqueado = isOcupado || isBloqueadoFolga || isBloqueadoAntecedencia
+                    const canWaitlist = isOcupado && !!publicMeta?.waitlist_enabled
+                    const isBloqueado = (isOcupado && !canWaitlist) || isBloqueadoFolga || isBloqueadoAntecedencia
                     
                     return (
                       <button
                         key={horario}
                         disabled={isBloqueado}
-                        onClick={() => setHorarioSelecionado(horario)}
+                        onClick={() => {
+                          if (canWaitlist) {
+                            setHorarioSelecionado(horario)
+                            setWaitlistDialogOpen(true)
+                          } else {
+                            setHorarioSelecionado(horario)
+                          }
+                        }}
                         className={`py-2 px-3 rounded-lg text-sm font-medium transition-all ${
                           isBloqueado
                             ? 'bg-secondary/50 text-muted-foreground/50 cursor-not-allowed'
+                            : canWaitlist
+                            ? 'bg-secondary/50 text-muted-foreground/50 cursor-pointer hover:bg-secondary/70'
                             : isSelecionado
                             ? 'bg-primary text-primary-foreground'
                             : 'bg-card hover:bg-primary/10 text-foreground'
@@ -2807,6 +2761,8 @@ export default function BarbeariaPage() {
                             ? `Disponível com ${minLeadMinutes} min de antecedência`
                             : isBloqueadoFolga
                             ? "Horário bloqueado pela barbearia"
+                            : canWaitlist
+                            ? "Horário ocupado — toque para entrar na lista de espera"
                             : undefined
                         }
                       >
@@ -2882,75 +2838,17 @@ export default function BarbeariaPage() {
                   {erroAgendamento}
                 </div>
               ) : null}
-              {listaEsperaCliente && publicMeta?.waitlist_enabled ? (
-                <Card className="border-primary/30 bg-primary/5">
-                  <CardContent className="p-4 space-y-3">
-                    <div className="flex items-center gap-2">
-                      <Bell className="w-5 h-5 text-primary shrink-0" />
-                      <p className="font-semibold text-foreground">Lista de espera</p>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      Status:{" "}
-                      <strong className="text-foreground">
-                        {listaEsperaCliente.status === "waiting"
-                          ? "Aguardando"
-                          : listaEsperaCliente.status === "notified"
-                            ? "Vaga disponível"
-                            : listaEsperaCliente.status === "accepted"
-                              ? "Aceito"
-                              : listaEsperaCliente.status}
-                      </strong>
-                    </p>
-                    {listaEsperaCliente.queue_position != null ? (
-                      <p className="text-sm text-foreground">
-                        Posição na fila: <strong>{listaEsperaCliente.queue_position}</strong>
-                        {listaEsperaCliente.estimated_wait_minutes != null ? (
-                          <> · Estimativa ~{listaEsperaCliente.estimated_wait_minutes} min</>
-                        ) : null}
-                      </p>
-                    ) : null}
-                    <p className="text-sm text-muted-foreground">
-                      {(listaEsperaCliente.barber?.name ?? profissionalData?.nome) ?? "Profissional"} ·{" "}
-                      {(listaEsperaCliente.service?.name ?? servicosSelecionadosData.map((s) => s.nome).join(", ")) ??
-                        "Serviço"}
-                    </p>
-                    {listaEsperaCliente.status === "notified" &&
-                    listaEsperaCliente.offered_date &&
-                    listaEsperaCliente.offered_time ? (
-                      <div className="space-y-2 pt-2 border-t border-border">
-                        <p className="text-sm text-foreground">
-                          Horário liberado:{" "}
-                          <strong>
-                            {listaEsperaCliente.offered_date} às{" "}
-                            {listaEsperaCliente.offered_time.slice(0, 5)}
-                          </strong>
-                          {publicMeta.waitlist_accept_deadline_minutes ? (
-                            <span className="block text-xs text-muted-foreground mt-1">
-                              Você tem até {publicMeta.waitlist_accept_deadline_minutes} minutos para confirmar (ou a
-                              vaga segue para o próximo).
-                            </span>
-                          ) : null}
-                        </p>
-                        <Button
-                          type="button"
-                          className="w-full"
-                          disabled={waitlistAcceptBusy}
-                          onClick={() => void aceitarVagaListaEspera()}
-                        >
-                          {waitlistAcceptBusy ? (
-                            <Loader2 className="w-4 h-4 animate-spin mr-2 inline" />
-                          ) : null}
-                          Confirmar este horário
-                        </Button>
-                      </div>
-                    ) : (
-                      <p className="text-xs text-muted-foreground">
-                        Quando surgir uma vaga para este horário, você receberá um aviso. Mantenha as notificações
-                        ativadas.
-                      </p>
-                    )}
-                  </CardContent>
-                </Card>
+              {waitlist.item && publicMeta?.waitlist_enabled ? (
+                <WaitlistCard
+                  item={waitlist.item}
+                  acceptDeadlineMinutes={publicMeta.waitlist_accept_deadline_minutes ?? null}
+                  acceptBusy={waitlist.acceptBusy}
+                  cancelBusy={waitlist.cancelBusy}
+                  onAccept={() => void aceitarVagaListaEspera()}
+                  onCancel={() => void waitlist.cancel()}
+                  fallbackBarberName={profissionalData?.nome}
+                  fallbackServiceName={servicosSelecionadosData.map((s) => s.nome).join(", ")}
+                />
               ) : null}
               <div>
                 <Label htmlFor="nome" className="text-foreground">Seu nome</Label>

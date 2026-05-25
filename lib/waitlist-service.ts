@@ -40,6 +40,21 @@ export function parseExtraServiceIds(value: Prisma.JsonValue | null | undefined)
   return value.filter((x): x is string => typeof x === "string" && x.length > 0)
 }
 
+const WAITLIST_TTL_DAYS = 7
+
+/** Expira itens 'waiting' que ultrapassaram o TTL (7 dias sem receber vaga). */
+export async function expireOldWaitingItems(barbershopId: string): Promise<void> {
+  const cutoff = new Date(Date.now() - WAITLIST_TTL_DAYS * 24 * 60 * 60_000)
+  await prisma.waitingListItem.updateMany({
+    where: {
+      barbershopId,
+      status: "waiting",
+      createdAt: { lt: cutoff },
+    },
+    data: { status: "expired" },
+  })
+}
+
 /** Expira notificações antigas e notifica o próximo da fila com o mesmo horário ofertado. */
 export async function expireStaleWaitlistNotifications(barbershopId: string): Promise<void> {
   const bs = await prisma.barbershop.findUnique({

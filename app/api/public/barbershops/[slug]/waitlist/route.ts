@@ -11,6 +11,7 @@ import { hasFeature } from "@/lib/plans"
 import type { BarbershopSettings } from "@/lib/db/types"
 import {
   expireStaleWaitlistNotifications,
+  expireOldWaitingItems,
   estimateWaitMinutes,
   getWaitlistAcceptDeadlineMinutes,
   getWaitlistQueuePosition,
@@ -35,12 +36,13 @@ export async function GET(
     }
 
     await expireStaleWaitlistNotifications(shop.id)
+    await expireOldWaitingItems(shop.id)
 
     const cookieStore = await cookies()
     const rawSession = cookieStore.get(publicClientCookieName(slug))?.value
     const session = verifyPublicClientSession(slug, rawSession)
     if (!session) {
-      return NextResponse.json({ error: "Faça login para ver sua posição na fila." }, { status: 401 })
+      return NextResponse.json({ items: [] })
     }
 
     const settings = (shop.settings as BarbershopSettings | null) ?? null
@@ -168,6 +170,25 @@ export async function POST(
       if (Number.isNaN(desiredDate.getTime())) throw new Error("invalid")
     } catch {
       return NextResponse.json({ error: "Data inválida" }, { status: 400 })
+    }
+
+    const normalizedTime = timeStr.length >= 5 ? timeStr.slice(0, 5) : timeStr
+    const existing = await prisma.waitingListItem.findFirst({
+      where: {
+        barbershopId: shop.id,
+        clientId: session.clientId,
+        barberId,
+        desiredDate,
+        desiredTime: normalizedTime,
+        status: { in: ["waiting", "notified"] },
+      },
+      select: { id: true },
+    })
+    if (existing) {
+      return NextResponse.json(
+        { error: "Você já está na lista de espera para este horário." },
+        { status: 409 }
+      )
     }
 
     const row = await prisma.waitingListItem.create({
