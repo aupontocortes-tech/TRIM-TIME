@@ -1613,6 +1613,12 @@ export default function BarbeariaPage() {
       if (!ok) return
     }
     setErroAgendamento("")
+    const base = bookingSummary ?? loadConfirmedBooking(slug)
+    if (base) {
+      if (base.profissionalId) setProfissionalSelecionado(base.profissionalId)
+      if (base.servicos?.length) setServicosSelecionados(base.servicos.map((s) => s.id))
+      if (base.unitId) setSelectedUnitId(base.unitId)
+    }
     setIsRemarcando(true)
     setAgendamentoConfirmado(false)
     setTrimPlayStage("intro")
