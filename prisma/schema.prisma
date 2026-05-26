@@ -507,6 +507,8 @@ model WhatsAppIntegration {
   apiToken     String?  @map("api_token")
   /// Phone Number ID da Meta (Graph API) para enviar mensagens.
   graphPhoneNumberId String? @map("graph_phone_number_id")
+  /// WhatsApp Business Account ID (Embedded Signup).
+  wabaId       String?  @map("waba_id")
   connectedAt  DateTime @default(now()) @map("connected_at") @db.Timestamptz
   updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz
 

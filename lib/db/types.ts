@@ -251,9 +251,9 @@ export interface WhatsAppIntegration {
   barbershop_id: string
   phone_number: string
   graph_phone_number_id?: string | null
-  has_api_token?: boolean
+  waba_id?: string | null
+  connected: boolean
   connected_at: string
-  updated_at: string
 }
 
 export interface DashboardStats {

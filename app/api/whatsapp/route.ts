@@ -4,19 +4,46 @@ import { hasFeature, getUpgradeMessage } from "@/lib/plans"
 import { resolveEffectivePlanForActiveSession } from "@/lib/barbershop-effective-plan-server"
 import { prisma } from "@/lib/prisma"
 
-function friendlyWhatsappPrismaError(message: string): string {
+function friendlyPrismaError(message: string): string {
   if (
     message.includes("Unknown field") &&
     (message.includes("WhatsAppIntegration") || message.includes("graphPhoneNumberId"))
   ) {
     return (
-      "O Prisma Client está desatualizado (comum após atualizar o schema). " +
+      "O Prisma Client está desatualizado. " +
       "Pare o servidor (Ctrl+C), rode `npx prisma generate` e `npx prisma db push`, " +
       "depois inicie de novo com `npm run dev`."
     )
   }
   return message
 }
+
+function formatRow(row: {
+  id: string
+  phoneNumber: string
+  graphPhoneNumberId: string | null
+  wabaId: string | null
+  connectedAt: Date
+  apiToken: string | null
+}) {
+  return {
+    id: row.id,
+    phone_number: row.phoneNumber,
+    graph_phone_number_id: row.graphPhoneNumberId ?? null,
+    waba_id: row.wabaId ?? null,
+    connected: Boolean(row.apiToken?.trim() && row.graphPhoneNumberId?.trim()),
+    connected_at: row.connectedAt.toISOString(),
+  }
+}
+
+const SELECT_FIELDS = {
+  id: true,
+  phoneNumber: true,
+  graphPhoneNumberId: true,
+  wabaId: true,
+  connectedAt: true,
+  apiToken: true,
+} as const
 
 export async function GET() {
   try {
@@ -30,28 +57,14 @@ export async function GET() {
     }
     const row = await prisma.whatsAppIntegration.findUnique({
       where: { barbershopId },
-      select: {
-        id: true,
-        phoneNumber: true,
-        graphPhoneNumberId: true,
-        connectedAt: true,
-        apiToken: true,
-      },
+      select: SELECT_FIELDS,
     })
-    if (!row) {
-      return NextResponse.json(null)
-    }
-    return NextResponse.json({
-      id: row.id,
-      phone_number: row.phoneNumber,
-      graph_phone_number_id: row.graphPhoneNumberId ?? null,
-      has_api_token: Boolean(row.apiToken?.trim()),
-      connected_at: row.connectedAt.toISOString(),
-    })
+    if (!row) return NextResponse.json(null)
+    return NextResponse.json(formatRow(row))
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Não autorizado"
     return NextResponse.json(
-      { error: friendlyWhatsappPrismaError(msg) },
+      { error: friendlyPrismaError(msg) },
       { status: e instanceof Error && msg.includes("não identificada") ? 401 : 500 }
     )
   }
@@ -64,8 +77,8 @@ export async function POST(request: Request) {
       disconnect?: boolean
       phone_number?: string
       graph_phone_number_id?: string | null
+      waba_id?: string | null
       api_token?: string | null
-      clear_api_token?: boolean
     }
 
     if (body.disconnect === true) {
@@ -76,29 +89,15 @@ export async function POST(request: Request) {
       if (exists) {
         await prisma.whatsAppIntegration.update({
           where: { barbershopId },
-          data: { apiToken: null, graphPhoneNumberId: null },
+          data: { apiToken: null, graphPhoneNumberId: null, wabaId: null },
         })
       }
       const row = await prisma.whatsAppIntegration.findUnique({
         where: { barbershopId },
-        select: {
-          id: true,
-          phoneNumber: true,
-          graphPhoneNumberId: true,
-          connectedAt: true,
-          apiToken: true,
-        },
+        select: SELECT_FIELDS,
       })
-      if (!row) {
-        return NextResponse.json(null)
-      }
-      return NextResponse.json({
-        id: row.id,
-        phone_number: row.phoneNumber,
-        graph_phone_number_id: row.graphPhoneNumberId ?? null,
-        has_api_token: Boolean(row.apiToken?.trim()),
-        connected_at: row.connectedAt.toISOString(),
-      })
+      if (!row) return NextResponse.json(null)
+      return NextResponse.json(formatRow(row))
     }
 
     const plan = await resolveEffectivePlanForActiveSession(barbershopId)
@@ -114,17 +113,9 @@ export async function POST(request: Request) {
     }
 
     const phoneNumber = body.phone_number.trim()
-    const graphId =
-      body.graph_phone_number_id !== undefined
-        ? body.graph_phone_number_id?.trim() || null
-        : undefined
-
-    const tokenUpdate =
-      body.clear_api_token === true
-        ? null
-        : typeof body.api_token === "string" && body.api_token.trim()
-          ? body.api_token.trim()
-          : undefined
+    const graphId = body.graph_phone_number_id?.trim() || null
+    const wabaId = body.waba_id?.trim() || null
+    const token = body.api_token?.trim() || null
 
     const row = await prisma.whatsAppIntegration.upsert({
       where: { barbershopId },
@@ -132,35 +123,25 @@ export async function POST(request: Request) {
         barbershopId,
         phoneNumber,
         apiProvider: "meta",
-        apiToken: tokenUpdate ?? null,
-        graphPhoneNumberId: graphId === undefined ? null : graphId,
+        apiToken: token,
+        graphPhoneNumberId: graphId,
+        wabaId,
       },
       update: {
         phoneNumber,
-        ...(graphId !== undefined ? { graphPhoneNumberId: graphId } : {}),
-        ...(tokenUpdate !== undefined ? { apiToken: tokenUpdate } : {}),
+        graphPhoneNumberId: graphId,
+        wabaId,
+        ...(token ? { apiToken: token } : {}),
       },
-      select: {
-        id: true,
-        phoneNumber: true,
-        graphPhoneNumberId: true,
-        connectedAt: true,
-        apiToken: true,
-      },
+      select: SELECT_FIELDS,
     })
 
-    return NextResponse.json({
-      id: row.id,
-      phone_number: row.phoneNumber,
-      graph_phone_number_id: row.graphPhoneNumberId,
-      has_api_token: Boolean(row.apiToken?.trim()),
-      connected_at: row.connectedAt.toISOString(),
-    })
+    return NextResponse.json(formatRow(row))
   } catch (e) {
     console.error("[whatsapp POST]", e)
     const msg = e instanceof Error ? e.message : "Erro ao salvar"
     return NextResponse.json(
-      { error: friendlyWhatsappPrismaError(msg) },
+      { error: friendlyPrismaError(msg) },
       { status: e instanceof Error && msg.includes("não identificada") ? 401 : 500 }
     )
   }

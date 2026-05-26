@@ -5,7 +5,7 @@ export type { WhatsAppSendResult }
 
 export type WhatsAppIntegrationForSend = Pick<
   WhatsAppIntegration,
-  "apiToken" | "graphPhoneNumberId" | "phoneNumber" | "apiProvider"
+  "apiToken" | "graphPhoneNumberId" | "phoneNumber"
 >
 
 export function isWhatsAppIntegrationReady(integration: WhatsAppIntegrationForSend | null): boolean {

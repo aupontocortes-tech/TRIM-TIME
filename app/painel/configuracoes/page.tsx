@@ -60,7 +60,6 @@ import {
   UserPlus,
   Bell,
   ExternalLink,
-  Plug,
   Camera,
   Trophy,
   Download,
@@ -270,14 +269,8 @@ export default function ConfiguracoesPage() {
   const [waLoading, setWaLoading] = useState(false)
   const [waError, setWaError] = useState<string | null>(null)
   const [waPhone, setWaPhone] = useState("")
-  const [waGraphId, setWaGraphId] = useState("")
-  const [waToken, setWaToken] = useState("")
-  const [waClearToken, setWaClearToken] = useState(false)
+  const [waConnected, setWaConnected] = useState(false)
   const [waBusy, setWaBusy] = useState(false)
-  const [waConnectOpen, setWaConnectOpen] = useState(false)
-  const [waProvider, setWaProvider] = useState("meta")
-  const [waHasApiToken, setWaHasApiToken] = useState(false)
-  /** GET /api/whatsapp retornou 403: credenciais só persistem no Premium; não limpamos o que o usuário digita. */
   const [waPlanBlocked, setWaPlanBlocked] = useState(false)
   const [notifWaConfirmTpl, setNotifWaConfirmTpl] = useState(DEFAULT_WA_CONFIRM)
   const [notifWaPostTpl, setNotifWaPostTpl] = useState(DEFAULT_WA_POST)
@@ -501,31 +494,22 @@ export default function ConfiguracoesPage() {
         if (r.status === 403) {
           setWaPlanBlocked(true)
           setWaError(null)
-          setWaHasApiToken(false)
+          setWaConnected(false)
           return
         }
         setWaPlanBlocked(false)
         setWaError(typeof j.error === "string" ? j.error : "Não foi possível carregar")
         setWaPhone("")
-        setWaGraphId("")
-        setWaHasApiToken(false)
-        setWaProvider("meta")
+        setWaConnected(false)
         return
       }
       setWaPlanBlocked(false)
       if (j && typeof j.phone_number === "string") {
         setWaPhone(j.phone_number)
-        setWaGraphId(typeof j.graph_phone_number_id === "string" ? j.graph_phone_number_id : "")
-        setWaHasApiToken(j.has_api_token === true)
-        setWaToken("")
-        setWaClearToken(false)
+        setWaConnected(j.connected === true)
       } else {
         setWaPhone("")
-        setWaGraphId("")
-        setWaProvider("meta")
-        setWaHasApiToken(false)
-        setWaToken("")
-        setWaClearToken(false)
+        setWaConnected(false)
       }
     } catch {
       setWaError("Erro de rede")
@@ -596,11 +580,8 @@ export default function ConfiguracoesPage() {
     ? publicBookingUrl(barbershop.slug, origin)
     : "—"
 
+  const waApiConnected = Boolean(whatsappIntegrationFeature) && waConnected
   const waDigitsOnly = waPhone.replace(/\D/g, "")
-  const waApiConnected =
-    Boolean(whatsappIntegrationFeature) &&
-    waHasApiToken &&
-    waDigitsOnly.length >= 10
   const fallbackWaMessage = renderNotificationTemplate(
     notifWaConfirmTpl.trim() || DEFAULT_WA_CONFIRM,
     {
@@ -1007,40 +988,14 @@ export default function ConfiguracoesPage() {
     }
   }
 
-  const handleSaveWhatsapp = async () => {
-    if (!waPhone.trim()) {
-      setWaError("Informe o número")
-      return
-    }
-    setWaBusy(true)
-    setWaError(null)
-    try {
-      const body: Record<string, unknown> = {
-        phone_number: waPhone.trim(),
-      }
-      const r = await fetch("/api/whatsapp", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      })
-      const j = await r.json().catch(() => ({}))
-      if (!r.ok) {
-        setWaError(typeof j.error === "string" ? j.error : "Erro ao salvar")
-        return
-      }
-      setWaToken("")
-      setWaClearToken(false)
-      await loadWhatsapp()
-    } catch {
-      setWaError("Erro de rede")
-    } finally {
-      setWaBusy(false)
-    }
+  const handleStartEmbeddedSignup = () => {
+    // TODO: Integrate Meta Embedded Signup SDK
+    // window.FB.login(callback, { config_id: '...', response_type: 'code', override_default_response_type: true })
+    setWaError("Embedded Signup será ativado em breve. A configuração da Meta está sendo finalizada.")
   }
 
   const handleWaDisconnect = async () => {
-    if (!confirm("Desconectar a API do WhatsApp? O número cadastrado permanece; tokens serão removidos.")) return
+    if (!confirm("Desconectar o WhatsApp? As mensagens automáticas vão parar de ser enviadas.")) return
     setWaBusy(true)
     setWaError(null)
     try {
@@ -1055,9 +1010,6 @@ export default function ConfiguracoesPage() {
         setWaError(typeof j.error === "string" ? j.error : "Erro ao desconectar")
         return
       }
-      setWaGraphId("")
-      setWaToken("")
-      setWaClearToken(false)
       await loadWhatsapp()
     } catch {
       setWaError("Erro de rede")
@@ -1735,8 +1687,8 @@ export default function ConfiguracoesPage() {
             <span className={CONFIG_TAB_LABEL_CLASS}>Notificações</span>
           </TabsTrigger>
           <TabsTrigger value="integracao" className={CONFIG_TAB_TRIGGER_CLASS}>
-            <Plug className="shrink-0" />
-            <span className={CONFIG_TAB_LABEL_CLASS}>Integração</span>
+            <Smartphone className="shrink-0" />
+            <span className={CONFIG_TAB_LABEL_CLASS}>WhatsApp Business</span>
           </TabsTrigger>
           <TabsTrigger value="trimplay" className={CONFIG_TAB_TRIGGER_CLASS}>
             <Trophy className="shrink-0" />
@@ -3722,81 +3674,90 @@ export default function ConfiguracoesPage() {
 
         <TabsContent value="integracao" className="space-y-6">
 
-          {/* ── HERO: STATUS DA CONEXÃO ── */}
-          {whatsappIntegrationFeature && waApiConnected ? (
-            <Card className="bg-card border-green-500/30">
-              <CardContent className="pt-6">
+          {waLoading ? (
+            <Card className="bg-card border-border">
+              <CardContent className="py-12 text-center">
+                <p className="text-muted-foreground text-sm">Carregando...</p>
+              </CardContent>
+            </Card>
+          ) : waApiConnected ? (
+            /* ── CONECTADO ── */
+            <Card className="bg-card border-green-500/20 overflow-hidden">
+              <div className="h-1 bg-green-500" />
+              <CardContent className="pt-6 pb-6">
                 <div className="flex items-start gap-4">
                   <div className="w-14 h-14 rounded-2xl bg-green-500/10 flex items-center justify-center shrink-0">
                     <CheckCircle2 className="w-7 h-7 text-green-500" />
                   </div>
-                  <div className="flex-1 space-y-1">
-                    <div className="flex items-center gap-2">
+                  <div className="flex-1 space-y-1.5">
+                    <div className="flex items-center gap-2.5">
                       <p className="text-lg font-semibold text-foreground">WhatsApp conectado</p>
-                      <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                      <div className="flex items-center gap-1.5 rounded-full bg-green-500/10 px-2.5 py-0.5">
+                        <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                        <span className="text-[11px] font-medium text-green-600 dark:text-green-400">Ativo</span>
+                      </div>
                     </div>
                     <p className="text-sm text-muted-foreground">
                       Número: <span className="text-foreground font-medium">{waPhone.trim() || "—"}</span>
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      Seus clientes estão recebendo mensagens automáticas.
+                      Seus clientes estão recebendo confirmações, lembretes e mensagens automáticas.
                     </p>
                   </div>
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
-                    className="shrink-0 text-muted-foreground"
+                    className="shrink-0 text-muted-foreground hover:text-destructive hover:border-destructive/30"
                     disabled={waBusy}
                     onClick={() => void handleWaDisconnect()}
                   >
-                    {waBusy ? "…" : "Desconectar"}
+                    {waBusy ? "..." : "Desconectar"}
                   </Button>
                 </div>
               </CardContent>
             </Card>
           ) : (
+            /* ── NÃO CONECTADO ── */
             <Card className="bg-card border-border overflow-hidden">
-              <CardContent className="pt-6 pb-8">
-                <div className="text-center space-y-6 max-w-lg mx-auto">
-                  <div className="mx-auto w-16 h-16 rounded-2xl bg-green-500/10 flex items-center justify-center">
-                    <MessageSquare className="w-8 h-8 text-green-500" />
-                  </div>
-                  <div className="space-y-2">
-                    <p className="text-xl font-semibold text-foreground">Mensagens automáticas no WhatsApp</p>
-                    <p className="text-sm text-muted-foreground leading-relaxed">
-                      Conecte o WhatsApp da sua barbearia e seus clientes recebem tudo automaticamente: confirmação do horário, lembrete antes de chegar e mensagem depois do atendimento.
-                    </p>
+              <CardContent className="pt-8 pb-10">
+                <div className="text-center space-y-8 max-w-lg mx-auto">
+                  <div className="space-y-4">
+                    <div className="mx-auto w-20 h-20 rounded-3xl bg-green-500/10 flex items-center justify-center">
+                      <MessageSquare className="w-10 h-10 text-green-500" />
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-2xl font-bold text-foreground">WhatsApp Business</p>
+                      <p className="text-sm text-muted-foreground leading-relaxed max-w-md mx-auto">
+                        Conecte seu WhatsApp Business oficial para enviar mensagens automáticas aos seus clientes.
+                      </p>
+                    </div>
                   </div>
 
-                  {/* O que o cliente recebe */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-left">
-                    <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-2">
-                      <CalendarCheck className="w-5 h-5 text-green-500" />
-                      <p className="text-sm font-medium text-foreground">Confirmação</p>
-                      <p className="text-xs text-muted-foreground">Quando o cliente marca um horário</p>
-                    </div>
-                    <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-2">
-                      <Clock3 className="w-5 h-5 text-blue-500" />
-                      <p className="text-sm font-medium text-foreground">Lembrete</p>
-                      <p className="text-xs text-muted-foreground">Antes do horário agendado</p>
-                    </div>
-                    <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-2">
-                      <Heart className="w-5 h-5 text-rose-500" />
-                      <p className="text-sm font-medium text-foreground">Pós-atendimento</p>
-                      <p className="text-xs text-muted-foreground">Agradecimento após a visita</p>
-                    </div>
+                  <div className="grid grid-cols-2 gap-3 text-left max-w-sm mx-auto">
+                    {[
+                      { icon: <CalendarCheck className="w-4 h-4 text-green-500" />, text: "Confirmação de agendamento" },
+                      { icon: <Clock3 className="w-4 h-4 text-blue-500" />, text: "Lembretes automáticos" },
+                      { icon: <Send className="w-4 h-4 text-primary" />, text: "Mensagens automáticas" },
+                      { icon: <Zap className="w-4 h-4 text-amber-500" />, text: "Atendimento automatizado" },
+                    ].map((item, i) => (
+                      <div key={i} className="flex items-center gap-2.5 rounded-lg bg-muted/40 border border-border/60 px-3 py-2.5">
+                        {item.icon}
+                        <span className="text-xs font-medium text-foreground">{item.text}</span>
+                      </div>
+                    ))}
                   </div>
 
                   {!whatsappIntegrationFeature ? (
-                    <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 space-y-2">
-                      <p className="text-sm font-medium text-foreground">Disponível no plano Premium</p>
-                      <p className="text-xs text-muted-foreground">Faça upgrade para desbloquear o WhatsApp automático.</p>
+                    <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-5 space-y-3 max-w-sm mx-auto">
+                      <p className="text-sm font-semibold text-foreground">Disponível no plano Premium</p>
+                      <p className="text-xs text-muted-foreground">
+                        Faça upgrade para desbloquear o WhatsApp automático e enviar mensagens aos seus clientes.
+                      </p>
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
-                        className="mt-1"
                         onClick={() => window.location.href = "/painel/assinatura"}
                       >
                         Ver planos
@@ -3804,16 +3765,21 @@ export default function ConfiguracoesPage() {
                       </Button>
                     </div>
                   ) : (
-                    <Button
-                      type="button"
-                      size="lg"
-                      className="bg-green-600 hover:bg-green-700 text-white px-8"
-                      disabled={waBusy}
-                      onClick={() => setWaConnectOpen(true)}
-                    >
-                      <Zap className="w-4 h-4 mr-2" />
-                      Conectar WhatsApp
-                    </Button>
+                    <div className="space-y-3">
+                      <Button
+                        type="button"
+                        size="lg"
+                        className="bg-green-600 hover:bg-green-700 text-white px-10 h-12 text-base font-semibold shadow-lg shadow-green-600/20"
+                        disabled={waBusy}
+                        onClick={handleStartEmbeddedSignup}
+                      >
+                        <Zap className="w-5 h-5 mr-2" />
+                        Conectar WhatsApp
+                      </Button>
+                      <p className="text-[11px] text-muted-foreground">
+                        Você será redirecionado para o login da Meta (Facebook) para autorizar a conexão.
+                      </p>
+                    </div>
                   )}
                 </div>
               </CardContent>
@@ -3826,84 +3792,42 @@ export default function ConfiguracoesPage() {
             </div>
           ) : null}
 
-          {waLoading ? (
-            <p className="text-muted-foreground text-sm">Carregando…</p>
+          {/* ── COMO FUNCIONA ── */}
+          {!waApiConnected && !waLoading ? (
+            <Card className="bg-card border-border">
+              <CardHeader>
+                <CardTitle className="text-foreground text-base">Como funciona</CardTitle>
+                <CardDescription className="text-muted-foreground">
+                  Em poucos cliques seu WhatsApp está conectado e funcionando.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                  {[
+                    { step: "1", icon: <Zap className="w-5 h-5" />, title: "Clique em Conectar", desc: "Abre a tela oficial da Meta" },
+                    { step: "2", icon: <Shield className="w-5 h-5" />, title: "Faça login", desc: "Entre com sua conta Facebook/Meta" },
+                    { step: "3", icon: <Smartphone className="w-5 h-5" />, title: "Autorize", desc: "Selecione o número WhatsApp" },
+                    { step: "4", icon: <CheckCircle2 className="w-5 h-5" />, title: "Pronto!", desc: "Mensagens enviadas automaticamente" },
+                  ].map((s) => (
+                    <div key={s.step} className="relative flex flex-col items-center text-center p-4 space-y-2">
+                      <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                        {s.icon}
+                      </div>
+                      <p className="text-sm font-medium text-foreground">{s.title}</p>
+                      <p className="text-xs text-muted-foreground">{s.desc}</p>
+                      <div className="absolute -top-1 -left-1 w-5 h-5 rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center">
+                        {s.step}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
           ) : null}
-
-          {/* ── DIALOG: CONECTAR ── */}
-          <Dialog open={waConnectOpen} onOpenChange={setWaConnectOpen}>
-            <DialogContent className="bg-card border-border max-w-md">
-              <DialogHeader>
-                <DialogTitle className="text-foreground flex items-center gap-2">
-                  <MessageSquare className="w-5 h-5 text-green-500" />
-                  Conectar WhatsApp
-                </DialogTitle>
-                <DialogDescription className="text-muted-foreground">
-                  Informe o número da sua barbearia. Ele será usado para enviar as mensagens aos clientes.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-5 pt-2">
-                <Field>
-                  <FieldLabel>Número do WhatsApp</FieldLabel>
-                  <Input
-                    className="bg-input border-border text-foreground text-base h-11"
-                    value={waPhone}
-                    onChange={(e) => setWaPhone(e.target.value)}
-                    placeholder="(11) 99999-8888"
-                  />
-                  <p className="text-xs text-muted-foreground mt-1.5">
-                    O número que seus clientes já conhecem. Com DDD.
-                  </p>
-                </Field>
-                <Button
-                  type="button"
-                  size="lg"
-                  className="w-full bg-green-600 hover:bg-green-700 text-white"
-                  disabled={waBusy || !waPhone.trim()}
-                  onClick={async () => {
-                    await handleSaveWhatsapp()
-                    setWaConnectOpen(false)
-                  }}
-                >
-                  {waBusy ? "Conectando…" : "Conectar"}
-                  {!waBusy && <ArrowRight className="w-4 h-4 ml-2" />}
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
-
-          {/* ── COMO FUNCIONA (passo a passo visual) ── */}
-          <Card className="bg-card border-border">
-            <CardHeader>
-              <CardTitle className="text-foreground text-base">Como funciona</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                {[
-                  { step: "1", icon: <Smartphone className="w-5 h-5" />, title: "Conecte", desc: "Informe o número da barbearia" },
-                  { step: "2", icon: <CalendarCheck className="w-5 h-5" />, title: "Cliente agenda", desc: "Pelo link ou pelo painel" },
-                  { step: "3", icon: <Send className="w-5 h-5" />, title: "Envio automático", desc: "Confirmação chega no WhatsApp" },
-                  { step: "4", icon: <Clock3 className="w-5 h-5" />, title: "Lembrete", desc: "Aviso antes do horário" },
-                ].map((s) => (
-                  <div key={s.step} className="relative flex flex-col items-center text-center p-4 space-y-2">
-                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-                      {s.icon}
-                    </div>
-                    <p className="text-sm font-medium text-foreground">{s.title}</p>
-                    <p className="text-xs text-muted-foreground">{s.desc}</p>
-                    <div className="absolute -top-1 -left-1 w-5 h-5 rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center">
-                      {s.step}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
 
           {/* ── CONFIGURAÇÕES (só aparece se conectado ou Premium) ── */}
           {whatsappIntegrationFeature ? (
             <>
-              {/* Lembretes */}
               <Card className="bg-card border-border">
                 <CardHeader>
                   <CardTitle className="text-foreground text-base flex items-center gap-2">
@@ -3956,7 +3880,6 @@ export default function ConfiguracoesPage() {
                 </CardContent>
               </Card>
 
-              {/* Mensagens */}
               <Card className="bg-card border-border">
                 <CardHeader>
                   <CardTitle className="text-foreground text-base flex items-center gap-2">
@@ -4039,7 +3962,7 @@ export default function ConfiguracoesPage() {
                   onClick={() => void handleSaveNotificacoes()}
                 >
                   <Save className="w-4 h-4 mr-2" />
-                  {notifBusy ? "Salvando…" : "Salvar configurações"}
+                  {notifBusy ? "Salvando..." : "Salvar configurações"}
                 </Button>
               </div>
             </>
