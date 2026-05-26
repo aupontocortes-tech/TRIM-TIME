@@ -6,6 +6,64 @@ import { hasFeature } from "@/lib/plans"
 import type { BarbershopUnit } from "@/lib/db/types"
 import { normalizeGoogleMapsUrl } from "@/lib/google-maps-url"
 
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const barbershopId = await requireBarbershopId()
+    const effectivePlan = await resolveEffectivePlanForActiveSession(barbershopId)
+    if (!effectivePlan || !hasFeature(effectivePlan, "multi_units")) {
+      return NextResponse.json(
+        { error: "Multiunidade disponível apenas no plano Premium." },
+        { status: 403 }
+      )
+    }
+    const { id } = await params
+
+    const supabase = createServiceRoleClient()
+
+    const { count } = await supabase
+      .from("barbershop_units")
+      .select("id", { count: "exact", head: true })
+      .eq("barbershop_id", barbershopId)
+
+    if ((count ?? 0) <= 1) {
+      return NextResponse.json(
+        { error: "Não é possível excluir a única unidade. A barbearia precisa de pelo menos uma." },
+        { status: 400 }
+      )
+    }
+
+    const { count: appointmentCount } = await supabase
+      .from("appointments")
+      .select("id", { count: "exact", head: true })
+      .eq("unit_id", id)
+      .in("status", ["pending", "confirmed"])
+
+    if ((appointmentCount ?? 0) > 0) {
+      return NextResponse.json(
+        { error: `Essa unidade tem ${appointmentCount} agendamento(s) pendente(s). Cancele ou conclua antes de excluir.` },
+        { status: 400 }
+      )
+    }
+
+    const { error } = await supabase
+      .from("barbershop_units")
+      .delete()
+      .eq("id", id)
+      .eq("barbershop_id", barbershopId)
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ ok: true })
+  } catch (e) {
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : "Erro ao excluir unidade" },
+      { status: e instanceof Error && e.message.includes("não identificada") ? 401 : 500 }
+    )
+  }
+}
+
 function optStr(v: unknown): string | null {
   if (v === undefined || v === null) return null
   const s = String(v).trim()

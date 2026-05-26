@@ -1230,6 +1230,28 @@ export default function ConfiguracoesPage() {
     }
   }
 
+  const handleDeleteUnit = async (unit: BarbershopUnit) => {
+    if (!confirm(`Excluir a unidade "${unit.name}"? Essa ação não pode ser desfeita.`)) return
+    setUnitBusy(true)
+    setUnitError(null)
+    try {
+      const r = await fetch(`/api/units/${unit.id}`, {
+        method: "DELETE",
+        credentials: "include",
+      })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) {
+        setUnitError(typeof j.error === "string" ? j.error : "Erro ao excluir unidade")
+        return
+      }
+      await refetchUnits()
+    } catch {
+      setUnitError("Erro de rede ao excluir unidade")
+    } finally {
+      setUnitBusy(false)
+    }
+  }
+
   const openEdit = (b: Barber) => {
     setEditing(b)
     setEditName(b.name)
@@ -3404,6 +3426,17 @@ export default function ConfiguracoesPage() {
                         >
                           {unit.active ? "Desativar" : "Ativar"}
                         </Button>
+                        {units.length > 1 && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            className="h-9 px-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                            onClick={() => void handleDeleteUnit(unit)}
+                            disabled={unitBusy || !multiUnitsFeature}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        )}
                       </div>
                     </div>
                   ))}
