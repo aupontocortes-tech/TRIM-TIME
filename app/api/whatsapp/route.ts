@@ -4,9 +4,6 @@ import { hasFeature, getUpgradeMessage } from "@/lib/plans"
 import { resolveEffectivePlanForActiveSession } from "@/lib/barbershop-effective-plan-server"
 import { prisma } from "@/lib/prisma"
 
-const WHATSAPP_PROVIDERS = new Set(["meta", "twilio", "zenvia", "360dialog"])
-
-/** Evita expor o dump inteiro do Prisma quando o client ficou velho no hot reload do Next. */
 function friendlyWhatsappPrismaError(message: string): string {
   if (
     message.includes("Unknown field") &&
@@ -36,7 +33,6 @@ export async function GET() {
       select: {
         id: true,
         phoneNumber: true,
-        apiProvider: true,
         graphPhoneNumberId: true,
         connectedAt: true,
         apiToken: true,
@@ -49,7 +45,6 @@ export async function GET() {
       id: row.id,
       phone_number: row.phoneNumber,
       graph_phone_number_id: row.graphPhoneNumberId ?? null,
-      api_provider: row.apiProvider,
       has_api_token: Boolean(row.apiToken?.trim()),
       connected_at: row.connectedAt.toISOString(),
     })
@@ -69,7 +64,6 @@ export async function POST(request: Request) {
       disconnect?: boolean
       phone_number?: string
       graph_phone_number_id?: string | null
-      api_provider?: string
       api_token?: string | null
       clear_api_token?: boolean
     }
@@ -90,7 +84,6 @@ export async function POST(request: Request) {
         select: {
           id: true,
           phoneNumber: true,
-          apiProvider: true,
           graphPhoneNumberId: true,
           connectedAt: true,
           apiToken: true,
@@ -103,7 +96,6 @@ export async function POST(request: Request) {
         id: row.id,
         phone_number: row.phoneNumber,
         graph_phone_number_id: row.graphPhoneNumberId ?? null,
-        api_provider: row.apiProvider,
         has_api_token: Boolean(row.apiToken?.trim()),
         connected_at: row.connectedAt.toISOString(),
       })
@@ -122,8 +114,6 @@ export async function POST(request: Request) {
     }
 
     const phoneNumber = body.phone_number.trim()
-    const rawProvider = body.api_provider?.trim().toLowerCase() || "meta"
-    const apiProvider = WHATSAPP_PROVIDERS.has(rawProvider) ? rawProvider : "meta"
     const graphId =
       body.graph_phone_number_id !== undefined
         ? body.graph_phone_number_id?.trim() || null
@@ -141,20 +131,18 @@ export async function POST(request: Request) {
       create: {
         barbershopId,
         phoneNumber,
-        apiProvider,
+        apiProvider: "meta",
         apiToken: tokenUpdate ?? null,
         graphPhoneNumberId: graphId === undefined ? null : graphId,
       },
       update: {
         phoneNumber,
-        apiProvider,
         ...(graphId !== undefined ? { graphPhoneNumberId: graphId } : {}),
         ...(tokenUpdate !== undefined ? { apiToken: tokenUpdate } : {}),
       },
       select: {
         id: true,
         phoneNumber: true,
-        apiProvider: true,
         graphPhoneNumberId: true,
         connectedAt: true,
         apiToken: true,
@@ -165,7 +153,6 @@ export async function POST(request: Request) {
       id: row.id,
       phone_number: row.phoneNumber,
       graph_phone_number_id: row.graphPhoneNumberId,
-      api_provider: row.apiProvider,
       has_api_token: Boolean(row.apiToken?.trim()),
       connected_at: row.connectedAt.toISOString(),
     })
