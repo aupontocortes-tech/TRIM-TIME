@@ -1,0 +1,3251 @@
+"use client"
+
+import { useState, useEffect, useMemo, useRef } from "react"
+import { useParams } from "next/navigation"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { InputOTP, InputOTPGroup, InputOTPSlot, REGEXP_ONLY_DIGITS } from "@/components/ui/input-otp"
+import { Label } from "@/components/ui/label"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import {
+  Scissors,
+  Clock,
+  MapPin,
+  Star,
+  ChevronLeft,
+  ChevronRight,
+  Check,
+  Calendar,
+  EyeOff,
+  Eye,
+  LogOut,
+  Phone,
+  Building2,
+  Bell,
+  Camera,
+  Loader2,
+} from "lucide-react"
+import {
+  clearConfirmedBooking,
+  loadConfirmedBooking,
+  saveConfirmedBooking,
+  type PersistedClientBookingV1,
+} from "@/lib/cliente-booking-persist"
+import {
+  clearSavedClientProfile,
+  loadSavedClientProfile,
+  saveSavedClientProfile,
+} from "@/lib/cliente-booking-saved-profile"
+import { formatCpfDisplay, cpfDigits } from "@/lib/cpf"
+import { clientPhoneDigits, clientPhonesMatch } from "@/lib/client-phone-utils"
+import { openingHoursFromSettings } from "@/lib/barbershop-settings-ui"
+import type { BarbershopBookingRules, BarbershopSettings } from "@/lib/db/types"
+import { compressImageToJpegDataUrl } from "@/lib/client-image-compress"
+import { MAX_PROFILE_PHOTO_DATA_URL_CHARS } from "@/lib/photo-data-url"
+import { urlBase64ToUint8Array } from "@/lib/push-client-utils"
+import { AppInstallPrompt } from "@/components/app-install-prompt"
+import { TrimPlayGame } from "@/components/trim-play/TrimPlayGame"
+import { TrimPlaySplash } from "@/components/trim-play/TrimPlaySplash"
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { isSlotPastGraceFromYmd } from "@/lib/appointment-reminder-time"
+import { normalizePublicOtpCode } from "@/lib/public-otp-code"
+import { ClientOAuthButtons } from "@/components/auth/client-oauth-buttons"
+import { ClientUnitPicker } from "@/components/booking/client-unit-picker"
+import {
+  clearClientOAuthRegisterDraft,
+  loadClientOAuthRegisterDraft,
+  saveClientOAuthRegisterDraft,
+} from "@/lib/client-oauth-storage"
+
+// Dados mockados da barbearia (viriam do banco de dados pelo slug)
+const barbeariaData = {
+  slug: "trim-time",
+  nome: "Trim Time",
+  descricao: "Sua barbearia de confiança. Corte, barba e cuidado masculino.",
+  logo: "/icon.png",
+  capa: "/placeholder.svg",
+  endereco: "Rua das Flores, 123 - Centro",
+  cidade: "São Paulo, SP",
+  telefone: "(11) 99999-9999",
+  instagram: "@trimtime",
+  horarioFuncionamento: "Seg-Sab: 9h às 20h",
+  avaliacao: 4.9,
+  totalAvaliacoes: 127,
+  servicos: [
+    { id: 1, nome: "Corte Masculino", descricao: "", preco: 45, duracao: 30 },
+    { id: 2, nome: "Barba", descricao: "", preco: 35, duracao: 20 },
+    { id: 3, nome: "Corte + Barba", descricao: "", preco: 70, duracao: 45 },
+    { id: 4, nome: "Sobrancelha", descricao: "", preco: 15, duracao: 10 },
+    { id: 5, nome: "Pigmentação", descricao: "", preco: 80, duracao: 40 },
+    { id: 6, nome: "Hidratação", descricao: "", preco: 50, duracao: 30 },
+  ],
+  profissionais: [
+    { id: 1, nome: "Carlos Silva", foto: "/placeholder.svg", especialidade: "Cortes Modernos" },
+    { id: 2, nome: "André Santos", foto: "/placeholder.svg", especialidade: "Barbas" },
+    { id: 3, nome: "Lucas Oliveira", foto: "/placeholder.svg", especialidade: "Degradê" },
+  ]
+}
+
+function parseHHMM(v: string): number | null {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(v.trim())
+  if (!m) return null
+  const hh = Number(m[1])
+  const mm = Number(m[2])
+  if (Number.isNaN(hh) || Number.isNaN(mm)) return null
+  return hh * 60 + mm
+}
+
+function formatHHMM(minutes: number): string {
+  const hh = Math.floor(minutes / 60)
+  const mm = minutes % 60
+  return `${hh.toString().padStart(2, "0")}:${mm.toString().padStart(2, "0")}`
+}
+
+// Gerar horários disponíveis em incrementos de 30 min entre abertura e fechamento.
+function gerarHorarios(open: string, close: string, stepMinutes = 30): string[] {
+  const openMin = parseHHMM(open)
+  const closeMin = parseHHMM(close)
+  if (openMin === null || closeMin === null) return []
+  if (closeMin <= openMin) return []
+
+  const out: string[] = []
+  for (let t = openMin; t < closeMin; t += stepMinutes) {
+    out.push(formatHHMM(t))
+  }
+  return out
+}
+
+// Gerar próximos 14 dias
+const gerarDias = () => {
+  const dias = []
+  const hoje = new Date()
+  for (let i = 0; i < 14; i++) {
+    const data = new Date(hoje)
+    data.setDate(hoje.getDate() + i)
+    dias.push(data)
+  }
+  return dias
+}
+
+const diasSemana = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
+const meses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
+
+/** Data local YYYY-MM-DD (evita trocar o dia com toISOString em UTC). */
+function toYMDLocal(d: Date) {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, "0")
+  const day = String(d.getDate()).padStart(2, "0")
+  return `${y}-${m}-${day}`
+}
+
+function minutesFromHHMM(value: string): number | null {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(value ?? "").trim())
+  if (!m) return null
+  const hh = Number(m[1])
+  const mm = Number(m[2])
+  if (Number.isNaN(hh) || Number.isNaN(mm)) return null
+  return hh * 60 + mm
+}
+
+function isValidEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim().toLowerCase())
+}
+
+function messageFromUnknownError(err: unknown): string {
+  if (err instanceof Error && err.message.trim()) return err.message.trim()
+  return "Algo deu errado. Tente novamente."
+}
+
+/** Só conta falhas em que o Supabase rejeita o OTP (401). Outros erros não gastam tentativa. */
+const OTP_UI_MAX_INVALID = 60
+const OTP_UI_LOCKOUT_MS = 60_000
+/** Cooldown do botão “Reenviar código”; alinhado ao OTP_RESEND_COOLDOWN_SECONDS da API (padrão 60s). */
+const OTP_UI_RESEND_COOLDOWN_MS = 62_000
+const OTP_UI_LOCKOUT_SEC = Math.ceil(OTP_UI_LOCKOUT_MS / 1000)
+/** Campo público: 6 dígitos (padrão Supabase). A API ainda aceita 6–10 caracteres se o projeto mudar. */
+const OTP_INPUT_MAX_LEN = 6
+
+function pushRemindersOkSessionKey(slug: string) {
+  return `trimtime_push_reminders_ok_v1_${slug}`
+}
+
+type ClienteAgendamento = {
+  id: string
+  nome: string
+  email: string
+  telefone: string
+  photo_url?: string | null
+  cpf?: string | null
+}
+
+type PublicUnit = {
+  id: string
+  name: string
+  phone: string | null
+  address: string | null
+  city: string | null
+  state: string | null
+  cep: string | null
+  maps_url: string | null
+}
+
+type PublicShopPayload = {
+  id: string
+  name: string
+  slug: string
+  phone: string | null
+  address: string | null
+  city: string | null
+  state: string | null
+  cep: string | null
+  maps_url?: string | null
+  opening_hours?: BarbershopSettings["opening_hours"] | null
+  booking_rules?: BarbershopBookingRules | null
+  /** Plano Pro/Premium: lista de espera ativa. */
+  waitlist_enabled?: boolean
+  waitlist_accept_deadline_minutes?: number | null
+  units: PublicUnit[]
+  services: { id: string; name: string; description?: string; price: number; duration: number }[]
+  barbers: { id: string; name: string; phone: string | null; photo_url?: string | null; photo_position?: number }[]
+}
+
+type ClienteListaEsperaUi = {
+  id: string
+  status: string
+  queue_position: number | null
+  queue_ahead: number | null
+  estimated_wait_minutes: number | null
+  offered_date?: string | null
+  offered_time?: string | null
+  barber?: { id?: string; name?: string }
+  service?: { id?: string; name?: string }
+}
+
+type CurrentPublicAppointmentPayload = {
+  appointment: null | {
+    client_id: string
+    client_name: string
+    date: string
+    time: string
+    barber_id: string
+    barber_name: string
+    unit_id: string | null
+    unit_name: string | null
+    services: { id: string; name: string; duration: number; price: number }[]
+    appointment_ids: string[]
+    total_price: number
+    total_duration: number
+  }
+}
+
+export default function BarbeariaPage() {
+  const params = useParams()
+  const slug = (params?.slug as string) || "trim-time"
+  const storageSuffix = `_${slug}`
+  const otpVerifyBusyRef = useRef(false)
+
+  const [authPhase, setAuthPhase] = useState<
+    "loading" | "cadastro" | "login" | "codigo" | "redefinir_senha" | "logado"
+  >("loading")
+  const [clienteLogado, setClienteLogado] = useState<ClienteAgendamento | null>(null)
+  const [authLoading, setAuthLoading] = useState(false)
+
+  const [etapa, setEtapa] = useState(1)
+  const [servicosSelecionados, setServicosSelecionados] = useState<string[]>([])
+  const [profissionalSelecionado, setProfissionalSelecionado] = useState<string | null>(null)
+  const [dataSelecionada, setDataSelecionada] = useState<Date | null>(null)
+  const [horarioSelecionado, setHorarioSelecionado] = useState<string | null>(null)
+  const [dadosCliente, setDadosCliente] = useState({
+    nome: "",
+    telefone: "",
+    email: "",
+    cpf: "",
+    foto: "",
+    fotoPosicao: 50,
+  })
+  const [dadosSalvosMsg, setDadosSalvosMsg] = useState<string | null>(null)
+  const [fotoConfigOpen, setFotoConfigOpen] = useState(false)
+  const [fotoEditDraft, setFotoEditDraft] = useState("")
+  const [fotoEditPos, setFotoEditPos] = useState(50)
+  const [fotoModalErr, setFotoModalErr] = useState<string | null>(null)
+  const [agendamentoConfirmado, setAgendamentoConfirmado] = useState(false)
+  const [bookingSummary, setBookingSummary] = useState<PersistedClientBookingV1 | null>(null)
+  const [isRemarcando, setIsRemarcando] = useState(false)
+  const [bookingLoading, setBookingLoading] = useState(false)
+  const [erroAgendamento, setErroAgendamento] = useState("")
+  const [waitlistDialogOpen, setWaitlistDialogOpen] = useState(false)
+  const [waitlistJoinBusy, setWaitlistJoinBusy] = useState(false)
+  const [waitlistAcceptBusy, setWaitlistAcceptBusy] = useState(false)
+  const [listaEsperaCliente, setListaEsperaCliente] = useState<ClienteListaEsperaUi | null>(null)
+  const [trimPlayStage, setTrimPlayStage] = useState<"intro" | "splash" | "game">("intro")
+  const [trimPlayCliente, setTrimPlayCliente] = useState<null | { id: string; nome: string }>(null)
+  const [pushReminderMsg, setPushReminderMsg] = useState<string | null>(null)
+  const [pushReminderBusy, setPushReminderBusy] = useState(false)
+  /** Após ativar com sucesso, some o bloco de lembretes (só barra Olá / Sair). */
+  const [pushRemindersActivated, setPushRemindersActivated] = useState(false)
+
+  // Cadastro: nome + telefone + e-mail → código por e-mail via Supabase Auth (API /auth/otp)
+  const [formCadastro, setFormCadastro] = useState({ nome: "", telefone: "", email: "" })
+  const [erroCadastro, setErroCadastro] = useState("")
+
+  const [otpEmail, setOtpEmail] = useState("")
+  const [otpIntent, setOtpIntent] = useState<"register" | "login" | "reset_password">("register")
+  const [resetSenhaForm, setResetSenhaForm] = useState({ novaSenha: "", confirmar: "" })
+  const [showNovaSenhaReset, setShowNovaSenhaReset] = useState(false)
+  const [erroRedefinirSenha, setErroRedefinirSenha] = useState("")
+  const [otpCode, setOtpCode] = useState("")
+  const [otpError, setOtpError] = useState("")
+  const [otpInvalidCount, setOtpInvalidCount] = useState(0)
+  const [otpLockUntil, setOtpLockUntil] = useState<number | null>(null)
+  const [otpResendNotBefore, setOtpResendNotBefore] = useState<number | null>(null)
+  const [otpUiNow, setOtpUiNow] = useState(() => Date.now())
+
+  const [formLogin, setFormLogin] = useState({ email: "", senha: "" })
+  /** Alternativa ao e-mail+senha: código de 6 dígitos no e-mail. */
+  const [loginWithEmailCode, setLoginWithEmailCode] = useState(false)
+  const [showSenhaLogin, setShowSenhaLogin] = useState(false)
+  const [erroLogin, setErroLogin] = useState("")
+  /** Voltou do Google no cadastro — falta nome/WhatsApp antes de concluir. */
+  const [oauthPendingComplete, setOauthPendingComplete] = useState(false)
+
+  /** Dados públicos da barbearia (API) — nome, contato, unidades */
+  const [publicMeta, setPublicMeta] = useState<PublicShopPayload | null>(null)
+  const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null)
+  const [occupiedTimes, setOccupiedTimes] = useState<string[]>([])
+
+  /** Atualiza a grade quando o relógio avança (só etapa Horário + data = hoje). */
+  const [bookingClockTick, setBookingClockTick] = useState(0)
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const bump = () => setBookingClockTick((n) => n + 1)
+    const hojeNaGrade =
+      etapa === 3 &&
+      dataSelecionada != null &&
+      toYMDLocal(dataSelecionada) === toYMDLocal(new Date())
+
+    const onVis = () => {
+      if (document.visibilityState !== "visible") return
+      if (
+        etapa !== 3 ||
+        !dataSelecionada ||
+        toYMDLocal(dataSelecionada) !== toYMDLocal(new Date())
+      ) {
+        return
+      }
+      bump()
+    }
+    document.addEventListener("visibilitychange", onVis)
+
+    let intervalId: number | undefined
+    if (hojeNaGrade) {
+      bump()
+      intervalId = window.setInterval(bump, 10_000)
+    }
+
+    return () => {
+      document.removeEventListener("visibilitychange", onVis)
+      if (intervalId !== undefined) window.clearInterval(intervalId)
+    }
+  }, [etapa, dataSelecionada])
+
+  useEffect(() => {
+    let cancelled = false
+    fetch(`/api/public/barbershops/${encodeURIComponent(slug)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: PublicShopPayload | null) => {
+        if (!cancelled && data?.name) setPublicMeta(data)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [slug])
+
+  useEffect(() => {
+    if (!listaEsperaCliente?.id || !publicMeta?.waitlist_enabled) return
+    const poll = () => {
+      void fetch(`/api/public/barbershops/${encodeURIComponent(slug)}/waitlist`, {
+        credentials: "include",
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((j: { items?: ClienteListaEsperaUi[] } | null) => {
+          if (!j?.items) return
+          const row = j.items.find((x) => x.id === listaEsperaCliente.id)
+          if (row) setListaEsperaCliente((prev) => (prev ? { ...prev, ...row } : prev))
+        })
+        .catch(() => {})
+    }
+    poll()
+    const timer = window.setInterval(poll, 15_000)
+    return () => window.clearInterval(timer)
+  }, [listaEsperaCliente?.id, publicMeta?.waitlist_enabled, slug])
+
+  useEffect(() => {
+    const units = publicMeta?.units
+    if (!units?.length) return
+    if (units.length === 1) {
+      setSelectedUnitId(units[0].id)
+      return
+    }
+    if (typeof window === "undefined") return
+    const saved = sessionStorage.getItem(`trimtime_unit_${slug}`)
+    if (saved && units.some((u) => u.id === saved)) {
+      setSelectedUnitId(saved)
+    }
+  }, [publicMeta, slug])
+
+  useEffect(() => {
+    if (authPhase !== "codigo") return
+    const id = window.setInterval(() => setOtpUiNow(Date.now()), 1000)
+    return () => window.clearInterval(id)
+  }, [authPhase])
+
+  useEffect(() => {
+    if (authPhase !== "codigo" || !otpLockUntil || otpUiNow < otpLockUntil) return
+    setOtpLockUntil(null)
+    setOtpInvalidCount(0)
+    setOtpError("")
+  }, [authPhase, otpLockUntil, otpUiNow])
+
+  const applyLoggedInClient = (c: ClienteAgendamento) => {
+    setClienteLogado(c)
+    const saved = loadSavedClientProfile(slug)
+    setDadosCliente({
+      nome: c.nome,
+      telefone: c.telefone,
+      email: c.email,
+      cpf: c.cpf ? formatCpfDisplay(c.cpf) : "",
+      foto: c.photo_url?.trim() || saved?.foto?.trim() || "",
+      fotoPosicao: saved?.fotoPosicao ?? 50,
+    })
+    setAuthPhase("logado")
+    setOauthPendingComplete(false)
+    clearClientOAuthRegisterDraft(slug)
+  }
+
+  const completeClientOAuthSession = async (
+    mode: "register" | "login",
+    nome?: string,
+    telefone?: string
+  ): Promise<{ ok: true } | { error: string }> => {
+    const res = await fetch(
+      `/api/public/barbershops/${encodeURIComponent(slug)}/auth-magic-complete`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          mode,
+          nome: nome?.trim(),
+          telefone: telefone?.trim(),
+        }),
+      }
+    )
+    const data = (await res.json().catch(() => ({}))) as { error?: string; client?: ClienteAgendamento }
+    if (!res.ok || !data.client) {
+      return { error: data.error?.trim() || "Não foi possível concluir o acesso." }
+    }
+    applyLoggedInClient(data.client)
+    return { ok: true }
+  }
+
+  useEffect(() => {
+    let cancelled = false
+
+    const run = async () => {
+      if (typeof window !== "undefined") {
+        const params = new URLSearchParams(window.location.search)
+        const oauthErr = params.get("client_oauth_error")
+        const oauthMsg = params.get("oauth_error_msg")?.trim()
+        const needProfile = params.get("oauth_need_profile") === "1"
+        const emailParam = params.get("email")?.trim()
+
+        if (oauthErr || needProfile) {
+          window.history.replaceState({}, "", window.location.pathname)
+          if (!cancelled) {
+            if (needProfile) {
+              setFormCadastro((p) => ({
+                ...p,
+                email: emailParam || p.email,
+              }))
+              setOauthPendingComplete(true)
+              setAuthPhase("cadastro")
+              setErroCadastro(
+                "E-mail confirmado com Google. Informe nome e WhatsApp e toque em «Concluir cadastro»."
+              )
+              return
+            }
+
+            const msg =
+              oauthMsg ||
+              (oauthErr === "not_registered"
+                ? "Este e-mail ainda não está cadastrado aqui. Use «Cadastre-se» ou crie conta com Google."
+                : oauthErr === "denied"
+                  ? "Login com Google cancelado."
+                  : oauthErr === "phone_conflict"
+                    ? "Este telefone já está em outro e-mail nesta barbearia."
+                    : oauthErr === "shop_not_found"
+                      ? "Barbearia não encontrada. Confira se o link de agendamento está correto."
+                    : oauthErr === "session"
+                      ? "Sessão do Google expirada. Tente de novo."
+                      : "Não foi possível entrar com Google. Tente de novo ou use o código por e-mail.")
+            setErroLogin(msg)
+            setAuthPhase(oauthErr === "not_registered" ? "cadastro" : "login")
+          }
+          return
+        }
+      }
+
+      fetch(`/api/public/barbershops/${encodeURIComponent(slug)}/auth/session`, {
+        credentials: "include",
+        cache: "no-store",
+      })
+        .then((r) => (r.ok ? r.json() : { client: null }))
+        .then((data: { client?: ClienteAgendamento | null }) => {
+          if (cancelled) return
+          const c = data?.client ?? null
+          if (c) {
+            applyLoggedInClient(c)
+            return
+          }
+          setClienteLogado(null)
+          setAuthPhase("cadastro")
+        })
+        .catch(() => {
+          if (cancelled) return
+          setClienteLogado(null)
+          setAuthPhase("cadastro")
+        })
+    }
+
+    void run()
+
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- completeClientOAuthSession estável por slug
+  }, [slug])
+
+  /** Lembrete push já ativado nesta aba — esconde o botão após refresh. */
+  useEffect(() => {
+    if (typeof window === "undefined" || authPhase !== "logado" || !clienteLogado) return
+    try {
+      if (sessionStorage.getItem(pushRemindersOkSessionKey(slug)) === "1") {
+        setPushRemindersActivated(true)
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [authPhase, clienteLogado, slug])
+
+  /** Reabrir o link: restaura resumo; tela cheia ou modo navegação conforme uiFocus salvo */
+  useEffect(() => {
+    if (authPhase !== "logado") return
+    const p = loadConfirmedBooking(slug)
+    if (!p) {
+      setBookingSummary(null)
+      setIsRemarcando(false)
+      return
+    }
+
+    const ymdLocal = p.dataIso.slice(0, 10)
+    if (isSlotPastGraceFromYmd(ymdLocal, p.horario)) {
+      clearConfirmedBooking(slug)
+      setBookingSummary(null)
+      setIsRemarcando(false)
+      setAgendamentoConfirmado(false)
+      return
+    }
+
+    if (clienteLogado) {
+      const idMatch = p.clienteId === clienteLogado.id
+      const phoneMatch =
+        typeof p.clientPhoneDigits === "string" &&
+        p.clientPhoneDigits.length >= 10 &&
+        clientPhonesMatch(p.clientPhoneDigits, clienteLogado.telefone)
+      if (!idMatch && !phoneMatch) {
+        setBookingSummary(null)
+        setIsRemarcando(false)
+        setAgendamentoConfirmado(false)
+        return
+      }
+    } else if (p.bookedWithoutLogin === false) {
+      /** Confirmado logado, sessão sumiu: só mostra se o telefone salvo neste aparelho bater. */
+      const saved = loadSavedClientProfile(slug)
+      const phoneOk =
+        typeof p.clientPhoneDigits === "string" &&
+        p.clientPhoneDigits.length >= 10 &&
+        saved?.telefone &&
+        clientPhonesMatch(p.clientPhoneDigits, saved.telefone)
+      if (!phoneOk) {
+        setBookingSummary(null)
+        setIsRemarcando(false)
+        setAgendamentoConfirmado(false)
+        return
+      }
+    }
+
+    setBookingSummary(p)
+    /** Sem uiFocus salvo: tela principal com card (jogo / remarcar / ver confirmação), não etapa 1. */
+    const focus = p.uiFocus ?? "browsing"
+    if (focus === "browsing") {
+      setAgendamentoConfirmado(false)
+      setTrimPlayStage("intro")
+      setEtapa(1)
+    } else {
+      setAgendamentoConfirmado(true)
+      setTrimPlayStage("intro")
+    }
+
+    if (clienteLogado) {
+      const saved = loadSavedClientProfile(slug)
+      setDadosCliente((prev) => ({
+        nome: p.nomeExibicao || clienteLogado.nome,
+        telefone: clienteLogado.telefone,
+        email: clienteLogado.email,
+        cpf: clienteLogado.cpf ? formatCpfDisplay(clienteLogado.cpf) : "",
+        foto:
+          clienteLogado.photo_url?.trim() ||
+          prev.foto?.trim() ||
+          saved?.foto?.trim() ||
+          "",
+        fotoPosicao: prev.fotoPosicao ?? saved?.fotoPosicao ?? 50,
+      }))
+    } else {
+      setDadosCliente((prev) => ({
+        ...prev,
+        nome: p.nomeExibicao || prev.nome,
+        telefone: prev.telefone,
+        email: prev.email,
+        foto: prev.foto,
+      }))
+    }
+  }, [authPhase, clienteLogado, slug])
+
+  /**
+   * Sincroniza com o servidor: sem agendamento ativo no banco, limpa resumo local (evita card após expiração).
+   * Se não houver resumo local, restaura a partir da API.
+   */
+  useEffect(() => {
+    if (authPhase !== "logado") return
+    let cancelled = false
+
+    const savedProfile = loadSavedClientProfile(slug)
+    const phoneHint = clienteLogado?.telefone || dadosCliente.telefone || savedProfile?.telefone || ""
+    const digits = clientPhoneDigits(phoneHint)
+    const canQuery = Boolean(clienteLogado) || digits.length >= 10
+    if (!canQuery) return
+
+    const query = digits.length >= 10 ? `?phone=${encodeURIComponent(phoneHint)}` : ""
+
+    fetch(`/api/public/barbershops/${encodeURIComponent(slug)}/appointments/current${query}`, {
+      credentials: "include",
+      cache: "no-store",
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: CurrentPublicAppointmentPayload | null) => {
+        if (cancelled || data == null) return
+        const appt = data.appointment
+        if (!appt) {
+          clearConfirmedBooking(slug)
+          setBookingSummary(null)
+          setIsRemarcando(false)
+          setAgendamentoConfirmado(false)
+          return
+        }
+
+        if (bookingSummary) return
+
+        const next: PersistedClientBookingV1 = {
+          v: 1,
+          clienteId: appt.client_id,
+          confirmedAt: new Date().toISOString(),
+          unitId: appt.unit_id,
+          unitName: appt.unit_name,
+          dataIso: `${appt.date}T12:00:00`,
+          horario: appt.time.slice(0, 5),
+          profissionalId: appt.barber_id,
+          profissionalNome: appt.barber_name,
+          servicos: appt.services.map((s) => ({
+            id: s.id,
+            nome: s.name,
+            preco: Number(s.price ?? 0),
+            duracao: Number(s.duration ?? 0),
+          })),
+          nomeExibicao: appt.client_name || clienteLogado?.nome || dadosCliente.nome || "Cliente",
+          totalPreco: Number(appt.total_price ?? 0),
+          totalDuracao: Number(appt.total_duration ?? 0),
+          clientPhoneDigits: clientPhoneDigits(phoneHint) || null,
+          bookedWithoutLogin: !clienteLogado,
+          appointmentIds: Array.isArray(appt.appointment_ids) ? appt.appointment_ids : undefined,
+          uiFocus: "browsing",
+        }
+
+        saveConfirmedBooking(slug, next)
+        setBookingSummary(next)
+        setAgendamentoConfirmado(false)
+        setTrimPlayStage("intro")
+        setEtapa(1)
+        setDadosCliente((prev) => ({
+          ...prev,
+          nome: prev.nome || next.nomeExibicao,
+          telefone: prev.telefone || phoneHint,
+        }))
+      })
+      .catch(() => {})
+
+    return () => {
+      cancelled = true
+    }
+  }, [authPhase, bookingSummary, clienteLogado, dadosCliente.nome, dadosCliente.telefone, slug])
+
+  useEffect(() => {
+    if (!agendamentoConfirmado) return
+    setTrimPlayStage("intro")
+
+    if (clienteLogado) {
+      setTrimPlayCliente({ id: clienteLogado.id, nome: clienteLogado.nome })
+      return
+    }
+
+    if (typeof window === "undefined") return
+    const key = `trimplay_game_cliente_${slug}`
+    try {
+      const raw = localStorage.getItem(key)
+      if (raw) {
+        const parsed = JSON.parse(raw) as { id: string; nome: string }
+        if (parsed?.id && parsed?.nome) {
+          setTrimPlayCliente({ id: parsed.id, nome: parsed.nome })
+          return
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    const id = `gp_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
+    const nome = dadosCliente.nome?.trim() || "Cliente"
+    const payload = { id, nome }
+    try {
+      localStorage.setItem(key, JSON.stringify(payload))
+    } catch {
+      // ignore
+    }
+    setTrimPlayCliente(payload)
+  }, [agendamentoConfirmado, clienteLogado, dadosCliente.nome, slug])
+
+  const formatPhone = (value: string) => {
+    const numbers = value.replace(/\D/g, "")
+    if (numbers.length <= 2) return value
+    if (numbers.length <= 7) return `(${numbers.slice(0, 2)}) ${numbers.slice(2)}`
+    return `(${numbers.slice(0, 2)}) ${numbers.slice(2, 7)}-${numbers.slice(7, 11)}`
+  }
+
+  const formatCpfInput = (value: string) =>
+    formatCpfDisplay(value.replace(/\D/g, "").slice(0, 11))
+
+  const sendOtpEmailRequest = async (
+    intent: "register" | "login" | "reset_password",
+    email: string
+  ) => {
+    const normalized = email.trim().toLowerCase()
+    const body =
+      intent === "register"
+        ? {
+            intent: "register" as const,
+            email: normalized,
+            nome: formCadastro.nome.trim(),
+            telefone: formCadastro.telefone,
+          }
+        : intent === "reset_password"
+          ? { intent: "reset_password" as const, email: normalized }
+          : { intent: "login" as const, email: normalized }
+    const res = await fetch(`/api/public/barbershops/${encodeURIComponent(slug)}/auth-otp-send`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    })
+    const data = (await res.json().catch(() => ({}))) as { error?: string }
+    if (!res.ok) {
+      throw new Error(data.error?.trim() || "Não foi possível enviar o código.")
+    }
+  }
+
+  const handleStartPasswordReset = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setErroRedefinirSenha("")
+    const email = otpEmail.trim().toLowerCase()
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setErroRedefinirSenha("Informe um e-mail válido")
+      return
+    }
+    setAuthLoading(true)
+    try {
+      await sendOtpEmailRequest("reset_password", email)
+      setOtpIntent("reset_password")
+      setOtpCode("")
+      setResetSenhaForm({ novaSenha: "", confirmar: "" })
+      setOtpInvalidCount(0)
+      setOtpLockUntil(null)
+      setOtpError("")
+      setOtpResendNotBefore(Date.now() + OTP_UI_RESEND_COOLDOWN_MS)
+      setAuthPhase("codigo")
+    } catch (err) {
+      setErroRedefinirSenha(messageFromUnknownError(err))
+    } finally {
+      setAuthLoading(false)
+    }
+  }
+
+  const handleConfirmPasswordReset = async () => {
+    if (otpLockUntil && otpUiNow < otpLockUntil) return
+    const code = normalizePublicOtpCode(otpCode)
+    if (code.length !== OTP_INPUT_MAX_LEN) {
+      setOtpError(`Digite os ${OTP_INPUT_MAX_LEN} dígitos do código.`)
+      return
+    }
+    const em = otpEmail.trim().toLowerCase()
+    if (!em) {
+      setOtpError("E-mail ausente. Volte e tente de novo.")
+      return
+    }
+    const { novaSenha, confirmar } = resetSenhaForm
+    if (novaSenha.length < 6) {
+      setOtpError("A nova senha deve ter pelo menos 6 caracteres.")
+      return
+    }
+    if (novaSenha !== confirmar) {
+      setOtpError("As senhas não coincidem.")
+      return
+    }
+    if (otpVerifyBusyRef.current || authLoading) return
+    otpVerifyBusyRef.current = true
+    setAuthLoading(true)
+    setOtpError("")
+    try {
+      const res = await fetch(
+        `/api/public/barbershops/${encodeURIComponent(slug)}/auth/password-reset/confirm`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            email: em,
+            code,
+            senha: novaSenha,
+            confirmarSenha: confirmar,
+          }),
+        }
+      )
+      const data = (await res.json().catch(() => ({}))) as { error?: string; client?: ClienteAgendamento }
+      if (!res.ok || !data.client) {
+        setOtpError(data.error?.trim() || "Não foi possível redefinir a senha.")
+        return
+      }
+      setClienteLogado(data.client)
+      setDadosCliente({
+        nome: data.client.nome,
+        telefone: data.client.telefone,
+        email: data.client.email,
+        cpf: data.client.cpf ? formatCpfDisplay(data.client.cpf) : "",
+        foto: data.client.photo_url ?? "",
+        fotoPosicao: 50,
+      })
+      setFormLogin({ email: em, senha: "" })
+      setLoginWithEmailCode(false)
+      setOtpCode("")
+      setResetSenhaForm({ novaSenha: "", confirmar: "" })
+      setAuthPhase("logado")
+    } catch {
+      setOtpError("Erro de rede. Tente novamente.")
+    } finally {
+      otpVerifyBusyRef.current = false
+      setAuthLoading(false)
+    }
+  }
+
+  const handleConfirmOtp = async () => {
+    if (otpIntent === "reset_password") {
+      void handleConfirmPasswordReset()
+      return
+    }
+    if (otpLockUntil && otpUiNow < otpLockUntil) return
+    const code = normalizePublicOtpCode(otpCode)
+    if (code.length !== OTP_INPUT_MAX_LEN) {
+      setOtpError(`Digite os ${OTP_INPUT_MAX_LEN} dígitos do código e toque em Confirmar.`)
+      return
+    }
+    if (otpVerifyBusyRef.current || authLoading) return
+    const em = otpEmail.trim().toLowerCase()
+    if (!em) {
+      setOtpError("E-mail ausente. Volte e tente de novo.")
+      return
+    }
+    otpVerifyBusyRef.current = true
+    setAuthLoading(true)
+    setOtpError("")
+    try {
+      const res = await fetch(`/api/public/barbershops/${encodeURIComponent(slug)}/auth-otp-verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ intent: otpIntent, email: em, code }),
+      })
+      const data = (await res.json().catch(() => ({}))) as { error?: string; client?: ClienteAgendamento }
+      if (!res.ok || !data.client) {
+        const msg = data.error?.trim() || "Não foi possível confirmar. Tente de novo."
+        if (res.status === 401) {
+          setOtpInvalidCount((prev) => {
+            const next = prev + 1
+            if (next >= OTP_UI_MAX_INVALID) {
+              setOtpLockUntil(Date.now() + OTP_UI_LOCKOUT_MS)
+              setOtpError(
+                `Código inválido (tentativa ${next} de ${OTP_UI_MAX_INVALID}). Aguarde ${OTP_UI_LOCKOUT_SEC} segundos para tentar de novo.`
+              )
+            } else {
+              setOtpError(`Código inválido (tentativa ${next} de ${OTP_UI_MAX_INVALID}).`)
+            }
+            return next
+          })
+        } else {
+          setOtpError(msg)
+        }
+        return
+      }
+      setOtpInvalidCount(0)
+      setOtpLockUntil(null)
+      setClienteLogado(data.client)
+      setDadosCliente({
+        nome: data.client.nome,
+        telefone: data.client.telefone,
+        email: data.client.email,
+        cpf: data.client.cpf ? formatCpfDisplay(data.client.cpf) : "",
+        foto: data.client.photo_url ?? "",
+        fotoPosicao: 50,
+      })
+      setOtpCode("")
+      setAuthPhase("logado")
+    } catch {
+      setOtpError("Erro de rede. Tente novamente sem sair desta tela.")
+    } finally {
+      otpVerifyBusyRef.current = false
+      setAuthLoading(false)
+    }
+  }
+
+  const handleOAuthRegisterComplete = async () => {
+    setErroCadastro("")
+    setAuthLoading(true)
+    const digits = formCadastro.telefone.replace(/\D/g, "")
+    if (digits.length < 10) {
+      setErroCadastro("Informe um telefone válido com DDD")
+      setAuthLoading(false)
+      return
+    }
+    if (!formCadastro.nome.trim()) {
+      setErroCadastro("Informe seu nome completo")
+      setAuthLoading(false)
+      return
+    }
+    saveClientOAuthRegisterDraft(slug, {
+      nome: formCadastro.nome.trim(),
+      telefone: formCadastro.telefone,
+    })
+    const result = await completeClientOAuthSession(
+      "register",
+      formCadastro.nome,
+      formCadastro.telefone
+    )
+    if ("error" in result) {
+      setErroCadastro(result.error)
+    }
+    setAuthLoading(false)
+  }
+
+  const handleCadastro = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (oauthPendingComplete) {
+      await handleOAuthRegisterComplete()
+      return
+    }
+    setErroCadastro("")
+    setOtpError("")
+    setAuthLoading(true)
+    const digits = formCadastro.telefone.replace(/\D/g, "")
+    if (digits.length < 10) {
+      setErroCadastro("Informe um telefone válido com DDD")
+      setAuthLoading(false)
+      return
+    }
+    const email = formCadastro.email.trim().toLowerCase()
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setErroCadastro("Informe um e-mail válido")
+      setAuthLoading(false)
+      return
+    }
+    try {
+      await sendOtpEmailRequest("register", email)
+      setOtpEmail(email)
+      setOtpIntent("register")
+      setOtpCode("")
+      setOtpInvalidCount(0)
+      setOtpLockUntil(null)
+      setOtpError("")
+      setOtpResendNotBefore(Date.now() + OTP_UI_RESEND_COOLDOWN_MS)
+      setAuthPhase("codigo")
+    } catch (e) {
+      setErroCadastro(messageFromUnknownError(e))
+    } finally {
+      setAuthLoading(false)
+    }
+  }
+
+  const handleResendOtp = async () => {
+    if (otpResendNotBefore && Date.now() < otpResendNotBefore) return
+    if (authLoading || otpVerifyBusyRef.current) return
+    setOtpError("")
+    const em = otpEmail.trim().toLowerCase()
+    if (!em || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) {
+      setOtpError("Use Voltar e informe o e-mail de novo.")
+      return
+    }
+    if (otpIntent === "register") {
+      const digits = formCadastro.telefone.replace(/\D/g, "")
+      if (digits.length < 10 || !formCadastro.nome.trim()) {
+        setOtpError("Volte ao cadastro e confira nome, telefone e e-mail.")
+        return
+      }
+    }
+    setAuthLoading(true)
+    try {
+      await sendOtpEmailRequest(otpIntent, em)
+      setOtpCode("")
+      setOtpInvalidCount(0)
+      setOtpLockUntil(null)
+      setOtpResendNotBefore(Date.now() + OTP_UI_RESEND_COOLDOWN_MS)
+    } catch (e) {
+      setOtpError(messageFromUnknownError(e))
+    } finally {
+      setAuthLoading(false)
+    }
+  }
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setErroLogin("")
+    setOtpError("")
+    setAuthLoading(true)
+    try {
+      const email = formLogin.email.trim().toLowerCase()
+
+      if (!loginWithEmailCode) {
+        const body = {
+          emailOuTelefone: email || formLogin.email.trim(),
+          senha: formLogin.senha,
+        }
+        if (!body.emailOuTelefone) {
+          setErroLogin("Informe o e-mail")
+          return
+        }
+        if (!body.senha) {
+          setErroLogin("Informe a senha")
+          return
+        }
+        const res = await fetch(`/api/public/barbershops/${encodeURIComponent(slug)}/auth/login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify(body),
+        })
+        const data = (await res.json().catch(() => ({}))) as {
+          error?: string
+          code?: string
+          client?: ClienteAgendamento
+        }
+        if (!res.ok || !data.client) {
+          setErroLogin(data.error || "E-mail ou senha incorretos")
+          if (data.code === "no_password") {
+            setOtpEmail(email)
+          }
+          return
+        }
+        setClienteLogado(data.client)
+        setDadosCliente({
+          nome: data.client.nome,
+          telefone: data.client.telefone,
+          email: data.client.email,
+          cpf: data.client.cpf ? formatCpfDisplay(data.client.cpf) : "",
+          foto: data.client.photo_url ?? "",
+          fotoPosicao: 50,
+        })
+        setAuthPhase("logado")
+        return
+      }
+
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        setErroLogin("Informe um e-mail válido")
+        return
+      }
+      await sendOtpEmailRequest("login", email)
+      setOtpEmail(email)
+      setOtpIntent("login")
+      setOtpCode("")
+      setOtpInvalidCount(0)
+      setOtpLockUntil(null)
+      setOtpError("")
+      setOtpResendNotBefore(Date.now() + OTP_UI_RESEND_COOLDOWN_MS)
+      setAuthPhase("codigo")
+    } catch (e) {
+      setErroLogin(messageFromUnknownError(e))
+    } finally {
+      setAuthLoading(false)
+    }
+  }
+
+  const handleLogout = async () => {
+    await fetch(`/api/public/barbershops/${encodeURIComponent(slug)}/push-subscribe`, {
+      method: "DELETE",
+      credentials: "include",
+    }).catch(() => {})
+    await fetch(`/api/public/barbershops/${encodeURIComponent(slug)}/auth/session`, {
+      method: "DELETE",
+      credentials: "include",
+    }).catch(() => {})
+    setClienteLogado(null)
+    setAuthPhase("cadastro")
+    setOtpEmail("")
+    setOtpCode("")
+    setOtpError("")
+    setOtpInvalidCount(0)
+    setOtpLockUntil(null)
+    setOtpResendNotBefore(null)
+    setOtpIntent("register")
+    setFormLogin({ email: "", senha: "" })
+    setLoginWithEmailCode(false)
+    setFormCadastro({ nome: "", telefone: "", email: "" })
+    setEtapa(1)
+    setServicosSelecionados([])
+    setProfissionalSelecionado(null)
+    setDataSelecionada(null)
+    setHorarioSelecionado(null)
+    setDadosCliente({ nome: "", telefone: "", email: "", cpf: "", foto: "", fotoPosicao: 50 })
+    setPushReminderMsg(null)
+    setPushRemindersActivated(false)
+    try {
+      sessionStorage.removeItem(pushRemindersOkSessionKey(slug))
+    } catch {
+      /* ignore */
+    }
+    setBookingSummary(null)
+    setIsRemarcando(false)
+    setAgendamentoConfirmado(false)
+    setTrimPlayStage("intro")
+  }
+
+  const msgLembretesIndisponivel =
+    "Lembretes por notificação não estão disponíveis neste momento. Seu agendamento funciona normalmente."
+
+  const ativarLembretesPush = async () => {
+    setPushReminderMsg(null)
+    setPushReminderBusy(true)
+    try {
+      if (typeof window === "undefined" || !("serviceWorker" in navigator) || !("PushManager" in window)) {
+        setPushReminderMsg("Este navegador não permite ativar lembretes assim. Você pode continuar o agendamento.")
+        return
+      }
+      const pkRes = await fetch("/api/public/push/vapid-public-key")
+      if (!pkRes.ok) {
+        await pkRes.json().catch(() => ({}))
+        setPushReminderMsg(msgLembretesIndisponivel)
+        return
+      }
+      const { publicKey } = (await pkRes.json()) as { publicKey?: string }
+      if (!publicKey) {
+        setPushReminderMsg(msgLembretesIndisponivel)
+        return
+      }
+      const perm = await Notification.requestPermission()
+      if (perm !== "granted") {
+        setPushReminderMsg("Permissão negada. Se mudar de ideia, ative notificações nas configurações do navegador.")
+        return
+      }
+      const reg = await navigator.serviceWorker.ready
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey),
+      })
+      const json = sub.toJSON()
+      const saveRes = await fetch(`/api/public/barbershops/${encodeURIComponent(slug)}/push-subscribe`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subscription: json }),
+      })
+      await saveRes.json().catch(() => ({}))
+      if (!saveRes.ok) {
+        setPushReminderMsg("Não foi possível concluir agora. Tente de novo mais tarde.")
+        return
+      }
+      try {
+        sessionStorage.setItem(pushRemindersOkSessionKey(slug), "1")
+      } catch {
+        /* ignore */
+      }
+      setPushRemindersActivated(true)
+      setPushReminderMsg(null)
+    } catch {
+      setPushReminderMsg("Algo deu errado ao ativar. Você pode tentar de novo depois.")
+    } finally {
+      setPushReminderBusy(false)
+    }
+  }
+
+  const barbearia = {
+    ...barbeariaData,
+    nome: publicMeta?.name ?? barbeariaData.nome,
+    telefone: publicMeta?.phone ?? barbeariaData.telefone,
+    servicos:
+      publicMeta?.services?.length
+        ? publicMeta.services.map((service) => ({
+            id: service.id,
+            nome: service.name,
+            descricao: (service.description ?? "").trim(),
+            preco: service.price,
+            duracao: service.duration,
+          }))
+        : barbeariaData.servicos.map((service) => ({
+            ...service,
+            id: String(service.id),
+            descricao: service.descricao ?? "",
+          })),
+    profissionais:
+      publicMeta?.barbers?.length
+        ? publicMeta.barbers.map((barber) => ({
+            id: barber.id,
+            nome: barber.name,
+            foto: barber.photo_url || "/placeholder.svg",
+            fotoPosition: barber.photo_position ?? 50,
+            especialidade: barber.phone ? `Contato: ${barber.phone}` : "Profissional",
+          }))
+        : barbeariaData.profissionais.map((barber) => ({ ...barber, id: String(barber.id) })),
+  }
+  const dias = gerarDias()
+  const openingHours = useMemo(
+    () => openingHoursFromSettings(publicMeta?.opening_hours ?? undefined),
+    [publicMeta]
+  )
+  const dayKeyByIndex = [
+    "domingo",
+    "segunda",
+    "terca",
+    "quarta",
+    "quinta",
+    "sexta",
+    "sabado",
+  ] as const
+
+  const dayKeyFromDate = (d: Date) => dayKeyByIndex[d.getDay()]
+
+  const bookingRules = publicMeta?.booking_rules ?? null
+  const minLeadMinutes = Math.max(0, Math.round(Number(bookingRules?.min_lead_minutes ?? 30) || 30))
+
+  const horarios = useMemo(() => {
+    if (!dataSelecionada) return [] as string[]
+    const key = dayKeyFromDate(dataSelecionada)
+    const day = openingHours[key]
+    if (!day?.ativo) return []
+    return gerarHorarios(day.abertura, day.fechamento)
+  }, [dataSelecionada, openingHours])
+
+  const horariosBloqueadosFolga = useMemo(() => {
+    if (!dataSelecionada) return new Set<string>()
+    const key = dayKeyFromDate(dataSelecionada)
+    const ranges = Array.isArray(bookingRules?.blocked_ranges?.[key]) ? bookingRules?.blocked_ranges?.[key] : []
+    if (!ranges?.length) return new Set<string>()
+    const blocked = new Set<string>()
+    for (const slot of horarios) {
+      const slotMin = minutesFromHHMM(slot)
+      if (slotMin == null) continue
+      const isBlocked = ranges.some((range) => {
+        const start = minutesFromHHMM(String(range?.start ?? ""))
+        const end = minutesFromHHMM(String(range?.end ?? ""))
+        return start != null && end != null && end > start && slotMin >= start && slotMin < end
+      })
+      if (isBlocked) blocked.add(slot)
+    }
+    return blocked
+  }, [dataSelecionada, bookingRules, horarios])
+
+  const horariosBloqueadosAntecedencia = useMemo(() => {
+    if (!dataSelecionada) return new Set<string>()
+    const now = new Date()
+    if (toYMDLocal(dataSelecionada) !== toYMDLocal(now)) return new Set<string>()
+    const cutoffMs = now.getTime() + minLeadMinutes * 60_000
+    const y = dataSelecionada.getFullYear()
+    const mo = dataSelecionada.getMonth()
+    const d = dataSelecionada.getDate()
+    const blocked = new Set<string>()
+    for (const slot of horarios) {
+      const slotMin = minutesFromHHMM(slot)
+      if (slotMin == null) continue
+      const hh = Math.floor(slotMin / 60)
+      const mm = slotMin % 60
+      const slotStart = new Date(y, mo, d, hh, mm, 0, 0)
+      if (slotStart.getTime() < cutoffMs) blocked.add(slot)
+    }
+    return blocked
+  }, [dataSelecionada, minLeadMinutes, horarios, bookingClockTick])
+
+  const selectedUnit =
+    publicMeta?.units?.find((u) => u.id === selectedUnitId) ?? null
+  const displayNome = publicMeta?.name ?? barbeariaData.nome
+  const fotoClienteHeader =
+    clienteLogado?.photo_url?.trim() || dadosCliente.foto?.trim() || ""
+  const displayPhone =
+    selectedUnit?.phone ?? publicMeta?.phone ?? null
+  const displayAddress =
+    selectedUnit?.address ?? publicMeta?.address ?? null
+  const cityStateUnit = [selectedUnit?.city, selectedUnit?.state]
+    .filter(Boolean)
+    .join(" - ")
+  const cityStateBase = [publicMeta?.city, publicMeta?.state]
+    .filter(Boolean)
+    .join(" - ")
+  const displayCityLine = cityStateUnit || cityStateBase || null
+  const shopUnits = publicMeta?.units ?? []
+  const showUnitPicker = shopUnits.length > 0
+  const hasMultipleUnits = shopUnits.length > 1
+  /** Com resumo de agendamento ativo, só o card de gestão; no modo remarcar, reabre o wizard. */
+  const showAgendamentoWizard = !bookingSummary || isRemarcando
+
+  const displayHorarioFuncionamento = (() => {
+    const short: Record<(typeof dayKeyByIndex)[number], string> = {
+      segunda: "Seg",
+      terca: "Ter",
+      quarta: "Qua",
+      quinta: "Qui",
+      sexta: "Sex",
+      sabado: "Sáb",
+      domingo: "Dom",
+    }
+
+    const order = [...dayKeyByIndex]
+    const segments: string[] = []
+
+    let i = 0
+    while (i < order.length) {
+      const key = order[i]
+      const day = openingHours[key]
+      if (!day?.ativo) {
+        i++
+        continue
+      }
+
+      const open = day.abertura
+      const close = day.fechamento
+      let j = i + 1
+      while (j < order.length) {
+        const k = order[j]
+        const dk = openingHours[k]
+        if (!dk?.ativo || dk.abertura !== open || dk.fechamento !== close) break
+        j++
+      }
+
+      const start = short[order[i]]
+      const end = short[order[j - 1]]
+      const label = j - i >= 2 ? `${start}-${end}` : start
+
+      const fmtHour = (t: string) => {
+        const m = /^(\d{1,2}):(\d{2})$/.exec(t.trim())
+        if (!m) return t
+        const hh = Number(m[1])
+        return Number.isNaN(hh) ? t : `${hh}h`
+      }
+
+      segments.push(`${label}: ${fmtHour(open)} às ${fmtHour(close)}`)
+      i = j
+    }
+
+    return segments.length ? segments.join(" · ") : null
+  })()
+
+  const persistUnit = (id: string) => {
+    setSelectedUnitId(id)
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem(`trimtime_unit_${slug}`, id)
+    }
+  }
+
+  useEffect(() => {
+    if (!publicMeta) {
+      setOccupiedTimes([])
+      return
+    }
+    if (!dataSelecionada || !profissionalSelecionado) {
+      setOccupiedTimes([])
+      return
+    }
+    const date = toYMDLocal(dataSelecionada)
+    let cancelled = false
+    const unitQ =
+      selectedUnitId != null && selectedUnitId !== ""
+        ? `&unit_id=${encodeURIComponent(selectedUnitId)}`
+        : ""
+    fetch(
+      `/api/public/barbershops/${encodeURIComponent(slug)}/appointments?date=${encodeURIComponent(date)}&barber_id=${encodeURIComponent(profissionalSelecionado)}${unitQ}`,
+      { cache: "no-store" }
+    )
+      .then((r) => (r.ok ? r.json() : { occupied_times: [] }))
+      .then((data: { occupied_times?: string[] }) => {
+        if (!cancelled) setOccupiedTimes(Array.isArray(data.occupied_times) ? data.occupied_times : [])
+      })
+      .catch(() => {
+        if (!cancelled) setOccupiedTimes([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [dataSelecionada, profissionalSelecionado, slug, selectedUnitId, publicMeta])
+
+  useEffect(() => {
+    if (!horarioSelecionado) return
+    if (
+      occupiedTimes.includes(horarioSelecionado) ||
+      horariosBloqueadosFolga.has(horarioSelecionado) ||
+      horariosBloqueadosAntecedencia.has(horarioSelecionado)
+    ) {
+      setHorarioSelecionado(null)
+    }
+  }, [
+    horarioSelecionado,
+    occupiedTimes,
+    horariosBloqueadosFolga,
+    horariosBloqueadosAntecedencia,
+  ])
+
+  const toggleServico = (id: string) => {
+    setServicosSelecionados(prev => 
+      prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]
+    )
+  }
+
+  const servicosSelecionadosData = barbearia.servicos.filter(s => servicosSelecionados.includes(s.id))
+  const totalPreco = servicosSelecionadosData.reduce((acc, s) => acc + s.preco, 0)
+  const totalDuracao = servicosSelecionadosData.reduce((acc, s) => acc + s.duracao, 0)
+
+  const profissionalData = barbearia.profissionais.find(p => p.id === profissionalSelecionado)
+
+  const podeAvancar = () => {
+    switch (etapa) {
+      case 1: {
+        if (hasMultipleUnits && !selectedUnitId) return false
+        return servicosSelecionados.length > 0
+      }
+      case 2: return profissionalSelecionado !== null
+      case 3: return dataSelecionada !== null && horarioSelecionado !== null
+      case 4:
+        return (
+          publicMeta !== null &&
+          dadosCliente.nome.trim() !== "" &&
+          dadosCliente.telefone.trim() !== "" &&
+          isValidEmail(dadosCliente.email)
+        )
+      default: return false
+    }
+  }
+
+  const entrarNaListaEspera = async () => {
+    if (!dataSelecionada || !horarioSelecionado || profissionalSelecionado === null || !publicMeta?.waitlist_enabled)
+      return
+    setWaitlistJoinBusy(true)
+    try {
+      const res = await fetch(`/api/public/barbershops/${encodeURIComponent(slug)}/waitlist`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          barber_id: profissionalSelecionado,
+          service_ids: servicosSelecionados,
+          date: toYMDLocal(dataSelecionada),
+          time: horarioSelecionado,
+        }),
+      })
+      const j = (await res.json().catch(() => ({}))) as {
+        error?: string
+        item?: ClienteListaEsperaUi
+      }
+      if (!res.ok) {
+        setErroAgendamento(j.error || "Não foi possível entrar na fila.")
+        setWaitlistDialogOpen(false)
+        return
+      }
+      if (j.item) setListaEsperaCliente(j.item)
+      setWaitlistDialogOpen(false)
+    } catch {
+      setErroAgendamento("Erro ao entrar na fila.")
+      setWaitlistDialogOpen(false)
+    } finally {
+      setWaitlistJoinBusy(false)
+    }
+  }
+
+  const aceitarVagaListaEspera = async () => {
+    if (!listaEsperaCliente?.id || !publicMeta || !profissionalSelecionado) return
+    const od = listaEsperaCliente.offered_date
+    const ot = listaEsperaCliente.offered_time
+    if (!od || !ot) {
+      setErroAgendamento("Aguarde a notificação de vaga para poder confirmar.")
+      return
+    }
+    const prof = barbearia.profissionais.find((p) => p.id === profissionalSelecionado)
+    if (!prof) return
+    setWaitlistAcceptBusy(true)
+    setErroAgendamento("")
+    try {
+      const res = await fetch(
+        `/api/public/barbershops/${encodeURIComponent(slug)}/waitlist/${encodeURIComponent(listaEsperaCliente.id)}/accept`,
+        { method: "POST", credentials: "include" }
+      )
+      const j = (await res.json().catch(() => ({}))) as { error?: string; appointment_ids?: string[] }
+      if (!res.ok) {
+        setErroAgendamento(j.error || "Não foi possível confirmar o horário.")
+        return
+      }
+      const digitsTel = clientPhoneDigits(dadosCliente.telefone || clienteLogado?.telefone || "")
+      const summary: PersistedClientBookingV1 = {
+        v: 1,
+        clienteId: clienteLogado?.id ?? `guest_${Date.now()}`,
+        confirmedAt: new Date().toISOString(),
+        unitId: selectedUnitId,
+        unitName: selectedUnit?.name ?? null,
+        dataIso: `${od}T12:00:00`,
+        horario: ot.length >= 5 ? ot.slice(0, 5) : ot,
+        profissionalId: profissionalSelecionado,
+        profissionalNome: prof.nome,
+        servicos: servicosSelecionadosData.map((s) => ({
+          id: s.id,
+          nome: s.nome,
+          preco: s.preco,
+          duracao: s.duracao,
+        })),
+        nomeExibicao: dadosCliente.nome.trim() || clienteLogado?.nome || "Cliente",
+        totalPreco,
+        totalDuracao,
+        clientPhoneDigits: digitsTel.length >= 10 ? digitsTel : null,
+        bookedWithoutLogin: !clienteLogado,
+        appointmentIds: Array.isArray(j.appointment_ids) ? j.appointment_ids : undefined,
+        uiFocus: "confirmation",
+      }
+      saveConfirmedBooking(slug, summary)
+      setBookingSummary(summary)
+      setListaEsperaCliente(null)
+      setAgendamentoConfirmado(true)
+    } catch {
+      setErroAgendamento("Erro ao confirmar o horário.")
+    } finally {
+      setWaitlistAcceptBusy(false)
+    }
+  }
+
+  const confirmarAgendamento = async () => {
+    if (!dataSelecionada || !horarioSelecionado || profissionalSelecionado === null) return
+    if (!publicMeta) {
+      setErroAgendamento("Não foi possível carregar a barbearia. Atualize a página e tente novamente.")
+      return
+    }
+    const cpfNorm = cpfDigits(dadosCliente.cpf)
+    if (dadosCliente.cpf.trim() && !cpfNorm) {
+      setErroAgendamento("CPF inválido: use 11 dígitos ou deixe em branco.")
+      return
+    }
+    if (!isValidEmail(dadosCliente.email)) {
+      setErroAgendamento("E-mail obrigatório: informe um e-mail válido.")
+      return
+    }
+    const prof = barbearia.profissionais.find((p) => p.id === profissionalSelecionado)
+    if (!prof) return
+    const remarcaBase = isRemarcando ? bookingSummary ?? loadConfirmedBooking(slug) : null
+    const remarcaAppointmentIds =
+      remarcaBase?.appointmentIds?.map((id) => String(id).trim()).filter(Boolean) ?? []
+    const remarcaDate = remarcaBase?.dataIso ? toYMDLocal(new Date(remarcaBase.dataIso)) : undefined
+    setBookingLoading(true)
+    setErroAgendamento("")
+    try {
+      const res = await fetch(`/api/public/barbershops/${encodeURIComponent(slug)}/appointments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          barber_id: profissionalSelecionado,
+          service_ids: servicosSelecionados,
+          date: toYMDLocal(dataSelecionada),
+          time: horarioSelecionado,
+          unit_id: selectedUnitId,
+          remarca_appointment_ids: remarcaAppointmentIds.length ? remarcaAppointmentIds : undefined,
+          remarca_date: isRemarcando ? remarcaDate : undefined,
+          client: {
+            nome: dadosCliente.nome,
+            telefone: dadosCliente.telefone,
+            email: dadosCliente.email,
+            cpf: cpfNorm ?? undefined,
+            photo_url: dadosCliente.foto.trim() ? dadosCliente.foto : undefined,
+          },
+        }),
+      })
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string
+        client?: ClienteAgendamento
+        appointment_ids?: string[]
+        code?: string
+        waitlist_available?: boolean
+      }
+      if (!res.ok) {
+        const slotGone =
+          res.status === 409 &&
+          data.code === "SLOT_UNAVAILABLE" &&
+          data.waitlist_available &&
+          publicMeta?.waitlist_enabled
+        if (slotGone) {
+          setWaitlistDialogOpen(true)
+          setErroAgendamento("")
+          return
+        }
+        setErroAgendamento(data.error || "Não foi possível confirmar seu agendamento")
+        return
+      }
+      if (data.client) {
+        setClienteLogado(data.client)
+      }
+      const digitsTel = clientPhoneDigits(
+        dadosCliente.telefone || data.client?.telefone || clienteLogado?.telefone || ""
+      )
+      const summary: PersistedClientBookingV1 = {
+        v: 1,
+        clienteId: data.client?.id ?? clienteLogado?.id ?? `guest_${Date.now()}`,
+        confirmedAt: new Date().toISOString(),
+        unitId: selectedUnitId,
+        unitName: selectedUnit?.name ?? null,
+        dataIso: `${toYMDLocal(dataSelecionada)}T12:00:00`,
+        horario: horarioSelecionado,
+        profissionalId: profissionalSelecionado,
+        profissionalNome: prof.nome,
+        servicos: servicosSelecionadosData.map((s) => ({
+          id: s.id,
+          nome: s.nome,
+          preco: s.preco,
+          duracao: s.duracao,
+        })),
+        nomeExibicao: dadosCliente.nome.trim() || data.client?.nome || clienteLogado?.nome || "Cliente",
+        totalPreco,
+        totalDuracao,
+        clientPhoneDigits: digitsTel.length >= 10 ? digitsTel : null,
+        bookedWithoutLogin: !clienteLogado,
+        appointmentIds: Array.isArray(data.appointment_ids) ? data.appointment_ids : undefined,
+        uiFocus: "confirmation",
+      }
+      saveConfirmedBooking(slug, summary)
+      setBookingSummary(summary)
+      setIsRemarcando(false)
+      setAgendamentoConfirmado(true)
+    } catch {
+      setErroAgendamento("Erro ao confirmar agendamento. Tente novamente.")
+    } finally {
+      setBookingLoading(false)
+    }
+  }
+
+  const remarcarAgendamento = () => {
+    if (typeof window !== "undefined") {
+      const ok = window.confirm(
+        "Tem certeza que deseja remarcar? O agendamento atual só será alterado quando você confirmar o novo horário."
+      )
+      if (!ok) return
+    }
+    setErroAgendamento("")
+    setIsRemarcando(true)
+    setAgendamentoConfirmado(false)
+    setTrimPlayStage("intro")
+    setEtapa(3)
+    setDataSelecionada(null)
+    setHorarioSelecionado(null)
+  }
+
+  const voltarDaRemarcacao = () => {
+    setErroAgendamento("")
+    setIsRemarcando(false)
+    setEtapa(1)
+    setDataSelecionada(null)
+    setHorarioSelecionado(null)
+  }
+
+  /** Volta ao início do agendamento mantendo o resumo salvo (reabre app / link e vê o card + pode jogar de novo). */
+  const concluirParaInicio = () => {
+    const base = bookingSummary ?? loadConfirmedBooking(slug)
+    if (base) {
+      const next: PersistedClientBookingV1 = { ...base, uiFocus: "browsing" }
+      saveConfirmedBooking(slug, next)
+      setBookingSummary(next)
+    }
+    setIsRemarcando(false)
+    setAgendamentoConfirmado(false)
+    setTrimPlayStage("intro")
+    setEtapa(1)
+    setServicosSelecionados([])
+    setProfissionalSelecionado(null)
+    setDataSelecionada(null)
+    setHorarioSelecionado(null)
+  }
+
+  const verConfirmacaoEJogo = (irDiretoProJogo: boolean) => {
+    setAgendamentoConfirmado(true)
+    setTrimPlayStage(irDiretoProJogo ? "splash" : "intro")
+  }
+
+  const barbershopId = publicMeta?.id ?? ""
+
+  /** Sempre no mesmo “slot” do React — não desmonta ao mudar loading → logado (evita sumir o modal PWA). */
+  const clientBookingInstallPrompt = (
+    <AppInstallPrompt storageSuffix={storageSuffix} variant="clientBooking" />
+  )
+
+  // —— Telas de acesso: loading, cadastro, login ——
+  if (authPhase === "loading") {
+    return (
+      <>
+        <div className="min-h-screen bg-background flex items-center justify-center p-4">
+          <div className="text-muted-foreground">Carregando...</div>
+        </div>
+      </>
+    )
+  }
+
+  if (authPhase === "cadastro") {
+    return (
+      <>
+        <div className="min-h-screen bg-background">
+        <div className="h-32 bg-gradient-to-r from-primary/30 to-primary/10" />
+        <div className="max-w-md mx-auto px-4 -mt-8">
+          <Card className="bg-card border-border">
+            <CardContent className="p-6">
+              <div className="flex justify-center mb-4">
+                <img src={barbearia.logo} alt="" className="w-14 h-14 rounded-xl object-contain bg-background" />
+              </div>
+              <h1 className="text-xl font-bold text-foreground text-center mb-1">Cadastre-se</h1>
+              <p className="text-sm text-muted-foreground text-center mb-6">
+                {displayNome} — confirme o acesso com o botão <strong className="text-foreground">Google</strong>{" "}
+                abaixo ou com um <strong className="text-foreground">código de 6 dígitos</strong> no e-mail.
+              </p>
+              {!oauthPendingComplete ? (
+                <ClientOAuthButtons
+                  slug={slug}
+                  mode="register"
+                  disabled={authLoading}
+                  registerNome={formCadastro.nome}
+                  registerTelefone={formCadastro.telefone}
+                  onNeedRegisterData={() =>
+                    setErroCadastro("Preencha nome e WhatsApp acima antes do login social.")
+                  }
+                />
+              ) : null}
+              <form onSubmit={handleCadastro} className="space-y-4">
+                {erroCadastro && (
+                  <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+                    {erroCadastro}
+                  </div>
+                )}
+                <div>
+                  <Label className="text-foreground">Nome completo</Label>
+                  <Input
+                    value={formCadastro.nome}
+                    onChange={(e) => setFormCadastro((p) => ({ ...p, nome: e.target.value }))}
+                    placeholder="Seu nome"
+                    className="mt-1 bg-card border-border"
+                    required
+                  />
+                </div>
+                <div>
+                  <Label className="text-foreground">Telefone (WhatsApp)</Label>
+                  <Input
+                    value={formCadastro.telefone}
+                    onChange={(e) => setFormCadastro((p) => ({ ...p, telefone: formatPhone(e.target.value) }))}
+                    placeholder="(00) 00000-0000"
+                    className="mt-1 bg-card border-border"
+                    inputMode="tel"
+                    autoComplete="tel"
+                    required
+                  />
+                </div>
+                <div>
+                  <Label className="text-foreground">E-mail</Label>
+                  <Input
+                    type="email"
+                    value={formCadastro.email}
+                    onChange={(e) => setFormCadastro((p) => ({ ...p, email: e.target.value }))}
+                    placeholder="seu@email.com"
+                    className="mt-1 bg-card border-border"
+                    autoComplete="email"
+                    readOnly={oauthPendingComplete}
+                    required
+                  />
+                </div>
+                <Button
+                  type="submit"
+                  disabled={authLoading}
+                  className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+                >
+                  {authLoading
+                    ? oauthPendingComplete
+                      ? "Concluindo..."
+                      : "Enviando código..."
+                    : oauthPendingComplete
+                    ? "Concluir cadastro"
+                    : "Receber código por e-mail"}
+                </Button>
+              </form>
+              <p className="text-center text-sm text-muted-foreground mt-4">
+                Já tem conta?{" "}
+                <button
+                  type="button"
+                  className="text-primary font-medium hover:underline"
+                  onClick={() => setAuthPhase("login")}
+                >
+                  Entrar
+                </button>
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+      </>
+    )
+  }
+
+  if (authPhase === "redefinir_senha") {
+    return (
+      <>
+        <div className="min-h-screen bg-background">
+          <div className="h-32 bg-gradient-to-r from-primary/30 to-primary/10" />
+          <div className="max-w-md mx-auto px-4 -mt-8">
+            <Card className="bg-card border-border">
+              <CardContent className="p-6">
+                <div className="flex justify-center mb-4">
+                  <img src={barbearia.logo} alt="" className="w-14 h-14 rounded-xl object-contain bg-background" />
+                </div>
+                <h1 className="text-xl font-bold text-foreground text-center mb-1">Redefinir senha</h1>
+                <p className="text-sm text-muted-foreground text-center mb-6">
+                  Enviaremos um código no e-mail cadastrado. Depois você define uma nova senha (mín. 6
+                  caracteres). Vale também se sua conta foi criada com Google e você quer passar a usar
+                  senha.
+                </p>
+                <form onSubmit={handleStartPasswordReset} className="space-y-4">
+                  {erroRedefinirSenha ? (
+                    <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+                      {erroRedefinirSenha}
+                    </div>
+                  ) : null}
+                  <div>
+                    <Label className="text-foreground" htmlFor="reset-email">
+                      E-mail
+                    </Label>
+                    <Input
+                      id="reset-email"
+                      type="email"
+                      value={otpEmail}
+                      onChange={(e) => setOtpEmail(e.target.value)}
+                      placeholder="seu@email.com"
+                      className="mt-1 bg-card border-border"
+                      autoComplete="email"
+                      required
+                    />
+                  </div>
+                  <Button
+                    type="submit"
+                    disabled={authLoading}
+                    className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+                  >
+                    {authLoading ? "Enviando código..." : "Enviar código no e-mail"}
+                  </Button>
+                </form>
+                <button
+                  type="button"
+                  className="w-full text-center text-sm text-muted-foreground hover:text-foreground mt-4 underline-offset-2 hover:underline"
+                  onClick={() => {
+                    setErroRedefinirSenha("")
+                    setAuthPhase("login")
+                  }}
+                >
+                  Voltar para entrar
+                </button>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </>
+    )
+  }
+
+  if (authPhase === "codigo") {
+    const otpLocked = otpLockUntil != null && otpUiNow < otpLockUntil
+    const lockSecLeft =
+      otpLocked && otpLockUntil != null ? Math.max(0, Math.ceil((otpLockUntil - otpUiNow) / 1000)) : 0
+    const resendSecLeft =
+      otpResendNotBefore != null && otpUiNow < otpResendNotBefore
+        ? Math.max(0, Math.ceil((otpResendNotBefore - otpUiNow) / 1000))
+        : 0
+    const codeNorm = normalizePublicOtpCode(otpCode)
+    const isReset = otpIntent === "reset_password"
+    const senhaOk =
+      resetSenhaForm.novaSenha.length >= 6 && resetSenhaForm.novaSenha === resetSenhaForm.confirmar
+    const canConfirm =
+      codeNorm.length === OTP_INPUT_MAX_LEN &&
+      !otpLocked &&
+      !authLoading &&
+      (!isReset || senhaOk)
+
+    return (
+      <>
+        <div className="min-h-screen bg-background">
+          <div className="h-32 bg-gradient-to-r from-primary/30 to-primary/10" />
+          <div className="max-w-md mx-auto px-4 -mt-8">
+            <Card className="bg-card border-border">
+              <CardContent className="p-6">
+                <div className="flex justify-center mb-4">
+                  <img src={barbearia.logo} alt="" className="w-14 h-14 rounded-xl object-contain bg-background" />
+                </div>
+                <h1 className="text-xl font-bold text-foreground text-center mb-1">
+                  {isReset ? "Nova senha" : "Código no e-mail"}
+                </h1>
+                <p className="text-sm text-muted-foreground text-center mb-6">
+                  {isReset ? (
+                    <>
+                      Código enviado para{" "}
+                      <span className="text-foreground font-medium">{otpEmail || "seu e-mail"}</span> (confira também
+                      o <strong className="text-foreground">spam</strong>). Digite o código, escolha a nova senha e
+                      toque em <strong className="text-foreground">Salvar senha e entrar</strong>.
+                    </>
+                  ) : (
+                    <>
+                      Enviamos um código numérico (em geral{" "}
+                      <strong className="text-foreground">6 dígitos</strong>) para{" "}
+                      <span className="text-foreground font-medium">{otpEmail || "seu e-mail"}</span>. Digite o código
+                      e toque em <strong className="text-foreground">Confirmar</strong>. O mesmo código vale até{" "}
+                      <strong className="text-foreground">10 minutos</strong>.
+                    </>
+                  )}
+                </p>
+                <div className="space-y-4 flex flex-col items-center w-full">
+                  {otpLocked ? (
+                    <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-400 text-sm w-full text-center">
+                      Muitas tentativas. Aguarde <strong>{lockSecLeft}s</strong> para digitar de novo.
+                    </div>
+                  ) : null}
+                  {otpError && !otpLocked ? (
+                    <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm w-full">
+                      {otpError}
+                    </div>
+                  ) : null}
+                  <div className="w-full max-w-sm rounded-xl border-2 border-primary/25 bg-primary/5 dark:bg-primary/10 px-3 py-4 sm:p-5 shadow-inner">
+                    <p className="text-xs text-center text-muted-foreground mb-3 font-medium uppercase tracking-wide">
+                      Digite o código
+                    </p>
+                    <div className="flex w-full justify-center overflow-x-auto">
+                    <InputOTP
+                      maxLength={OTP_INPUT_MAX_LEN}
+                      pattern={REGEXP_ONLY_DIGITS}
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      value={otpCode}
+                      disabled={authLoading || otpLocked}
+                      onChange={(v) => {
+                        const next = normalizePublicOtpCode(v).slice(0, OTP_INPUT_MAX_LEN)
+                        setOtpCode(next)
+                        setOtpError("")
+                      }}
+                      containerClassName="justify-center w-max max-w-full"
+                    >
+                      <InputOTPGroup className="justify-center flex-nowrap gap-1">
+                        <InputOTPSlot index={0} />
+                        <InputOTPSlot index={1} />
+                        <InputOTPSlot index={2} />
+                        <InputOTPSlot index={3} />
+                        <InputOTPSlot index={4} />
+                        <InputOTPSlot index={5} />
+                      </InputOTPGroup>
+                    </InputOTP>
+                    </div>
+                  </div>
+                  {isReset ? (
+                    <div className="w-full max-w-sm space-y-3">
+                      <div>
+                        <Label htmlFor="nova-senha-reset">Nova senha</Label>
+                        <div className="relative">
+                          <Input
+                            id="nova-senha-reset"
+                            type={showNovaSenhaReset ? "text" : "password"}
+                            value={resetSenhaForm.novaSenha}
+                            onChange={(e) =>
+                              setResetSenhaForm((p) => ({ ...p, novaSenha: e.target.value }))
+                            }
+                            placeholder="Mínimo 6 caracteres"
+                            className="mt-1 bg-card border-border pr-10"
+                            autoComplete="new-password"
+                          />
+                          <button
+                            type="button"
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                            onClick={() => setShowNovaSenhaReset((v) => !v)}
+                          >
+                            {showNovaSenhaReset ? (
+                              <EyeOff className="w-4 h-4" />
+                            ) : (
+                              <Eye className="w-4 h-4" />
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                      <div>
+                        <Label htmlFor="confirmar-senha-reset">Confirmar senha</Label>
+                        <Input
+                          id="confirmar-senha-reset"
+                          type={showNovaSenhaReset ? "text" : "password"}
+                          value={resetSenhaForm.confirmar}
+                          onChange={(e) =>
+                            setResetSenhaForm((p) => ({ ...p, confirmar: e.target.value }))
+                          }
+                          placeholder="Repita a senha"
+                          className="mt-1 bg-card border-border"
+                          autoComplete="new-password"
+                        />
+                      </div>
+                    </div>
+                  ) : null}
+                  <Button
+                    type="button"
+                    disabled={!canConfirm}
+                    className="w-full max-w-[min(100%,20rem)] bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                    onClick={() => void handleConfirmOtp()}
+                  >
+                    {authLoading
+                      ? "Verificando..."
+                      : isReset
+                        ? "Salvar senha e entrar"
+                        : "Confirmar"}
+                  </Button>
+                </div>
+                <div className="flex flex-col gap-2 mt-6">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full border-border"
+                    disabled={authLoading || resendSecLeft > 0}
+                    onClick={() => void handleResendOtp()}
+                  >
+                    {resendSecLeft > 0
+                      ? `Reenviar código (${resendSecLeft}s)`
+                      : authLoading
+                      ? "Enviando..."
+                      : "Reenviar código"}
+                  </Button>
+                  <button
+                    type="button"
+                    className="text-center text-sm text-muted-foreground hover:text-foreground underline-offset-2 hover:underline"
+                    onClick={() => {
+                      setOtpError("")
+                      setOtpCode("")
+                      setOtpInvalidCount(0)
+                      setOtpLockUntil(null)
+                      setOtpResendNotBefore(null)
+                      setAuthPhase(
+                        otpIntent === "register"
+                          ? "cadastro"
+                          : otpIntent === "reset_password"
+                            ? "redefinir_senha"
+                            : "login"
+                      )
+                    }}
+                  >
+                    Voltar
+                  </button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </>
+    )
+  }
+
+  if (authPhase === "login") {
+    return (
+      <>
+        <div className="min-h-screen bg-background">
+        <div className="h-32 bg-gradient-to-r from-primary/30 to-primary/10" />
+        <div className="max-w-md mx-auto px-4 -mt-8">
+          <Card className="bg-card border-border">
+            <CardContent className="p-6">
+              <div className="flex justify-center mb-4">
+                <img src={barbearia.logo} alt="" className="w-14 h-14 rounded-xl object-contain bg-background" />
+              </div>
+              <h1 className="text-xl font-bold text-foreground text-center mb-1">Entrar</h1>
+              <p className="text-sm text-muted-foreground text-center mb-6">
+                {loginWithEmailCode
+                  ? "Informe o e-mail para receber um código de 6 dígitos (contas sem senha)."
+                  : "Entre com Google, ou use o e-mail e a senha da sua conta."}
+              </p>
+              <ClientOAuthButtons slug={slug} mode="login" disabled={authLoading} />
+              {!loginWithEmailCode ? (
+                <p className="text-xs text-muted-foreground text-center mt-2 mb-4 leading-snug">
+                  Com Google, a senha é digitada na página do Google.
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground text-center mt-2 mb-4">ou código por e-mail</p>
+              )}
+              <form
+                onSubmit={handleLogin}
+                className="space-y-4"
+                method="post"
+                autoComplete="on"
+                name="trimtime-client-login"
+              >
+                {erroLogin && (
+                  <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm space-y-2">
+                    <p>{erroLogin}</p>
+                    {erroLogin.includes("não tem senha") ? (
+                      <button
+                        type="button"
+                        className="text-primary font-medium underline"
+                        onClick={() => {
+                          setErroLogin("")
+                          setAuthPhase("redefinir_senha")
+                        }}
+                      >
+                        Criar senha agora com código no e-mail
+                      </button>
+                    ) : null}
+                  </div>
+                )}
+                <div>
+                  <Label className="text-foreground" htmlFor="client-login-email">
+                    E-mail
+                  </Label>
+                  <Input
+                    id="client-login-email"
+                    name="email"
+                    type="email"
+                    value={formLogin.email}
+                    onChange={(e) => setFormLogin((p) => ({ ...p, email: e.target.value }))}
+                    placeholder="seu@email.com"
+                    className="mt-1 bg-card border-border"
+                    autoComplete="username email"
+                    required
+                  />
+                </div>
+                {!loginWithEmailCode ? (
+                  <div>
+                    <Label className="text-foreground" htmlFor="client-login-password">
+                      Senha
+                    </Label>
+                    <div className="relative">
+                      <Input
+                        id="client-login-password"
+                        name="password"
+                        type={showSenhaLogin ? "text" : "password"}
+                        value={formLogin.senha}
+                        onChange={(e) => setFormLogin((p) => ({ ...p, senha: e.target.value }))}
+                        placeholder="Sua senha"
+                        className="mt-1 bg-card border-border pr-10"
+                        autoComplete="current-password"
+                        required
+                      />
+                      <button
+                        type="button"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                        onClick={() => setShowSenhaLogin(!showSenhaLogin)}
+                        aria-label={showSenhaLogin ? "Ocultar senha" : "Mostrar senha"}
+                      >
+                        {showSenhaLogin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      className="text-sm text-primary font-medium hover:underline mt-1"
+                      onClick={() => {
+                        setErroLogin("")
+                        setOtpEmail(formLogin.email)
+                        setAuthPhase("redefinir_senha")
+                      }}
+                    >
+                      Esqueceu a senha?
+                    </button>
+                  </div>
+                ) : null}
+                <Button
+                  type="submit"
+                  disabled={authLoading}
+                  className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+                >
+                  {authLoading
+                    ? loginWithEmailCode
+                      ? "Enviando código..."
+                      : "Entrando..."
+                    : loginWithEmailCode
+                      ? "Receber código por e-mail"
+                      : "Entrar"}
+                </Button>
+              </form>
+              <button
+                type="button"
+                className="w-full text-center text-sm text-primary font-medium hover:underline mt-3"
+                onClick={() => {
+                  setErroLogin("")
+                  setLoginWithEmailCode((v) => !v)
+                }}
+              >
+                {loginWithEmailCode
+                  ? "Voltar para entrar com senha"
+                  : "Entrar com código no e-mail (sem senha)"}
+              </button>
+              {!loginWithEmailCode ? (
+                <button
+                  type="button"
+                  className="w-full text-center text-xs text-muted-foreground hover:text-foreground mt-2 underline-offset-2 hover:underline"
+                  onClick={() => {
+                    setErroLogin("")
+                    setOtpEmail(formLogin.email)
+                    setAuthPhase("redefinir_senha")
+                  }}
+                >
+                  Criar ou redefinir senha com código no e-mail
+                </button>
+              ) : null}
+              <p className="text-center text-sm text-muted-foreground mt-4">
+                Não tem conta?{" "}
+                <button
+                  type="button"
+                  className="text-primary font-medium hover:underline"
+                  onClick={() => setAuthPhase("cadastro")}
+                >
+                  Cadastre-se
+                </button>
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+      </>
+    )
+  }
+
+  if (agendamentoConfirmado) {
+    if (trimPlayStage === "splash") {
+      return <TrimPlaySplash onComplete={() => setTrimPlayStage("game")} />
+    }
+    if (trimPlayStage === "game") {
+      if (!barbershopId || !trimPlayCliente) {
+        return (
+          <div className="min-h-screen bg-black flex items-center justify-center p-4 text-white">
+            Carregando Trim Play…
+          </div>
+        )
+      }
+      return (
+        <TrimPlayGame
+          barbershopId={barbershopId}
+          unitId={bookingSummary?.unitId ?? null}
+          clienteId={trimPlayCliente.id}
+          clienteNome={trimPlayCliente.nome}
+          onExit={() => setTrimPlayStage("intro")}
+        />
+      )
+    }
+
+    const resumoData = bookingSummary ? new Date(bookingSummary.dataIso) : null
+
+    return (
+      <>
+        {clientBookingInstallPrompt}
+        <div className="min-h-screen bg-black flex items-center justify-center p-4 text-white">
+        <Card className="max-w-md w-full bg-black border-[#FFD700]/35 shadow-none max-h-[min(100dvh-2rem,720px)] overflow-y-auto">
+          <CardContent className="p-6 sm:p-8 text-left">
+            <div className="text-center mb-5">
+              <div className="w-16 h-16 bg-[#FFD700]/15 rounded-full flex items-center justify-center mx-auto mb-4 border border-[#FFD700]/25">
+                <Check className="w-8 h-8 text-[#FFD700]" />
+              </div>
+              <h1 className="text-xl sm:text-2xl font-bold text-[#FFD700]">Agendamento confirmado</h1>
+              <p className="text-white/55 text-xs mt-1">
+                {bookingSummary
+                  ? `Confirmado em ${new Date(bookingSummary.confirmedAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}`
+                  : null}
+              </p>
+            </div>
+
+            {bookingSummary && resumoData ? (
+              <div className="space-y-3 mb-6 text-sm border border-[#FFD700]/20 rounded-xl p-4 bg-white/[0.03]">
+                <div className="flex gap-3">
+                  <Calendar className="w-5 h-5 text-[#FFD700] shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-white/50 text-xs">Data e horário</p>
+                    <p className="text-white font-medium">
+                      {diasSemana[resumoData.getDay()]}, {resumoData.getDate()} de {meses[resumoData.getMonth()]} às{" "}
+                      {bookingSummary.horario}
+                    </p>
+                  </div>
+                </div>
+                {bookingSummary.unitName ? (
+                  <div className="flex gap-3">
+                    <Building2 className="w-5 h-5 text-[#FFD700] shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-white/50 text-xs">Unidade</p>
+                      <p className="text-white font-medium">{bookingSummary.unitName}</p>
+                    </div>
+                  </div>
+                ) : null}
+                <div className="flex gap-3">
+                  <Scissors className="w-5 h-5 text-[#FFD700] shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-white/50 text-xs">Serviços</p>
+                    <p className="text-white font-medium">{bookingSummary.servicos.map((s) => s.nome).join(", ")}</p>
+                    <p className="text-[#FFD700]/80 text-xs mt-1">
+                      {bookingSummary.totalDuracao} min · R${" "}
+                      {Number(bookingSummary.totalPreco).toLocaleString("pt-BR", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex gap-3">
+                  <Avatar className="w-10 h-10 shrink-0">
+                    <AvatarFallback className="bg-[#FFD700]/20 text-[#FFD700] text-sm">
+                      {bookingSummary.profissionalNome
+                        .split(" ")
+                        .map((n) => n[0])
+                        .join("")}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <p className="text-white/50 text-xs">Profissional</p>
+                    <p className="text-white font-medium">{bookingSummary.profissionalNome}</p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <p className="text-white/75 text-sm text-center mb-6">
+                Seu horário está reservado. Jogue o Trim Play enquanto espera!
+              </p>
+            )}
+
+            <p className="text-white/70 text-sm text-center mb-4">
+              🎮 Suba no ranking da barbearia — pontuação salva mesmo offline.
+            </p>
+
+            <div className="flex flex-col gap-3">
+              <Button
+                onClick={() => setTrimPlayStage("splash")}
+                className="w-full bg-[#FFD700] text-black hover:opacity-95 font-semibold"
+              >
+                Jogar Trim Play
+              </Button>
+              <Button
+                variant="outline"
+                onClick={remarcarAgendamento}
+                className="w-full border-[#FFD700]/40 text-[#FFD700] hover:bg-[#FFD700]/10"
+              >
+                Remarcar agendamento
+              </Button>
+              <Button
+                variant="outline"
+                onClick={concluirParaInicio}
+                className="w-full border-[#FFD700]/40 text-[#FFD700] hover:bg-[#FFD700]/10"
+              >
+                Concluir
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+      </>
+    )
+  }
+
+  if (!clienteLogado) {
+    return (
+      <>
+        <div className="min-h-screen bg-background flex items-center justify-center p-4">
+          <div className="text-muted-foreground">Carregando...</div>
+        </div>
+      </>
+    )
+  }
+
+  return (
+    <>
+      {clientBookingInstallPrompt}
+      <Dialog open={waitlistDialogOpen} onOpenChange={setWaitlistDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Horários lotados</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Deseja entrar na lista de espera? Quando surgir uma vaga neste horário, enviaremos um aviso (push ou SMS,
+            conforme as integrações da barbearia).
+          </p>
+          <DialogFooter className="flex-col-reverse sm:flex-row gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full sm:w-auto"
+              onClick={() => {
+                setWaitlistDialogOpen(false)
+                setEtapa(3)
+                setHorarioSelecionado(null)
+              }}
+            >
+              Voltar à agenda
+            </Button>
+            <Button
+              type="button"
+              className="w-full sm:w-auto"
+              disabled={waitlistJoinBusy}
+              onClick={() => void entrarNaListaEspera()}
+            >
+              {waitlistJoinBusy ? <Loader2 className="w-4 h-4 animate-spin mr-2 inline" /> : null}
+              Entrar na fila
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <div className="min-h-screen bg-background">
+      {/* Barra: conta (só com login confirmado) */}
+      <div className="sticky top-0 z-20 border-b border-border bg-background/90 backdrop-blur">
+        <div className="flex items-center justify-between px-4 py-2">
+          <span className="text-sm text-muted-foreground truncate">
+            Olá, {clienteLogado.nome.split(" ")[0]}
+          </span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground hover:text-foreground"
+            onClick={handleLogout}
+          >
+            <LogOut className="w-4 h-4 mr-1" />
+            Sair
+          </Button>
+        </div>
+        {clienteLogado && !pushRemindersActivated ? (
+          <div className="px-4 pb-2 flex flex-col gap-1">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="w-full sm:w-auto border-border text-foreground"
+              disabled={pushReminderBusy}
+              onClick={() => void ativarLembretesPush()}
+            >
+              <Bell className="w-4 h-4 mr-2" />
+              {pushReminderBusy ? "Ativando…" : "Receber lembretes neste celular"}
+            </Button>
+            {pushReminderMsg ? (
+              <p className="text-xs text-muted-foreground">{pushReminderMsg}</p>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+
+      {/* Header da Barbearia */}
+      <div className="relative">
+        <div className="px-4 pt-4 pb-2 text-center max-w-2xl mx-auto">
+          <h1 className="text-base sm:text-lg font-bold text-foreground tracking-tight">{displayNome}</h1>
+        </div>
+        <div className="h-28 sm:h-32 bg-gradient-to-r from-primary/30 to-primary/10" />
+        <div className="max-w-2xl mx-auto px-4 -mt-11 sm:-mt-12">
+          <div className="flex items-end gap-4 mb-4">
+            <div className="w-24 h-24 rounded-xl bg-background border-4 border-background overflow-hidden flex items-center justify-center shrink-0 ring-1 ring-border/40">
+              {authPhase === "logado" && fotoClienteHeader ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={fotoClienteHeader}
+                  alt=""
+                  className="h-full w-full object-cover object-center"
+                  style={{ objectPosition: `center ${dadosCliente.fotoPosicao}%` }}
+                  decoding="async"
+                />
+              ) : (
+                <img src={barbearia.logo} alt="Logo Trim Time" className="w-[5.25rem] h-[5.25rem] object-contain bg-background" />
+              )}
+            </div>
+            <div className="pb-2 min-w-0 flex-1 text-left">
+              {clienteLogado ? (
+                <>
+                  <h2 className="text-xl sm:text-2xl font-bold text-foreground truncate">
+                    Olá, {clienteLogado.nome.trim().split(/\s+/).filter(Boolean)[0] ?? "cliente"}
+                  </h2>
+                  <div className="flex items-center gap-2 text-muted-foreground text-sm mt-0.5 flex-wrap">
+                    <Star className="w-4 h-4 text-primary fill-primary shrink-0" />
+                    <span>{barbearia.avaliacao}</span>
+                    <span>({barbearia.totalAvaliacoes} avaliações)</span>
+                  </div>
+                </>
+              ) : bookingSummary ? (
+                <>
+                  <h2 className="text-xl sm:text-2xl font-bold text-foreground truncate">
+                    Olá,{" "}
+                    {bookingSummary.nomeExibicao.trim().split(/\s+/).filter(Boolean)[0] ?? "cliente"}
+                  </h2>
+                  <div className="flex items-center gap-2 text-muted-foreground text-sm mt-0.5 flex-wrap">
+                    <Star className="w-4 h-4 text-primary fill-primary shrink-0" />
+                    <span>{barbearia.avaliacao}</span>
+                    <span>({barbearia.totalAvaliacoes} avaliações)</span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <h2 className="text-lg sm:text-xl font-semibold text-foreground">Agende seu horário</h2>
+                  <div className="flex items-center gap-2 text-muted-foreground text-sm mt-0.5 flex-wrap">
+                    <Star className="w-4 h-4 text-primary fill-primary shrink-0" />
+                    <span>{barbearia.avaliacao}</span>
+                    <span>({barbearia.totalAvaliacoes} avaliações)</span>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-start gap-2 text-sm text-muted-foreground mb-3">
+            <MapPin className="w-4 h-4 mt-0.5 shrink-0" />
+            <div>
+              {displayAddress ? (
+                <span className="block text-foreground/90">{displayAddress}</span>
+              ) : null}
+              <span>{displayCityLine}</span>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-4 text-sm text-muted-foreground mb-6">
+            {displayPhone ? (
+              <a
+                href={`tel:${displayPhone.replace(/\D/g, "")}`}
+                className="flex items-center gap-1 hover:text-primary transition-colors"
+              >
+                <Phone className="w-4 h-4 shrink-0" />
+                {displayPhone}
+              </a>
+            ) : null}
+            <div className="flex items-center gap-1">
+              <Clock className="w-4 h-4" />
+              <span>{displayHorarioFuncionamento ?? "—"}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {authPhase === "logado" && bookingSummary && !agendamentoConfirmado && !isRemarcando ? (
+        <div className="max-w-2xl mx-auto px-4 mb-6 space-y-3">
+          {erroAgendamento ? (
+            <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">
+              {erroAgendamento}
+            </div>
+          ) : null}
+          <Card className="border-primary/25 bg-card/90">
+            <CardContent className="p-4 space-y-4">
+              <div>
+                <div className="flex items-center gap-2 text-foreground font-semibold text-base">
+                  <Calendar className="w-5 h-5 text-primary shrink-0" />
+                  Remarcar agendamento
+                </div>
+                <p className="text-sm text-foreground font-medium mt-2">
+                  {(() => {
+                    const d = new Date(bookingSummary.dataIso)
+                    return `${diasSemana[d.getDay()]}, ${d.getDate()} de ${meses[d.getMonth()]} às ${bookingSummary.horario}`
+                  })()}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {bookingSummary.servicos.map((s) => s.nome).join(", ")} · {bookingSummary.profissionalNome}
+                  {bookingSummary.unitName ? ` · ${bookingSummary.unitName}` : ""}
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 space-y-3">
+                <p className="text-base sm:text-lg text-white leading-snug uppercase">
+                  Enquanto espera o dia do corte, jogue e suba no ranking da barbearia.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full border-primary/40 text-foreground hover:bg-primary/10"
+                  onClick={() => verConfirmacaoEJogo(true)}
+                >
+                  Abrir Trim Time Play
+                </Button>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-2 pt-0">
+                <Button
+                  type="button"
+                  className="w-full sm:flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
+                  onClick={remarcarAgendamento}
+                >
+                  Remarcar
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full sm:flex-1 border-border text-foreground hover:bg-secondary"
+                  onClick={() => verConfirmacaoEJogo(false)}
+                >
+                  Ver confirmação
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      ) : null}
+
+      {showAgendamentoWizard ? (
+      <>
+      {showUnitPicker ? (
+        <div className="max-w-2xl mx-auto px-4 mb-4">
+          <ClientUnitPicker
+            units={shopUnits}
+            selectedUnitId={selectedUnitId}
+            onConfirm={persistUnit}
+            hoursHint={displayHorarioFuncionamento}
+          />
+        </div>
+      ) : null}
+
+      {/* Indicador de Etapas */}
+      <div className="max-w-2xl mx-auto px-4 mb-6">
+        <div className="flex items-center justify-between">
+          {[1, 2, 3, 4].map((step) => (
+            <div key={step} className="flex items-center">
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors
+                ${etapa >= step 
+                  ? 'bg-primary text-primary-foreground' 
+                  : 'bg-secondary text-muted-foreground'
+                }`}
+              >
+                {etapa > step ? <Check className="w-4 h-4" /> : step}
+              </div>
+              {step < 4 && (
+                <div className={`w-12 sm:w-20 h-1 mx-1 transition-colors
+                  ${etapa > step ? 'bg-primary' : 'bg-secondary'}`} 
+                />
+              )}
+            </div>
+          ))}
+        </div>
+        <div className="flex justify-between mt-2 text-xs text-muted-foreground">
+          <span>Serviços</span>
+          <span>Profissional</span>
+          <span>Horário</span>
+          <span>Confirmar</span>
+        </div>
+      </div>
+
+      {/* Conteúdo das Etapas */}
+      <div className="max-w-2xl mx-auto px-4 pb-32">
+        
+        {/* Etapa 1: Escolher Serviços */}
+        {etapa === 1 && (
+          <div>
+            <h2 className="text-lg font-semibold text-foreground mb-4">Escolha os serviços</h2>
+            <div className="grid gap-3">
+              {barbearia.servicos.map((servico) => (
+                <Card 
+                  key={servico.id}
+                  className={`cursor-pointer transition-all border-2 ${
+                    servicosSelecionados.includes(servico.id)
+                      ? 'border-primary bg-primary/5'
+                      : 'border-transparent hover:border-primary/30'
+                  }`}
+                  onClick={() => toggleServico(servico.id)}
+                >
+                  <CardContent className="p-4 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors
+                        ${servicosSelecionados.includes(servico.id) 
+                          ? 'border-primary bg-primary' 
+                          : 'border-muted-foreground'
+                        }`}
+                      >
+                        {servicosSelecionados.includes(servico.id) && (
+                          <Check className="w-3 h-3 text-primary-foreground" />
+                        )}
+                      </div>
+                      <div className="min-w-0 text-left">
+                        <p className="font-medium text-foreground">{servico.nome}</p>
+                        <p className="text-sm text-muted-foreground">{servico.duracao} min</p>
+                        {servico.descricao?.trim() ? (
+                          <p className="text-sm text-muted-foreground/90 mt-1 whitespace-pre-wrap">
+                            {servico.descricao.trim()}
+                          </p>
+                        ) : null}
+                      </div>
+                    </div>
+                    <span className="text-primary font-semibold">R$ {servico.preco}</span>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Etapa 2: Escolher Profissional */}
+        {etapa === 2 && (
+          <div>
+            <h2 className="text-lg font-semibold text-foreground mb-4">Escolha o profissional</h2>
+            <div className="grid gap-3">
+              {barbearia.profissionais.map((profissional) => (
+                <Card 
+                  key={profissional.id}
+                  className={`cursor-pointer transition-all border-2 ${
+                    profissionalSelecionado === profissional.id
+                      ? 'border-primary bg-primary/5'
+                      : 'border-transparent hover:border-primary/30'
+                  }`}
+                  onClick={() => setProfissionalSelecionado(profissional.id)}
+                >
+                  <CardContent className="p-4 flex items-center gap-4">
+                    <Avatar className="w-14 h-14 border-2 border-primary/20">
+                      <AvatarImage src={profissional.foto} style={{ objectPosition: `center ${'fotoPosition' in profissional ? profissional.fotoPosition : 50}%` }} />
+                      <AvatarFallback className="bg-primary/10 text-primary">
+                        {profissional.nome.split(' ').map(n => n[0]).join('')}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1">
+                      <p className="font-medium text-foreground">{profissional.nome}</p>
+                      <p className="text-sm text-muted-foreground">{profissional.especialidade}</p>
+                    </div>
+                    <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors
+                      ${profissionalSelecionado === profissional.id 
+                        ? 'border-primary bg-primary' 
+                        : 'border-muted-foreground'
+                      }`}
+                    >
+                      {profissionalSelecionado === profissional.id && (
+                        <Check className="w-4 h-4 text-primary-foreground" />
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Etapa 3: Escolher Data e Horário */}
+        {etapa === 3 && (
+          <div>
+            <h2 className="text-lg font-semibold text-foreground mb-4">Escolha a data e horário</h2>
+            
+            {/* Seleção de Data */}
+            <div className="mb-6">
+              <p className="text-sm text-muted-foreground mb-3">Data</p>
+              <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                {dias.map((dia, index) => {
+                  const isHoje = index === 0
+                  const isSelecionado = dataSelecionada?.toDateString() === dia.toDateString()
+                  const key = dayKeyFromDate(dia)
+                  const isFechado = openingHours[key]?.ativo !== true
+                  
+                  return (
+                    <button
+                      key={index}
+                      disabled={isFechado}
+                      onClick={() => setDataSelecionada(dia)}
+                      className={`flex-shrink-0 w-16 py-3 rounded-lg text-center transition-all ${
+                        isFechado 
+                          ? 'bg-secondary/50 text-muted-foreground/50 cursor-not-allowed'
+                          : isSelecionado
+                            ? 'bg-primary text-primary-foreground'
+                            : 'bg-card hover:bg-primary/10 text-foreground'
+                      }`}
+                    >
+                      <p className="text-xs mb-1">{isHoje ? 'Hoje' : diasSemana[dia.getDay()]}</p>
+                      <p className="text-lg font-semibold">{dia.getDate()}</p>
+                      <p className="text-xs">{meses[dia.getMonth()]}</p>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Seleção de Horário */}
+            {dataSelecionada && (
+              <div>
+                <p className="text-sm text-muted-foreground mb-3">Horário</p>
+                <div className="grid grid-cols-4 sm:grid-cols-5 gap-2">
+                  {horarios.map((horario) => {
+                    const isSelecionado = horarioSelecionado === horario
+                    const isOcupado = occupiedTimes.includes(horario)
+                    const isBloqueadoFolga = horariosBloqueadosFolga.has(horario)
+                    const isBloqueadoAntecedencia = horariosBloqueadosAntecedencia.has(horario)
+                    const isBloqueado = isOcupado || isBloqueadoFolga || isBloqueadoAntecedencia
+                    
+                    return (
+                      <button
+                        key={horario}
+                        disabled={isBloqueado}
+                        onClick={() => setHorarioSelecionado(horario)}
+                        className={`py-2 px-3 rounded-lg text-sm font-medium transition-all ${
+                          isBloqueado
+                            ? 'bg-secondary/50 text-muted-foreground/50 cursor-not-allowed'
+                            : isSelecionado
+                            ? 'bg-primary text-primary-foreground'
+                            : 'bg-card hover:bg-primary/10 text-foreground'
+                        }`}
+                        title={
+                          isBloqueadoAntecedencia
+                            ? `Disponível com ${minLeadMinutes} min de antecedência`
+                            : isBloqueadoFolga
+                            ? "Horário bloqueado pela barbearia"
+                            : undefined
+                        }
+                      >
+                        {horario}
+                      </button>
+                    )
+                  })}
+                </div>
+                <p className="mt-3 text-xs text-muted-foreground">
+                  Horários já passados ou com menos de {minLeadMinutes} min de antecedência ficam bloqueados.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Etapa 4: Confirmar Dados */}
+        {etapa === 4 && (
+          <div>
+            <h2 className="text-lg font-semibold text-foreground mb-4">Confirme seus dados</h2>
+            
+            {/* Resumo do Agendamento */}
+            <Card className="mb-6 border-primary/20">
+              <CardContent className="p-4 space-y-3">
+                <div className="flex items-center gap-3 pb-3 border-b border-border">
+                  <Calendar className="w-5 h-5 text-primary" />
+                  <div>
+                    <p className="text-sm text-muted-foreground">Data e Horário</p>
+                    <p className="font-medium text-foreground">
+                      {dataSelecionada && `${diasSemana[dataSelecionada.getDay()]}, ${dataSelecionada.getDate()} de ${meses[dataSelecionada.getMonth()]}`} às {horarioSelecionado}
+                    </p>
+                  </div>
+                </div>
+
+                {selectedUnit ? (
+                  <div className="flex items-center gap-3 pb-3 border-b border-border">
+                    <Building2 className="w-5 h-5 text-primary" />
+                    <div>
+                      <p className="text-sm text-muted-foreground">Unidade</p>
+                      <p className="font-medium text-foreground">{selectedUnit.name}</p>
+                    </div>
+                  </div>
+                ) : null}
+                
+                <div className="flex items-center gap-3 pb-3 border-b border-border">
+                  <Scissors className="w-5 h-5 text-primary" />
+                  <div>
+                    <p className="text-sm text-muted-foreground">Serviços</p>
+                    <p className="font-medium text-foreground">
+                      {servicosSelecionadosData.map(s => s.nome).join(', ')}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <Avatar className="w-10 h-10">
+                    <AvatarFallback className="bg-primary/10 text-primary text-sm">
+                      {profissionalData?.nome.split(' ').map(n => n[0]).join('')}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Profissional</p>
+                    <p className="font-medium text-foreground">{profissionalData?.nome}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Formulário do Cliente */}
+            <div className="space-y-4">
+              {erroAgendamento ? (
+                <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">
+                  {erroAgendamento}
+                </div>
+              ) : null}
+              {listaEsperaCliente && publicMeta?.waitlist_enabled ? (
+                <Card className="border-primary/30 bg-primary/5">
+                  <CardContent className="p-4 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <Bell className="w-5 h-5 text-primary shrink-0" />
+                      <p className="font-semibold text-foreground">Lista de espera</p>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Status:{" "}
+                      <strong className="text-foreground">
+                        {listaEsperaCliente.status === "waiting"
+                          ? "Aguardando"
+                          : listaEsperaCliente.status === "notified"
+                            ? "Vaga disponível"
+                            : listaEsperaCliente.status === "accepted"
+                              ? "Aceito"
+                              : listaEsperaCliente.status}
+                      </strong>
+                    </p>
+                    {listaEsperaCliente.queue_position != null ? (
+                      <p className="text-sm text-foreground">
+                        Posição na fila: <strong>{listaEsperaCliente.queue_position}</strong>
+                        {listaEsperaCliente.estimated_wait_minutes != null ? (
+                          <> · Estimativa ~{listaEsperaCliente.estimated_wait_minutes} min</>
+                        ) : null}
+                      </p>
+                    ) : null}
+                    <p className="text-sm text-muted-foreground">
+                      {(listaEsperaCliente.barber?.name ?? profissionalData?.nome) ?? "Profissional"} ·{" "}
+                      {(listaEsperaCliente.service?.name ?? servicosSelecionadosData.map((s) => s.nome).join(", ")) ??
+                        "Serviço"}
+                    </p>
+                    {listaEsperaCliente.status === "notified" &&
+                    listaEsperaCliente.offered_date &&
+                    listaEsperaCliente.offered_time ? (
+                      <div className="space-y-2 pt-2 border-t border-border">
+                        <p className="text-sm text-foreground">
+                          Horário liberado:{" "}
+                          <strong>
+                            {listaEsperaCliente.offered_date} às{" "}
+                            {listaEsperaCliente.offered_time.slice(0, 5)}
+                          </strong>
+                          {publicMeta.waitlist_accept_deadline_minutes ? (
+                            <span className="block text-xs text-muted-foreground mt-1">
+                              Você tem até {publicMeta.waitlist_accept_deadline_minutes} minutos para confirmar (ou a
+                              vaga segue para o próximo).
+                            </span>
+                          ) : null}
+                        </p>
+                        <Button
+                          type="button"
+                          className="w-full"
+                          disabled={waitlistAcceptBusy}
+                          onClick={() => void aceitarVagaListaEspera()}
+                        >
+                          {waitlistAcceptBusy ? (
+                            <Loader2 className="w-4 h-4 animate-spin mr-2 inline" />
+                          ) : null}
+                          Confirmar este horário
+                        </Button>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        Quando surgir uma vaga para este horário, você receberá um aviso. Mantenha as notificações
+                        ativadas.
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              ) : null}
+              <div>
+                <Label htmlFor="nome" className="text-foreground">Seu nome</Label>
+                <Input
+                  id="nome"
+                  placeholder="Digite seu nome completo"
+                  value={dadosCliente.nome}
+                  onChange={(e) => setDadosCliente(prev => ({ ...prev, nome: e.target.value }))}
+                  className="mt-1 bg-card border-border focus:border-primary"
+                />
+              </div>
+              <div>
+                <Label htmlFor="email" className="text-foreground">E-mail (obrigatório)</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="seu@email.com"
+                  value={dadosCliente.email}
+                  onChange={(e) => setDadosCliente(prev => ({ ...prev, email: e.target.value }))}
+                  className="mt-1 bg-card border-border focus:border-primary"
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="telefone" className="text-foreground">Telefone (obrigatório)</Label>
+                <Input
+                  id="telefone"
+                  placeholder="(00) 00000-0000"
+                  value={dadosCliente.telefone}
+                  onChange={(e) => setDadosCliente(prev => ({ ...prev, telefone: formatPhone(e.target.value) }))}
+                  className="mt-1 bg-card border-border focus:border-primary"
+                />
+              </div>
+              <div>
+                <Label htmlFor="cpf-cliente" className="text-foreground">CPF (opcional)</Label>
+                <Input
+                  id="cpf-cliente"
+                  placeholder="000.000.000-00"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  value={dadosCliente.cpf}
+                  onChange={(e) =>
+                    setDadosCliente((prev) => ({ ...prev, cpf: formatCpfInput(e.target.value) }))
+                  }
+                  className="mt-1 bg-card border-border focus:border-primary"
+                />
+              </div>
+              <div className="rounded-lg border border-border bg-card/50 p-3 space-y-2">
+                <p className="text-xs text-muted-foreground leading-snug">
+                  Salve nome, telefone, e-mail e CPF neste aparelho para não digitar de novo no próximo
+                  agendamento. A senha da conta não é guardada aqui (por segurança).
+                </p>
+                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="border border-border"
+                    onClick={() => {
+                      saveSavedClientProfile(slug, {
+                        nome: dadosCliente.nome,
+                        telefone: dadosCliente.telefone,
+                        email: dadosCliente.email,
+                        cpf: dadosCliente.cpf.replace(/\D/g, "").slice(0, 11),
+                        foto: dadosCliente.foto || undefined,
+                        fotoPosicao: dadosCliente.fotoPosicao,
+                      })
+                      setDadosSalvosMsg("Dados salvos neste aparelho.")
+                      window.setTimeout(() => setDadosSalvosMsg(null), 4000)
+                    }}
+                  >
+                    Salvar meus dados neste aparelho
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="text-muted-foreground hover:text-destructive"
+                    onClick={() => {
+                      clearSavedClientProfile(slug)
+                      setDadosSalvosMsg("Dados salvos neste aparelho foram apagados.")
+                      window.setTimeout(() => setDadosSalvosMsg(null), 4000)
+                    }}
+                  >
+                    Esquecer dados salvos
+                  </Button>
+                </div>
+                {dadosSalvosMsg ? (
+                  <p className="text-xs text-primary font-medium">{dadosSalvosMsg}</p>
+                ) : null}
+              </div>
+              <div>
+                <p className="text-sm font-medium leading-none text-foreground">Sua foto (opcional)</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="mt-2 w-full border-border text-foreground hover:bg-secondary sm:w-auto"
+                  onClick={() => {
+                    setFotoModalErr(null)
+                    setFotoEditDraft(dadosCliente.foto)
+                    setFotoEditPos(dadosCliente.fotoPosicao)
+                    setFotoConfigOpen(true)
+                  }}
+                >
+                  <Camera className="w-4 h-4 mr-2" />
+                  {dadosCliente.foto ? "Ajustar foto" : "Adicionar foto"}
+                </Button>
+                {dadosCliente.foto ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={dadosCliente.foto}
+                    alt=""
+                    className="mt-2 h-16 w-16 rounded-full border border-border object-cover object-center"
+                    style={{ objectPosition: `center ${dadosCliente.fotoPosicao}%` }}
+                    decoding="async"
+                  />
+                ) : (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Ajuda o profissional a reconhecê-lo na agenda.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Footer Fixo com Resumo e Botão */}
+      <div className="fixed bottom-0 left-0 right-0 bg-card border-t border-border p-4">
+        <div className="max-w-2xl mx-auto">
+          {servicosSelecionados.length > 0 && (
+            <div className="flex items-center justify-between mb-3 text-sm">
+              <div className="flex items-center gap-2">
+                <span className="text-muted-foreground">{servicosSelecionados.length} serviço(s)</span>
+                <span className="text-muted-foreground">•</span>
+                <span className="text-muted-foreground">{totalDuracao} min</span>
+              </div>
+              <span className="text-primary font-bold text-lg tabular-nums shrink-0">
+                R${" "}
+                {totalPreco.toLocaleString("pt-BR", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
+              </span>
+            </div>
+          )}
+          
+          <div className="flex gap-3">
+            {etapa > 1 ? (
+              <Button
+                variant="outline"
+                onClick={() => setEtapa(etapa - 1)}
+                className="border-border text-foreground hover:bg-secondary"
+              >
+                <ChevronLeft className="w-4 h-4 mr-1" />
+                Voltar
+              </Button>
+            ) : isRemarcando ? (
+              <Button
+                variant="outline"
+                onClick={voltarDaRemarcacao}
+                className="border-border text-foreground hover:bg-secondary"
+              >
+                <ChevronLeft className="w-4 h-4 mr-1" />
+                Voltar
+              </Button>
+            ) : null}
+            
+            <Button
+              className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
+              disabled={!podeAvancar() || bookingLoading}
+              onClick={() => {
+                if (etapa < 4) {
+                  setEtapa(etapa + 1)
+                } else {
+                  void confirmarAgendamento()
+                }
+              }}
+            >
+              {etapa === 4 ? (bookingLoading ? 'Confirmando...' : 'Confirmar Agendamento') : 'Continuar'}
+              {etapa < 4 && <ChevronRight className="w-4 h-4 ml-1" />}
+            </Button>
+          </div>
+        </div>
+      </div>
+      </>
+      ) : null}
+
+      <Dialog
+        open={fotoConfigOpen}
+        onOpenChange={(open) => {
+          setFotoConfigOpen(open)
+          if (!open) setFotoModalErr(null)
+        }}
+      >
+        <DialogContent className="bg-card border-border text-foreground sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Sua foto no perfil</DialogTitle>
+          </DialogHeader>
+          {fotoModalErr ? (
+            <p className="text-sm text-destructive">{fotoModalErr}</p>
+          ) : null}
+          <input
+            id="foto-cliente-modal-file"
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            className="sr-only"
+            onChange={(e) => {
+              const f = e.target.files?.[0]
+              e.target.value = ""
+              if (!f) return
+              void compressImageToJpegDataUrl(f)
+                .then((url) => {
+                  if (url.length > MAX_PROFILE_PHOTO_DATA_URL_CHARS) {
+                    setFotoModalErr("Imagem grande demais. Tente outra.")
+                    return
+                  }
+                  setFotoModalErr(null)
+                  setFotoEditDraft(url)
+                })
+                .catch(() => setFotoModalErr("Não foi possível ler a imagem."))
+            }}
+          />
+          <div className="flex flex-col items-center gap-3 py-2">
+            {fotoEditDraft ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={fotoEditDraft}
+                alt=""
+                className="h-24 w-24 rounded-full border-2 border-primary/40 object-cover object-center shadow"
+                style={{ objectPosition: `center ${fotoEditPos}%` }}
+                decoding="async"
+              />
+            ) : (
+              <div className="flex h-24 w-24 items-center justify-center rounded-full border-2 border-dashed border-border bg-secondary">
+                <Camera className="h-8 w-8 text-muted-foreground" />
+              </div>
+            )}
+            {fotoEditDraft ? (
+              <div className="w-full space-y-1">
+                <p className="text-center text-xs text-muted-foreground">Ajustar posição</p>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={fotoEditPos}
+                  onChange={(e) => setFotoEditPos(Number(e.target.value))}
+                  className="w-full cursor-pointer accent-primary"
+                />
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>Topo</span>
+                  <span>Base</span>
+                </div>
+              </div>
+            ) : null}
+            <label
+              htmlFor="foto-cliente-modal-file"
+              className="inline-flex cursor-pointer items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+            >
+              <Camera className="h-4 w-4" />
+              {fotoEditDraft ? "Trocar foto" : "Escolher foto"}
+            </label>
+            {fotoEditDraft ? (
+              <button
+                type="button"
+                className="text-xs text-muted-foreground transition-colors hover:text-destructive"
+                onClick={() => {
+                  setFotoEditDraft("")
+                  setFotoEditPos(50)
+                }}
+              >
+                Remover foto
+              </button>
+            ) : null}
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setFotoConfigOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
+              onClick={() => {
+                setDadosCliente((prev) => ({
+                  ...prev,
+                  foto: fotoEditDraft,
+                  fotoPosicao: fotoEditPos,
+                }))
+                setFotoConfigOpen(false)
+              }}
+            >
+              Aplicar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+    </>
+  )
+}

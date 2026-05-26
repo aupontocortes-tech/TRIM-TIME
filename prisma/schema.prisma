@@ -1,0 +1,616 @@
+// Trim Time - Schema Prisma (PostgreSQL / Supabase)
+// Gera as tabelas com: npx prisma db push  ou  npx prisma migrate dev
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ========== ENUMS ==========
+enum SubscriptionPlan {
+  basic
+  pro
+  premium
+}
+
+enum SubscriptionStatus {
+  trial
+  active
+  past_due
+  canceled
+}
+
+enum AppointmentStatus {
+  pending
+  confirmed
+  completed
+  canceled
+  no_show
+}
+
+enum WaitingListStatus {
+  waiting
+  notified
+  accepted
+  expired
+  canceled
+}
+
+enum NotificationType {
+  push
+  email
+  whatsapp
+}
+
+enum NotificationEvent {
+  appointment_confirmation
+  appointment_reminder
+  appointment_post_service
+  appointment_canceled
+  waiting_list_slot_available
+  inactive_client_marketing
+}
+
+// ========== BARBERSHOPS ==========
+model Barbershop {
+  id          String    @id @default(uuid()) @db.Uuid
+  name        String
+  email       String
+  phone       String?
+  slug        String    @unique
+  role        String    @default("admin_barbershop") // super_admin | admin_barbershop
+  suspendedAt DateTime? @map("suspended_at") @db.Timestamptz
+  /// Conta de teste: plano efetivo premium sem pagamento (definida pelo super admin).
+  isTest      Boolean   @default(false) @map("is_test")
+  /// JSON: endereço, horários (opening_hours), etc. — ver BarbershopSettings em lib/db/types
+  settings    Json?     @map("settings")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  subscriptions       Subscription[]
+  barbers             Barber[]
+  clients             Client[]
+  services            Service[]
+  retailProducts      RetailProduct[]
+  appointments        Appointment[]
+  waitingList          WaitingListItem[]
+  whatsappIntegration  WhatsAppIntegration?
+  notificationLogs     NotificationLog[]
+  units                BarbershopUnit[]
+  payments             Payment[]
+  financialLedger      FinancialLedgerEntry[]
+  loyaltyLedgerEntries LoyaltyLedgerEntry[]
+  marketingCampaigns   MarketingCampaign[]
+  supportMessages      SupportMessage[]
+  trimPlayScores      TrimPlayScore[]
+  barberInvites       BarberInvite[]
+  clientOtpCodes      ClientOtpCode[]
+  barberOtpCodes      BarberOtpCode[]
+
+  @@index([email])
+  @@index([role])
+}
+
+/// Auditoria / rate limit de OTP Supabase para cadastro do painel (barbearia). Código vem só no e-mail.
+model PainelSignupOtpSend {
+  id        String   @id @default(uuid()) @db.Uuid
+  email     String
+  code      String   @db.VarChar(8)
+  expiresAt DateTime @map("expires_at") @db.Timestamptz
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([email])
+  @@index([expiresAt])
+  @@map("painel_signup_otp_sends")
+}
+
+/// Após verificar o OTP: token de uso único para concluir POST /api/barbershops.
+model PainelSignupToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  email     String
+  token     String    @unique @db.VarChar(128)
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz
+  usedAt    DateTime? @map("used_at") @db.Timestamptz
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([email])
+  @@map("painel_signup_tokens")
+}
+
+/// Auditoria / rate limit de envios OTP; o código real vem do e-mail (Supabase Auth).
+model ClientOtpCode {
+  id           String     @id @default(uuid()) @db.Uuid
+  barbershopId String     @map("barbershop_id") @db.Uuid
+  barbershop   Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  email        String
+  code         String     @db.VarChar(16)
+  expiresAt    DateTime   @map("expires_at") @db.Timestamptz
+  intent       String     @default("register") @db.VarChar(16)
+  nome         String?
+  telefone     String?    @map("telefone")
+  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([barbershopId, email])
+  @@index([expiresAt])
+  @@map("client_otp_codes")
+}
+
+/// Auditoria / rate limit OTP do app do profissional (código real no e-mail via Supabase Auth).
+model BarberOtpCode {
+  id           String     @id @default(uuid()) @db.Uuid
+  barbershopId String     @map("barbershop_id") @db.Uuid
+  barbershop   Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  email        String
+  code         String     @db.VarChar(4)
+  expiresAt    DateTime   @map("expires_at") @db.Timestamptz
+  intent       String     @default("barber_portal") @db.VarChar(24)
+  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([barbershopId, email])
+  @@index([expiresAt])
+  @@map("barber_otp_codes")
+}
+
+/// Convite por link para o profissional completar o cadastro (nome, e-mail, telefone, CPF, foto).
+model BarberInvite {
+  id           String     @id @default(uuid()) @db.Uuid
+  barbershopId String     @map("barbershop_id") @db.Uuid
+  barbershop   Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  token        String     @unique
+  expiresAt    DateTime   @map("expires_at") @db.Timestamptz
+  usedAt       DateTime?  @map("used_at") @db.Timestamptz
+  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([barbershopId])
+  @@map("barber_invites")
+}
+
+// ========== SUPORTE (CHAT ADMIN ↔ BARBEARIA) ==========
+model SupportMessage {
+  id           String     @id @default(uuid()) @db.Uuid
+  barbershopId String     @map("barbershop_id") @db.Uuid
+  barbershop   Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  body         String     @db.Text
+  /// admin | barbearia
+  sender       String     @map("sender")
+  readAt       DateTime?  @map("read_at") @db.Timestamptz
+  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([barbershopId, createdAt])
+  @@map("support_messages")
+}
+
+// ========== BARBERSHOP UNITS (multi-unidade — opcional) ==========
+model BarbershopUnit {
+  id           String   @id @default(uuid()) @db.Uuid
+  barbershopId String   @map("barbershop_id") @db.Uuid
+  barbershop   Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  name         String
+  /// Contato e endereço da loja (opcional). E-mail e WhatsApp da integração seguem na conta da barbearia.
+  phone        String?  @map("phone")
+  address      String?  @map("address")
+  city         String?  @map("city")
+  state        String?  @map("state")
+  cep          String?  @map("cep")
+  /// Link do Google Maps (localização exata / rota).
+  mapsUrl      String?  @map("maps_url")
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  appointments   Appointment[]
+  trimPlayScores TrimPlayScore[]
+
+  @@index([barbershopId])
+  @@map("barbershop_units")
+}
+
+// ========== PAYMENTS (gateway futuro) ==========
+model Payment {
+  id           String            @id @default(uuid()) @db.Uuid
+  barbershopId String            @map("barbershop_id") @db.Uuid
+  barbershop   Barbershop        @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  provider     String
+  externalId   String?           @map("external_id")
+  amount       Decimal           @db.Decimal(12, 2)
+  currency     String            @default("BRL")
+  status       String
+  plan         SubscriptionPlan?
+  metadata     Json?
+  createdAt    DateTime          @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([barbershopId])
+  @@index([externalId])
+  @@map("payments")
+}
+
+// ========== FINANCIAL LEDGER ==========
+model FinancialLedgerEntry {
+  id            String        @id @default(uuid()) @db.Uuid
+  barbershopId  String        @map("barbershop_id") @db.Uuid
+  barbershop    Barbershop    @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  direction     String
+  category      String
+  amount        Decimal       @db.Decimal(12, 2)
+  appointmentId String?     @map("appointment_id") @db.Uuid
+  appointment   Appointment?  @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  note          String?
+  metadata      Json?
+  occurredAt    DateTime      @default(now()) @map("occurred_at") @db.Timestamptz
+
+  @@index([barbershopId, occurredAt])
+  @@map("financial_ledger_entries")
+}
+
+// ========== LOYALTY LEDGER ==========
+model LoyaltyLedgerEntry {
+  id            String       @id @default(uuid()) @db.Uuid
+  barbershopId  String       @map("barbershop_id") @db.Uuid
+  barbershop    Barbershop   @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  clientId      String       @map("client_id") @db.Uuid
+  client        Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  deltaPoints   Int          @map("delta_points")
+  reason        String
+  appointmentId String?      @map("appointment_id") @db.Uuid
+  appointment   Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  createdAt     DateTime     @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([clientId])
+  @@index([barbershopId])
+  @@map("loyalty_ledger_entries")
+}
+
+// ========== MARKETING CAMPAIGNS (estrutura) ==========
+model MarketingCampaign {
+  id           String    @id @default(uuid()) @db.Uuid
+  barbershopId String    @map("barbershop_id") @db.Uuid
+  barbershop   Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  name         String
+  channel      String
+  status       String
+  payload      Json?
+  scheduledFor DateTime? @map("scheduled_for") @db.Timestamptz
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([barbershopId])
+  @@map("marketing_campaigns")
+}
+
+// ========== SUBSCRIPTIONS ==========
+model Subscription {
+  id                  String             @id @default(uuid()) @db.Uuid
+  barbershopId        String             @unique @map("barbershop_id") @db.Uuid
+  barbershop          Barbershop         @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  plan                SubscriptionPlan   @default(pro)
+  status              SubscriptionStatus @default(trial)
+  trialEnd            DateTime?          @map("trial_end") @db.Timestamptz
+  nextPayment         DateTime?          @map("next_payment") @db.Timestamptz
+  asaasCustomerId     String?            @map("asaas_customer_id")
+  asaasSubscriptionId String?            @map("asaas_subscription_id")
+  billingType         String?            @map("billing_type")
+  /// Cartão cadastrado no Asaas (obrigatório durante o trial com billing ativo).
+  cardSetupAt         DateTime?          @map("card_setup_at") @db.Timestamptz
+  /// Após o trial: accepted = contratou; declined = recusou (sem cobrança).
+  postTrialChoice     String?            @map("post_trial_choice")
+  /// Após recusar contratar: login limitado até esta data (conta preservada).
+  graceAccessUntil    DateTime?          @map("grace_access_until") @db.Timestamptz
+  createdAt           DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt           DateTime           @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([barbershopId])
+  @@index([status])
+  @@index([asaasSubscriptionId])
+}
+
+// ========== BARBERS ==========
+model Barber {
+  id           String   @id @default(uuid()) @db.Uuid
+  barbershopId String   @map("barbershop_id") @db.Uuid
+  barbershop   Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  name         String
+  phone        String?
+  email        String?
+  /// Apenas dígitos (11), quando informado.
+  cpf          String?
+  /// URL pública ou data URL (imagem comprimida no cliente).
+  photoUrl      String?  @map("photo_url") @db.Text
+  /// Posição vertical do recorte circular (0 = topo, 100 = base, padrão 50 = centro).
+  photoPosition Int      @default(50) @map("photo_position")
+  commission    Decimal  @default(0) @db.Decimal(5, 2)
+  active       Boolean  @default(true)
+  role         String   @default("user") // admin_barbershop | user
+  authUserId   String?  @map("auth_user_id")
+  /// Token estável para o app do profissional (link /app/barbeiro/[token]).
+  portalToken  String?  @unique @map("portal_token") @db.Uuid
+  /// Senha do app (scrypt); definida no primeiro acesso após OTP.
+  passwordHash String?  @map("password_hash")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  appointments Appointment[]
+  waitingListItems WaitingListItem[]
+
+  @@index([barbershopId])
+  @@index([barbershopId, role])
+}
+
+// ========== CLIENTS ==========
+model Client {
+  id            String   @id @default(uuid()) @db.Uuid
+  barbershopId  String   @map("barbershop_id") @db.Uuid
+  barbershop    Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  name          String
+  phone         String?
+  email         String?
+  notes         String?
+  /// Apenas dígitos (11), opcional.
+  cpf           String?
+  photoUrl      String?  @map("photo_url") @db.Text
+  loyaltyPoints Int      @default(0) @map("loyalty_points")
+  /// Web Push subscription (JSON) para lembretes no PWA do cliente.
+  pushSubscription Json?  @map("push_subscription")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  appointments       Appointment[]
+  waitingList        WaitingListItem[]
+  notificationLogs   NotificationLog[]
+  loyaltyLedgerEntries LoyaltyLedgerEntry[]
+
+  @@index([barbershopId])
+  @@index([barbershopId, phone])
+  @@index([barbershopId, email])
+}
+
+// ========== SERVICES ==========
+model Service {
+  id           String   @id @default(uuid()) @db.Uuid
+  barbershopId String   @map("barbershop_id") @db.Uuid
+  barbershop   Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  name         String
+  /** Texto exibido ao cliente na página de agendamento (opcional). */
+  description  String   @default("") @db.Text
+  price        Decimal  @default(0) @db.Decimal(10, 2)
+  duration     Int      @default(30)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  appointments              Appointment[]
+  appointmentServiceLines   AppointmentServiceLine[]
+  waitingList               WaitingListItem[]
+
+  @@index([barbershopId])
+}
+
+/// Linhas de serviço no mesmo agendamento (ex.: corte + barba). Mantém snapshot de preço.
+model AppointmentServiceLine {
+  id             String       @id @default(uuid()) @db.Uuid
+  appointmentId  String       @map("appointment_id") @db.Uuid
+  appointment    Appointment   @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  serviceId      String       @map("service_id") @db.Uuid
+  service        Service      @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  quantity       Int          @default(1)
+  unitPrice      Decimal      @map("unit_price") @db.Decimal(10, 2)
+
+  @@map("appointment_service_lines")
+  @@index([appointmentId])
+}
+
+// ========== RETAIL PRODUCTS (venda na barbearia) ==========
+model RetailProduct {
+  id             String                   @id @default(uuid()) @db.Uuid
+  barbershopId   String                   @map("barbershop_id") @db.Uuid
+  barbershop     Barbershop               @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  name           String
+  description    String                   @default("") @db.Text
+  price          Decimal                  @default(0) @db.Decimal(10, 2)
+  active         Boolean                  @default(true)
+  createdAt      DateTime                 @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime                 @updatedAt @map("updated_at") @db.Timestamptz
+  appointmentLines AppointmentRetailLine[]
+
+  @@map("retail_products")
+  @@index([barbershopId])
+}
+
+model AppointmentRetailLine {
+  id              String        @id @default(uuid()) @db.Uuid
+  appointmentId   String        @map("appointment_id") @db.Uuid
+  appointment     Appointment   @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  retailProductId String        @map("retail_product_id") @db.Uuid
+  retailProduct   RetailProduct @relation(fields: [retailProductId], references: [id], onDelete: Restrict)
+  quantity        Int           @default(1)
+  unitPrice       Decimal       @map("unit_price") @db.Decimal(10, 2)
+
+  @@map("appointment_retail_lines")
+  @@index([appointmentId])
+}
+
+// ========== APPOINTMENTS ==========
+model Appointment {
+  id           String           @id @default(uuid()) @db.Uuid
+  barbershopId String           @map("barbershop_id") @db.Uuid
+  barbershop   Barbershop       @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  clientId     String           @map("client_id") @db.Uuid
+  client       Client           @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  barberId     String           @map("barber_id") @db.Uuid
+  barber       Barber           @relation(fields: [barberId], references: [id], onDelete: Restrict)
+  serviceId    String           @map("service_id") @db.Uuid
+  service      Service          @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  unitId       String?          @map("unit_id") @db.Uuid
+  unit         BarbershopUnit?  @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  date         DateTime         @db.Date
+  time         String           // HH:MM ou HH:MM:SS
+  status       AppointmentStatus @default(pending)
+  totalPrice   Decimal?         @map("total_price") @db.Decimal(10, 2)
+  commissionPercent Decimal?    @map("commission_percent") @db.Decimal(5, 2)
+  commissionAmount  Decimal?    @map("commission_amount") @db.Decimal(10, 2)
+  createdAt    DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime         @updatedAt @map("updated_at") @db.Timestamptz
+
+  notificationLogs      NotificationLog[]
+  financialLedgerEntries FinancialLedgerEntry[]
+  loyaltyLedgerEntries        LoyaltyLedgerEntry[]
+  appointmentRetailLines     AppointmentRetailLine[]
+  appointmentServiceLines      AppointmentServiceLine[]
+
+  @@index([barbershopId])
+  @@index([barbershopId, date])
+  @@index([clientId])
+  @@index([barberId])
+  @@index([unitId])
+}
+
+// ========== WAITING LIST ==========
+model WaitingListItem {
+  id           String            @id @default(uuid()) @db.Uuid
+  barbershopId String            @map("barbershop_id") @db.Uuid
+  barbershop   Barbershop        @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  clientId     String            @map("client_id") @db.Uuid
+  client       Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  barberId     String            @map("barber_id") @db.Uuid
+  barber       Barber            @relation(fields: [barberId], references: [id], onDelete: Restrict)
+  serviceId    String            @map("service_id") @db.Uuid
+  service      Service           @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  /// IDs adicionais quando o cliente escolhe vários serviços (ordem preservada).
+  extraServiceIds Json?         @default("[]") @map("extra_service_ids")
+  desiredDate  DateTime?         @map("desired_date") @db.Date
+  desiredTime  String?           @map("desired_time") // HH:MM ou HH:MM:SS
+  /// Ex.: manha | tarde | noite | qualquer
+  preferredPeriod String?       @map("preferred_period")
+  priority     Int               @default(0)
+  status       WaitingListStatus @default(waiting)
+  notifiedAt   DateTime?        @map("notified_at") @db.Timestamptz
+  acceptedAt   DateTime?        @map("accepted_at") @db.Timestamptz
+  /// Quando uma vaga foi liberada, horário ofertado ao cliente.
+  offeredDate  DateTime?        @map("offered_date") @db.Date
+  offeredTime  String?          @map("offered_time")
+  createdAt    DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime         @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([barbershopId])
+  @@index([barbershopId, status])
+  @@index([barbershopId, barberId, status])
+}
+
+// ========== WHATSAPP INTEGRATIONS ==========
+model WhatsAppIntegration {
+  id           String   @id @default(uuid()) @db.Uuid
+  barbershopId String   @unique @map("barbershop_id") @db.Uuid
+  barbershop   Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  phoneNumber  String   @map("phone_number")
+  apiProvider  String   @default("meta") @map("api_provider")
+  apiToken     String?  @map("api_token")
+  /// Phone Number ID da Meta (Graph API) para enviar mensagens.
+  graphPhoneNumberId String? @map("graph_phone_number_id")
+  connectedAt  DateTime @default(now()) @map("connected_at") @db.Timestamptz
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([barbershopId])
+  @@map("whatsapp_integrations")
+}
+
+// ========== NOTIFICATION LOG ==========
+model NotificationLog {
+  id            String            @id @default(uuid()) @db.Uuid
+  barbershopId  String            @map("barbershop_id") @db.Uuid
+  barbershop    Barbershop        @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  clientId      String?           @map("client_id") @db.Uuid
+  client        Client?           @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  appointmentId String?           @map("appointment_id") @db.Uuid
+  appointment   Appointment?      @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  type          NotificationType
+  event         NotificationEvent
+  sentAt        DateTime          @default(now()) @map("sent_at") @db.Timestamptz
+  payload       Json?
+
+  @@index([barbershopId])
+  @@index([sentAt])
+}
+
+// ========== TRIM PLAY (MINI GAME) ==========
+model TrimPlayScore {
+  id            String     @id @default(uuid()) @db.Uuid
+  barbershopId  String     @map("barbershop_id") @db.Uuid
+  barbershop    Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  /// Null = ranking geral da barbearia (sem unidade). Unidade = ranking só daquela loja.
+  unitId        String?    @map("unit_id") @db.Uuid
+  unit          BarbershopUnit? @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  clienteId     String     @map("cliente_id")
+  clienteNome   String     @map("cliente_name")
+  bestScore     Int        @map("best_score") @default(0)
+  createdAt     DateTime   @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime   @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([barbershopId, unitId, bestScore])
+  @@map("trim_play_scores")
+}
+
+model TrimPlayAudioConfig {
+  id          String   @id @default(uuid()) @db.Uuid
+  key         String   @unique
+  fileUrl     String?  @map("file_url")
+  trimStartMs Int      @default(0) @map("trim_start_ms")
+  trimEndMs   Int      @default(0) @map("trim_end_ms")
+  volume      Decimal  @default(1) @db.Decimal(3, 2)
+  enabled     Boolean  @default(false)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@map("trim_play_audio_configs")
+}
+
+model TrimPlayAudioAsset {
+  id           String   @id @default(uuid()) @db.Uuid
+  category     String   @map("category")
+  fileUrl      String   @map("file_url")
+  fileName     String   @map("file_name")
+  trimStartSec Decimal  @default(0) @map("trim_start_sec") @db.Decimal(6, 3)
+  trimEndSec   Decimal  @default(2) @map("trim_end_sec") @db.Decimal(6, 3)
+  volume       Decimal  @default(1) @db.Decimal(3, 2)
+  enabled      Boolean  @default(true)
+  sortOrder    Int      @default(0) @map("sort_order")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([category, enabled, sortOrder])
+  @@map("trim_play_audio_assets")
+}
+
+// ========== TRIM PLAY (VISUAL) ==========
+// Lista de efeitos visuais alternados por evento no jogo (combo/vitória/game over).
+model TrimPlayVisualEffectAsset {
+  id         String   @id @default(uuid()) @db.Uuid
+  eventKey   String   @map("event_key") // combo1..combo5, victory, gameover
+  effectKey  String   @map("effect_key") // efeito_texto, efeito_flash, ...
+  enabled    Boolean  @default(true)
+  sortOrder  Int      @default(0) @map("sort_order")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([eventKey, enabled, sortOrder])
+  @@map("trim_play_visual_effect_assets")
+}
+
+// ========== CONFIGURAÇÕES GLOBAIS (SUPER ADMIN) ==========
+/// Linha única (id = singleton): WhatsApp da landing, etc.
+model PlatformSettings {
+  id                    String           @id @default("singleton")
+  landingWhatsappPhone  String?          @map("landing_whatsapp_phone")
+  priceBasic            Decimal?         @map("price_basic") @db.Decimal(10, 2)
+  pricePro              Decimal?         @map("price_pro") @db.Decimal(10, 2)
+  pricePremium          Decimal?         @map("price_premium") @db.Decimal(10, 2)
+  /// Nomes, benefícios e limites por plano (JSON). Preços também em price_*.
+  planConfigs           Json?            @map("plan_configs")
+  defaultTrialDays      Int              @default(7) @map("default_trial_days")
+  defaultTrialPlan      SubscriptionPlan @default(pro) @map("default_trial_plan")
+  /// Quando true + ASAAS_API_KEY, cobrança via Asaas.
+  paymentApiEnabled     Boolean          @default(false) @map("payment_api_enabled")
+  updatedAt             DateTime         @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("platform_settings")
+}

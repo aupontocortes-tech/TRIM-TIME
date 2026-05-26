@@ -1,0 +1,188 @@
+/**
+ * Serialização Prisma → formato snake_case usado pelas rotas / UI (legado Supabase).
+ */
+import type { Prisma } from "@prisma/client"
+import type {
+  Appointment,
+  Barber,
+  Client,
+  Service,
+  AppointmentRetailLineApi,
+  AppointmentServiceLineApi,
+} from "@/lib/db/types"
+import type { AppointmentStatus } from "@/lib/db/types"
+
+export const appointmentApiInclude = {
+  client: true,
+  barber: true,
+  service: true,
+  appointmentRetailLines: { include: { retailProduct: true } },
+  appointmentServiceLines: { include: { service: true } },
+} satisfies Prisma.AppointmentInclude
+
+export type AppointmentWithRelations = Prisma.AppointmentGetPayload<{
+  include: typeof appointmentApiInclude
+}>
+
+function mapRetailLines(
+  lines: AppointmentWithRelations["appointmentRetailLines"] | undefined
+): AppointmentRetailLineApi[] | undefined {
+  if (!lines?.length) return undefined
+  return lines.map((l) => ({
+    id: l.id,
+    retail_product_id: l.retailProductId,
+    quantity: l.quantity,
+    unit_price: Number(l.unitPrice),
+    product: l.retailProduct
+      ? {
+          id: l.retailProduct.id,
+          name: l.retailProduct.name,
+          description: (l.retailProduct.description ?? "").trim(),
+          price: Number(l.retailProduct.price),
+        }
+      : undefined,
+  }))
+}
+
+function mapStoredServiceLines(
+  lines: AppointmentWithRelations["appointmentServiceLines"]
+): AppointmentServiceLineApi[] | undefined {
+  if (!lines?.length) return undefined
+  return lines.map((l) => ({
+    id: l.id,
+    service_id: l.serviceId,
+    quantity: l.quantity,
+    unit_price: Number(l.unitPrice),
+    service: l.service
+      ? {
+          id: l.service.id,
+          name: l.service.name,
+          description: (l.service.description ?? "").trim(),
+          price: Number(l.service.price),
+          duration: l.service.duration,
+        }
+      : undefined,
+  }))
+}
+
+export function deriveServiceLinesFromAppointment(
+  row: AppointmentWithRelations
+): AppointmentServiceLineApi[] {
+  const stored = mapStoredServiceLines(row.appointmentServiceLines)
+  if (stored?.length) return stored
+  if (row.service) {
+    return [
+      {
+        id: "__legacy__",
+        service_id: row.serviceId,
+        quantity: 1,
+        unit_price: Number(row.service.price),
+        service: {
+          id: row.service.id,
+          name: row.service.name,
+          description: (row.service.description ?? "").trim(),
+          price: Number(row.service.price),
+          duration: row.service.duration,
+        },
+      },
+    ]
+  }
+  return []
+}
+
+export function parseAppointmentDate(ymd: string): Date {
+  const [y, m, d] = ymd.split("-").map(Number)
+  if (!y || !m || !d) throw new Error("Data inválida")
+  return new Date(Date.UTC(y, m - 1, d))
+}
+
+/**
+ * Intervalo [início, fim) em UTC para um dia civil YYYY-MM-DD.
+ * Use no Prisma em colunas `@db.Date`: `where: { date: { gte, lt } }` — evita falha de `equals`
+ * com alguns drivers/ fusos ao comparar DateTime com DATE.
+ */
+export function utcDayRangeForYmd(ymd: string): { gte: Date; lt: Date } {
+  const gte = parseAppointmentDate(ymd)
+  const [y, m, d] = ymd.split("-").map(Number)
+  const lt = new Date(Date.UTC(y, m - 1, d + 1))
+  return { gte, lt }
+}
+
+function formatAppointmentDate(d: Date): string {
+  const y = d.getUTCFullYear()
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0")
+  const day = String(d.getUTCDate()).padStart(2, "0")
+  return `${y}-${m}-${day}`
+}
+
+function mapClient(c: NonNullable<AppointmentWithRelations["client"]>): Client {
+  return {
+    id: c.id,
+    barbershop_id: c.barbershopId,
+    name: c.name,
+    phone: c.phone,
+    email: c.email,
+    notes: c.notes,
+    cpf: c.cpf ?? null,
+    photo_url: c.photoUrl ?? null,
+    loyalty_points: c.loyaltyPoints,
+    created_at: c.createdAt.toISOString(),
+    updated_at: c.updatedAt.toISOString(),
+  }
+}
+
+function mapBarber(b: NonNullable<AppointmentWithRelations["barber"]>): Barber {
+  return {
+    id: b.id,
+    barbershop_id: b.barbershopId,
+    name: b.name,
+    phone: b.phone,
+    email: b.email ?? null,
+    cpf: b.cpf ?? null,
+    photo_url: b.photoUrl ?? null,
+    commission: Number(b.commission),
+    active: b.active,
+    role: b.role as Barber["role"],
+    created_at: b.createdAt.toISOString(),
+    updated_at: b.updatedAt.toISOString(),
+  }
+}
+
+function mapService(s: NonNullable<AppointmentWithRelations["service"]>): Service {
+  return {
+    id: s.id,
+    barbershop_id: s.barbershopId,
+    name: s.name,
+    description: s.description ?? "",
+    price: Number(s.price),
+    duration: s.duration,
+    active: s.active,
+    created_at: s.createdAt.toISOString(),
+    updated_at: s.updatedAt.toISOString(),
+  }
+}
+
+export function mapAppointmentRowToApi(row: AppointmentWithRelations): Appointment {
+  const sl = deriveServiceLinesFromAppointment(row)
+  return {
+    id: row.id,
+    barbershop_id: row.barbershopId,
+    client_id: row.clientId,
+    barber_id: row.barberId,
+    service_id: row.serviceId,
+    date: formatAppointmentDate(row.date),
+    time: row.time,
+    status: row.status as AppointmentStatus,
+    total_price: row.totalPrice != null ? Number(row.totalPrice) : null,
+    commission_percent: row.commissionPercent != null ? Number(row.commissionPercent) : null,
+    commission_amount: row.commissionAmount != null ? Number(row.commissionAmount) : null,
+    unit_id: row.unitId,
+    created_at: row.createdAt.toISOString(),
+    updated_at: row.updatedAt.toISOString(),
+    service_lines: sl.length ? sl : undefined,
+    retail_lines: mapRetailLines(row.appointmentRetailLines),
+    client: row.client ? mapClient(row.client) : undefined,
+    barber: row.barber ? mapBarber(row.barber) : undefined,
+    service: row.service ? mapService(row.service) : undefined,
+  }
+}

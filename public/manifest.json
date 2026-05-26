@@ -1,0 +1,32 @@
+{
+  "id": "trimtime-painel",
+  "name": "Trim Time - Painel",
+  "short_name": "Trim Time",
+  "description": "Gestão da sua barbearia: agenda, clientes e configurações",
+  "start_url": "/painel",
+  "scope": "/painel",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#c9a227",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
