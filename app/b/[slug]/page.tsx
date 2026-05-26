@@ -1320,7 +1320,7 @@ export default function BarbeariaPage() {
     .join(" - ")
   const displayCityLine = cityStateUnit || cityStateBase || null
   const shopUnits = publicMeta?.units ?? []
-  const showUnitPicker = shopUnits.length > 0
+  const showUnitPicker = shopUnits.length > 1
   const hasMultipleUnits = shopUnits.length > 1
   /** Com resumo de agendamento ativo, só o card de gestão; no modo remarcar, reabre o wizard. */
   const showAgendamentoWizard = !bookingSummary || isRemarcando
