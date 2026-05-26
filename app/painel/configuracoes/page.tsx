@@ -72,6 +72,7 @@ import {
   CheckCircle2,
   ArrowRight,
   Send,
+  AlertTriangle,
 } from "lucide-react"
 import {
   Dialog,
@@ -304,6 +305,10 @@ export default function ConfiguracoesPage() {
   const [newUnitMapsUrl, setNewUnitMapsUrl] = useState("")
   const [unitEditOpen, setUnitEditOpen] = useState(false)
   const [editingUnit, setEditingUnit] = useState<BarbershopUnit | null>(null)
+  const [deleteUnitOpen, setDeleteUnitOpen] = useState(false)
+  const [deletingUnit, setDeletingUnit] = useState<BarbershopUnit | null>(null)
+  const [deleteCode, setDeleteCode] = useState("")
+  const [deleteCodeInput, setDeleteCodeInput] = useState("")
   const [editUnitName, setEditUnitName] = useState("")
   const [editUnitPhone, setEditUnitPhone] = useState("")
   const [editUnitAddress, setEditUnitAddress] = useState("")
@@ -1230,12 +1235,20 @@ export default function ConfiguracoesPage() {
     }
   }
 
-  const handleDeleteUnit = async (unit: BarbershopUnit) => {
-    if (!confirm(`Excluir a unidade "${unit.name}"? Essa ação não pode ser desfeita.`)) return
+  const openDeleteUnit = (unit: BarbershopUnit) => {
+    const code = Math.random().toString(36).slice(2, 8).toUpperCase()
+    setDeletingUnit(unit)
+    setDeleteCode(code)
+    setDeleteCodeInput("")
+    setDeleteUnitOpen(true)
+  }
+
+  const handleConfirmDeleteUnit = async () => {
+    if (!deletingUnit || deleteCodeInput !== deleteCode) return
     setUnitBusy(true)
     setUnitError(null)
     try {
-      const r = await fetch(`/api/units/${unit.id}`, {
+      const r = await fetch(`/api/units/${deletingUnit.id}`, {
         method: "DELETE",
         credentials: "include",
       })
@@ -1244,6 +1257,8 @@ export default function ConfiguracoesPage() {
         setUnitError(typeof j.error === "string" ? j.error : "Erro ao excluir unidade")
         return
       }
+      setDeleteUnitOpen(false)
+      setDeletingUnit(null)
       await refetchUnits()
     } catch {
       setUnitError("Erro de rede ao excluir unidade")
@@ -3431,7 +3446,7 @@ export default function ConfiguracoesPage() {
                             type="button"
                             variant="ghost"
                             className="h-9 px-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                            onClick={() => void handleDeleteUnit(unit)}
+                            onClick={() => openDeleteUnit(unit)}
                             disabled={unitBusy || !multiUnitsFeature}
                           >
                             <Trash2 className="w-4 h-4" />
@@ -3538,6 +3553,78 @@ export default function ConfiguracoesPage() {
                     </Button>
                   </div>
                 </FieldGroup>
+              )}
+            </DialogContent>
+          </Dialog>
+
+          <Dialog
+            open={deleteUnitOpen}
+            onOpenChange={(open) => {
+              setDeleteUnitOpen(open)
+              if (!open) {
+                setDeletingUnit(null)
+                setDeleteCode("")
+                setDeleteCodeInput("")
+              }
+            }}
+          >
+            <DialogContent className="bg-card border-border max-w-md">
+              <DialogHeader>
+                <DialogTitle className="text-destructive flex items-center gap-2">
+                  <AlertTriangle className="w-5 h-5" />
+                  Excluir unidade
+                </DialogTitle>
+              </DialogHeader>
+              {deletingUnit && (
+                <div className="space-y-4 py-2">
+                  <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-sm text-foreground space-y-2">
+                    <p>
+                      Você está prestes a excluir a unidade <strong>{deletingUnit.name}</strong>.
+                    </p>
+                    <p className="text-destructive font-medium">
+                      Essa ação não pode ser desfeita.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <p className="text-sm text-muted-foreground">
+                      Para confirmar, digite o código abaixo:
+                    </p>
+                    <div className="flex items-center justify-center">
+                      <span className="text-2xl font-mono font-bold tracking-[0.3em] text-foreground bg-secondary px-4 py-2 rounded-lg border border-border select-all">
+                        {deleteCode}
+                      </span>
+                    </div>
+                    <Input
+                      className="bg-input border-border text-foreground text-center font-mono text-lg tracking-widest uppercase"
+                      placeholder="Digite o código acima"
+                      value={deleteCodeInput}
+                      onChange={(e) => setDeleteCodeInput(e.target.value.toUpperCase())}
+                      maxLength={6}
+                      autoFocus
+                    />
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="flex-1 border-border text-foreground"
+                      onClick={() => setDeleteUnitOpen(false)}
+                    >
+                      Cancelar
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      className="flex-1"
+                      disabled={unitBusy || deleteCodeInput !== deleteCode}
+                      onClick={() => void handleConfirmDeleteUnit()}
+                    >
+                      {unitBusy ? "Excluindo…" : "Excluir unidade"}
+                    </Button>
+                  </div>
+                </div>
               )}
             </DialogContent>
           </Dialog>
