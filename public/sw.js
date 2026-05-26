@@ -31,13 +31,19 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     self.registration.showNotification(data.title, {
       body: data.body,
-      icon: "/icon.png",
+      icon: "/icon-192.png",
       badge: "/icon.png",
+      image: "/icon-192.png",
       vibrate: [200, 100, 200, 100, 200],
-      tag: "trimtime-" + Date.now(),
+      tag: "trimtime-push-" + Date.now(),
       renotify: true,
       requireInteraction: true,
+      silent: false,
       data: { url: data.url },
+      actions: [
+        { action: "open", title: "Ver agendamento" },
+        { action: "dismiss", title: "Dispensar" },
+      ],
     })
   )
 })
@@ -48,18 +54,26 @@ self.addEventListener("message", (event) => {
   event.waitUntil(
     self.registration.showNotification(title || "Trim Time", {
       body: body || "",
-      icon: "/icon.png",
+      icon: "/icon-192.png",
       badge: "/icon.png",
       vibrate: [200, 100, 200],
       tag: tag || "trimtime-reminder",
       renotify: true,
+      requireInteraction: true,
+      silent: false,
       data: { url: url || "/" },
+      actions: [
+        { action: "open", title: "Ver agendamento" },
+        { action: "dismiss", title: "Dispensar" },
+      ],
     })
   )
 })
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close()
+  if (event.action === "dismiss") return
+
   const url = event.notification?.data?.url || "/"
   const abs = url.startsWith("http") ? url : new URL(url, self.location.origin).href
   event.waitUntil(

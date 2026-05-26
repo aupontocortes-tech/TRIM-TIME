@@ -121,8 +121,8 @@ export function cleanupOldReminders(): void {
 
 export function fireReminderNotification(reminder: LocalReminder): void {
   const label = offsetLabel(reminder.offsetMinutes)
-  const title = `Lembrete: ${reminder.serviceName}`
-  const body = `Seu ${reminder.serviceName} com ${reminder.barberName} é em ${label}! (${reminder.appointmentTime.slice(0, 5)})`
+  const title = `📅 ${reminder.barbershopName}`
+  const body = `Falta ${label} para o seu ${reminder.serviceName} com ${reminder.barberName} às ${reminder.appointmentTime.slice(0, 5)}. Não se atrase!`
   const url = `/b/${reminder.slug}`
   const tag = `reminder-${reminder.id}`
 
@@ -139,7 +139,12 @@ export function fireReminderNotification(reminder: LocalReminder): void {
       tag,
     })
   } else if ("Notification" in window && Notification.permission === "granted") {
-    new Notification(title, { body, icon: "/icon.png", tag })
+    new Notification(title, {
+      body,
+      icon: "/icon-192.png",
+      tag,
+      silent: false,
+    })
   }
 
   markReminderFired(reminder.id)

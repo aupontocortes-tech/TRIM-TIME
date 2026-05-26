@@ -22,7 +22,7 @@ function reminderOffsetsMinutes(ns: BarbershopNotificationSettings): number[] {
 const WINDOW_MS = 10 * 60 * 1000
 
 const DEFAULT_APP =
-  "Olá {{nome_cliente}}! Lembrete: você tem {{servico}} na {{barbearia}} em {{data}} às {{horario}}."
+  "Olá {{nome_cliente}}! 📅 Lembrete: seu {{servico}} na {{barbearia}} é em {{data}} às {{horario}}. Não se atrase!"
 const DEFAULT_WA = "Olá {{nome}}, lembrando do seu horário amanhã às {{hora}}."
 
 function formatDatePt(isoDate: string): string {
