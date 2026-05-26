@@ -991,7 +991,6 @@ export default function ConfiguracoesPage() {
   const handleStartEmbeddedSignup = () => {
     // TODO: Integrate Meta Embedded Signup SDK
     // window.FB.login(callback, { config_id: '...', response_type: 'code', override_default_response_type: true })
-    setWaError("Embedded Signup será ativado em breve. A configuração da Meta está sendo finalizada.")
   }
 
   const handleWaDisconnect = async () => {
@@ -3769,16 +3768,17 @@ export default function ConfiguracoesPage() {
                       <Button
                         type="button"
                         size="lg"
-                        className="bg-green-600 hover:bg-green-700 text-white px-10 h-12 text-base font-semibold shadow-lg shadow-green-600/20"
-                        disabled={waBusy}
-                        onClick={handleStartEmbeddedSignup}
+                        className="bg-green-600/60 text-white px-10 h-12 text-base font-semibold cursor-not-allowed"
+                        disabled
                       >
                         <Zap className="w-5 h-5 mr-2" />
                         Conectar WhatsApp
                       </Button>
-                      <p className="text-[11px] text-muted-foreground">
-                        Você será redirecionado para o login da Meta (Facebook) para autorizar a conexão.
-                      </p>
+                      <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 px-4 py-2.5 max-w-sm mx-auto">
+                        <p className="text-xs text-amber-600 dark:text-amber-400 font-medium">
+                          Em breve! A conexão oficial com a Meta está sendo finalizada.
+                        </p>
+                      </div>
                     </div>
                   )}
                 </div>
