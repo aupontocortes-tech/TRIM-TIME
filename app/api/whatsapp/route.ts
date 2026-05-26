@@ -22,7 +22,6 @@ function formatRow(row: {
   id: string
   phoneNumber: string
   graphPhoneNumberId: string | null
-  wabaId: string | null
   connectedAt: Date
   apiToken: string | null
 }) {
@@ -30,7 +29,6 @@ function formatRow(row: {
     id: row.id,
     phone_number: row.phoneNumber,
     graph_phone_number_id: row.graphPhoneNumberId ?? null,
-    waba_id: row.wabaId ?? null,
     connected: Boolean(row.apiToken?.trim() && row.graphPhoneNumberId?.trim()),
     connected_at: row.connectedAt.toISOString(),
   }
@@ -40,7 +38,6 @@ const SELECT_FIELDS = {
   id: true,
   phoneNumber: true,
   graphPhoneNumberId: true,
-  wabaId: true,
   connectedAt: true,
   apiToken: true,
 } as const
@@ -77,7 +74,6 @@ export async function POST(request: Request) {
       disconnect?: boolean
       phone_number?: string
       graph_phone_number_id?: string | null
-      waba_id?: string | null
       api_token?: string | null
     }
 
@@ -89,7 +85,7 @@ export async function POST(request: Request) {
       if (exists) {
         await prisma.whatsAppIntegration.update({
           where: { barbershopId },
-          data: { apiToken: null, graphPhoneNumberId: null, wabaId: null },
+          data: { apiToken: null, graphPhoneNumberId: null },
         })
       }
       const row = await prisma.whatsAppIntegration.findUnique({
@@ -114,7 +110,6 @@ export async function POST(request: Request) {
 
     const phoneNumber = body.phone_number.trim()
     const graphId = body.graph_phone_number_id?.trim() || null
-    const wabaId = body.waba_id?.trim() || null
     const token = body.api_token?.trim() || null
 
     const row = await prisma.whatsAppIntegration.upsert({
@@ -125,12 +120,10 @@ export async function POST(request: Request) {
         apiProvider: "meta",
         apiToken: token,
         graphPhoneNumberId: graphId,
-        wabaId,
       },
       update: {
         phoneNumber,
         graphPhoneNumberId: graphId,
-        wabaId,
         ...(token ? { apiToken: token } : {}),
       },
       select: SELECT_FIELDS,
