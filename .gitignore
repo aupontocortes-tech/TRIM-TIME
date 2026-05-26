@@ -17,3 +17,5 @@ tsconfig.tsbuildinfo
 
 # Cursor / Playwright MCP (logs locais)
 .playwright-mcp/
+.vercel
+.env*.local

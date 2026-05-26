@@ -19,7 +19,7 @@ function reminderOffsetsMinutes(ns: BarbershopNotificationSettings): number[] {
   }
   return [...out].sort((a, b) => a - b)
 }
-const WINDOW_MS = 10 * 60 * 1000
+const WINDOW_MS = 25 * 60 * 60 * 1000
 
 const DEFAULT_APP =
   "Olá {{nome_cliente}}! 📅 Lembrete: seu {{servico}} na {{barbearia}} é em {{data}} às {{horario}}. Não se atrase!"
