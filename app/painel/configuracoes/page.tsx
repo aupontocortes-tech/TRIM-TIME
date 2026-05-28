@@ -582,6 +582,9 @@ export default function ConfiguracoesPage() {
     : "—"
 
   const waApiConnected = Boolean(whatsappIntegrationFeature) && waConnected
+  const scrollToWaSettings = useCallback(() => {
+    document.getElementById("wa-settings-section")?.scrollIntoView({ behavior: "smooth", block: "start" })
+  }, [])
   const waDigitsOnly = waPhone.replace(/\D/g, "")
   const fallbackWaMessage = renderNotificationTemplate(
     notifWaConfirmTpl.trim() || DEFAULT_WA_CONFIRM,
@@ -3675,59 +3678,19 @@ export default function ConfiguracoesPage() {
 
         <TabsContent value="integracao" className="space-y-6">
 
-          {waApiConnected ? (
-            <Card className="bg-card border-green-500/20 overflow-hidden">
-              <div className="h-1 bg-green-500" />
-              <CardContent className="pt-6 pb-6">
-                <div className="flex items-start gap-4">
-                  <div className="w-14 h-14 rounded-2xl bg-green-500/10 flex items-center justify-center shrink-0">
-                    <CheckCircle2 className="w-7 h-7 text-green-500" />
-                  </div>
-                  <div className="flex-1 space-y-1.5">
-                    <div className="flex items-center gap-2.5">
-                      <p className="text-lg font-semibold text-foreground">WhatsApp conectado</p>
-                      <div className="flex items-center gap-1.5 rounded-full bg-green-500/10 px-2.5 py-0.5">
-                        <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                        <span className="text-[11px] font-medium text-green-600 dark:text-green-400">Ativo</span>
-                      </div>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      Número: <span className="text-foreground font-medium">{waPhone.trim() || "—"}</span>
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Seus clientes estão recebendo confirmações, lembretes e mensagens automáticas.
-                    </p>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="shrink-0 text-muted-foreground hover:text-destructive hover:border-destructive/30"
-                    disabled={waBusy}
-                    onClick={() => void handleWaDisconnect()}
-                  >
-                    {waBusy ? "..." : "Desconectar"}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ) : (
-            <WhatsAppConnectWizard
-              premium={whatsappIntegrationFeature}
-              loading={waLoading}
-              connected={waConnected}
-              phone={waPhone}
-              busy={waBusy}
-              error={waError}
-              onClearError={() => setWaError(null)}
-              onSetError={setWaError}
-              onReload={loadWhatsapp}
-              notifWa={notifWa}
-              onNotifWaChange={setNotifWa}
-              onSaveNotifications={handleSaveNotificacoes}
-              notifBusy={notifBusy}
-            />
-          )}
+          <WhatsAppConnectWizard
+            premium={whatsappIntegrationFeature}
+            loading={waLoading}
+            connected={waApiConnected}
+            phone={waPhone}
+            busy={waBusy}
+            error={waError}
+            onClearError={() => setWaError(null)}
+            onSetError={setWaError}
+            onReload={loadWhatsapp}
+            onScrollToSettings={scrollToWaSettings}
+            onDisconnect={() => void handleWaDisconnect()}
+          />
 
           {(waError || notifError) && waApiConnected ? (
             <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
@@ -3738,7 +3701,7 @@ export default function ConfiguracoesPage() {
           {/* ── CONFIGURAÇÕES (só aparece se conectado ou Premium) ── */}
           {whatsappIntegrationFeature ? (
             <>
-              <Card className="bg-card border-border">
+              <Card id="wa-settings-section" className="bg-card border-border scroll-mt-24">
                 <CardHeader>
                   <CardTitle className="text-foreground text-base flex items-center gap-2">
                     <Bell className="w-4 h-4 text-primary" />

@@ -1,49 +1,23 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Switch } from "@/components/ui/switch"
 import {
   MessageSquare,
   CalendarCheck,
   Clock3,
   Send,
   Zap,
-  Shield,
-  Smartphone,
   CheckCircle2,
   ArrowRight,
   ArrowLeft,
   Facebook,
+  Settings2,
 } from "lucide-react"
 
-const WIZARD_STORAGE_KEY = "trimtime_wa_wizard_step"
-const TOTAL_STEPS = 5
-
-const STEP_LABELS = [
-  "Conheça",
-  "Prepare-se",
-  "Conectar",
-  "Lembretes",
-  "Pronto",
-] as const
-
-type WizardStep = 1 | 2 | 3 | 4 | 5
-
-function loadSavedStep(): WizardStep {
-  if (typeof window === "undefined") return 1
-  const raw = sessionStorage.getItem(WIZARD_STORAGE_KEY)
-  const n = raw ? Number(raw) : 1
-  if (n >= 1 && n <= 5) return n as WizardStep
-  return 1
-}
-
-function saveStep(step: WizardStep) {
-  if (typeof window === "undefined") return
-  sessionStorage.setItem(WIZARD_STORAGE_KEY, String(step))
-}
+const STEPS = ["Conheça", "Prepare-se", "Conectar", "Pronto"] as const
 
 export type WhatsAppConnectWizardProps = {
   premium: boolean
@@ -55,11 +29,8 @@ export type WhatsAppConnectWizardProps = {
   onClearError: () => void
   onSetError: (message: string) => void
   onReload: () => Promise<void>
-  /** Ativa lembretes e salva (etapa 4). */
-  notifWa: boolean
-  onNotifWaChange: (v: boolean) => void
-  onSaveNotifications: () => Promise<boolean>
-  notifBusy: boolean
+  onScrollToSettings: () => void
+  onDisconnect?: () => void
 }
 
 export function WhatsAppConnectWizard({
@@ -72,12 +43,10 @@ export function WhatsAppConnectWizard({
   onClearError,
   onSetError,
   onReload,
-  notifWa,
-  onNotifWaChange,
-  onSaveNotifications,
-  notifBusy,
+  onScrollToSettings,
+  onDisconnect,
 }: WhatsAppConnectWizardProps) {
-  const [step, setStep] = useState<WizardStep>(1)
+  const [step, setStep] = useState(1)
   const [checkFb, setCheckFb] = useState(false)
   const [checkWaBusiness, setCheckWaBusiness] = useState(false)
   const [checkNumber, setCheckNumber] = useState(false)
@@ -87,32 +56,30 @@ export function WhatsAppConnectWizard({
   const metaConfigId = process.env.NEXT_PUBLIC_META_EMBEDDED_SIGNUP_CONFIG_ID?.trim()
   const metaReady = Boolean(metaAppId && metaConfigId)
 
-  const goTo = useCallback((s: WizardStep) => {
-    setStep(s)
-    saveStep(s)
+  const goTo = (n: number) => {
+    setStep(n)
     onClearError()
-  }, [onClearError])
+  }
 
-  useEffect(() => {
-    if (loading) return
-    if (connected) {
-      setStep(5)
-      saveStep(5)
-      return
-    }
-    const saved = loadSavedStep()
-    if (saved > 1) {
-      setStep((current) => (current > 1 ? current : saved))
-    }
-  }, [loading, connected])
+  const stepReady = checkFb && checkWaBusiness && checkNumber
 
   const handleConnectMeta = async () => {
-    if (!metaReady) return
+    if (!premium) {
+      onSetError("A conexão do WhatsApp está disponível no plano Premium.")
+      return
+    }
+    if (!metaReady) {
+      onSetError(
+        "A conexão oficial com a Meta está sendo liberada. Você já pode configurar lembretes e textos das mensagens abaixo."
+      )
+      goTo(4)
+      onScrollToSettings()
+      return
+    }
+
     onClearError()
     setConnecting(true)
-
     try {
-      // Carrega SDK da Meta sob demanda
       await new Promise<void>((resolve, reject) => {
         if (typeof window === "undefined") {
           reject(new Error("Ambiente inválido"))
@@ -128,33 +95,27 @@ export function WhatsAppConnectWizard({
           }
           fbAsyncInit?: () => void
         }
+        const done = () => {
+          if (w.FB) resolve()
+          else reject(new Error("Não foi possível carregar o login da Meta"))
+        }
         if (w.FB) {
-          resolve()
+          done()
           return
         }
-        w.fbAsyncInit = () => resolve()
-        const existing = document.getElementById("facebook-jssdk")
-        if (existing) {
-          const t = setInterval(() => {
-            if (w.FB) {
-              clearInterval(t)
-              resolve()
-            }
-          }, 100)
-          setTimeout(() => {
-            clearInterval(t)
-            if (!w.FB) reject(new Error("Não foi possível carregar o login da Meta"))
-          }, 8000)
-          return
+        w.fbAsyncInit = () => done()
+        if (!document.getElementById("facebook-jssdk")) {
+          const s = document.createElement("script")
+          s.id = "facebook-jssdk"
+          s.async = true
+          s.defer = true
+          s.crossOrigin = "anonymous"
+          s.src = "https://connect.facebook.net/pt_BR/sdk.js"
+          s.onerror = () => reject(new Error("Erro ao carregar o login da Meta"))
+          document.body.appendChild(s)
+        } else {
+          setTimeout(done, 1500)
         }
-        const s = document.createElement("script")
-        s.id = "facebook-jssdk"
-        s.async = true
-        s.defer = true
-        s.crossOrigin = "anonymous"
-        s.src = "https://connect.facebook.net/pt_BR/sdk.js"
-        s.onerror = () => reject(new Error("Erro ao carregar o login da Meta"))
-        document.body.appendChild(s)
       })
 
       const w = window as unknown as {
@@ -167,10 +128,6 @@ export function WhatsAppConnectWizard({
         }
       }
 
-      if (!w.FB) {
-        throw new Error("Não foi possível carregar o login da Meta")
-      }
-
       w.FB.init({
         appId: metaAppId!,
         cookie: true,
@@ -181,26 +138,26 @@ export function WhatsAppConnectWizard({
       await new Promise<void>((resolve, reject) => {
         w.FB.login(
           (response) => {
-            if (response.authResponse?.code) {
-              void fetch("/api/whatsapp/meta-signup", {
-                method: "POST",
-                credentials: "include",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ code: response.authResponse.code }),
-              })
-                .then(async (r) => {
-                  const j = await r.json().catch(() => ({}))
-                  if (!r.ok) {
-                    reject(new Error(typeof j.error === "string" ? j.error : "Não foi possível conectar"))
-                    return
-                  }
-                  await onReload()
-                  resolve()
-                })
-                .catch(() => reject(new Error("Erro de rede ao conectar")))
-            } else {
-              reject(new Error("Conexão cancelada ou não autorizada"))
+            if (!response.authResponse?.code) {
+              reject(new Error("Conexão cancelada. Tente novamente quando quiser."))
+              return
             }
+            void fetch("/api/whatsapp/meta-signup", {
+              method: "POST",
+              credentials: "include",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ code: response.authResponse.code }),
+            })
+              .then(async (r) => {
+                const j = await r.json().catch(() => ({}))
+                if (!r.ok) {
+                  reject(new Error(typeof j.error === "string" ? j.error : "Não foi possível conectar"))
+                  return
+                }
+                await onReload()
+                resolve()
+              })
+              .catch(() => reject(new Error("Erro de rede ao conectar")))
           },
           {
             config_id: metaConfigId!,
@@ -213,49 +170,57 @@ export function WhatsAppConnectWizard({
 
       goTo(4)
     } catch (e) {
-      onSetError(e instanceof Error ? e.message : "Não foi possível conectar com a Meta")
+      onSetError(e instanceof Error ? e.message : "Não foi possível conectar")
     } finally {
       setConnecting(false)
     }
   }
 
-  const stepReady = checkFb && checkWaBusiness && checkNumber
-
   if (loading) {
     return (
       <Card className="bg-card border-border">
         <CardContent className="py-12 text-center">
-          <p className="text-muted-foreground text-sm">Carregando...</p>
+          <p className="text-muted-foreground text-sm">Carregando…</p>
         </CardContent>
       </Card>
     )
   }
 
-  if (connected && step === 5) {
+  if (connected) {
     return (
       <Card className="bg-card border-green-500/20 overflow-hidden">
         <div className="h-1 bg-green-500" />
-        <CardContent className="pt-6 pb-6">
-          <WizardProgress current={5} />
-          <div className="flex items-start gap-4 mt-6">
+        <CardContent className="pt-6 pb-6 space-y-4">
+          <div className="flex items-start gap-4">
             <div className="w-14 h-14 rounded-2xl bg-green-500/10 flex items-center justify-center shrink-0">
               <CheckCircle2 className="w-7 h-7 text-green-500" />
             </div>
             <div className="flex-1 space-y-1.5">
-              <p className="text-lg font-semibold text-foreground">Tudo configurado!</p>
+              <p className="text-lg font-semibold text-foreground">WhatsApp conectado</p>
               <p className="text-sm text-muted-foreground">
-                WhatsApp conectado: <span className="text-foreground font-medium">{phone.trim() || "—"}</span>
+                Número: <span className="text-foreground font-medium">{phone.trim() || "—"}</span>
               </p>
               <p className="text-xs text-muted-foreground">
                 Seus clientes já podem receber confirmações e lembretes automáticos.
               </p>
             </div>
           </div>
-          <div className="flex flex-wrap gap-2 mt-6">
-            <Button type="button" variant="outline" size="sm" onClick={() => goTo(4)}>
-              Ajustar lembretes
+          <Button type="button" variant="outline" size="sm" onClick={onScrollToSettings}>
+            <Settings2 className="w-4 h-4 mr-2" />
+            Ajustar lembretes e mensagens
+          </Button>
+          {onDisconnect ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="text-muted-foreground hover:text-destructive"
+              disabled={busy}
+              onClick={onDisconnect}
+            >
+              {busy ? "…" : "Desconectar"}
             </Button>
-          </div>
+          ) : null}
         </CardContent>
       </Card>
     )
@@ -265,26 +230,51 @@ export function WhatsAppConnectWizard({
     <Card className="bg-card border-border overflow-hidden">
       <CardContent className="pt-8 pb-10">
         <div className="text-center space-y-6 max-w-lg mx-auto">
-          <WizardProgress current={step} />
+          {/* Indicador de etapas */}
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-primary">
+              Passo {step} de {STEPS.length}
+            </p>
+            <div className="flex gap-2 justify-center">
+              {STEPS.map((label, i) => {
+                const n = i + 1
+                return (
+                  <div key={label} className="flex flex-col items-center gap-1 min-w-[4rem]">
+                    <div
+                      className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${
+                        n < step
+                          ? "bg-green-500 text-white"
+                          : n === step
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      {n < step ? "✓" : n}
+                    </div>
+                    <span className={`text-[10px] ${n === step ? "text-foreground font-medium" : "text-muted-foreground"}`}>
+                      {label}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
 
-          {/* Cabeçalho fixo em todas as etapas */}
-          <div className="space-y-4 pt-2">
+          <div className="space-y-4">
             <div className="mx-auto w-20 h-20 rounded-3xl bg-green-500/10 flex items-center justify-center">
               <MessageSquare className="w-10 h-10 text-green-500" />
             </div>
             <div className="space-y-2">
               <p className="text-2xl font-bold text-foreground">WhatsApp Business</p>
               <p className="text-sm text-muted-foreground leading-relaxed max-w-md mx-auto">
-                {step === 1 && "Conecte seu WhatsApp oficial em poucos passos. Vamos guiar você."}
-                {step === 2 && "Confirme que você tem tudo pronto antes de conectar."}
-                {step === 3 && "Autorize com sua conta Meta (Facebook) — é rápido e seguro."}
-                {step === 4 && "Ative os lembretes para seus clientes não esquecerem o horário."}
-                {step === 5 && "Parabéns! Sua barbearia está pronta para enviar mensagens automáticas."}
+                {step === 1 && "Envie confirmações, lembretes e mensagens automáticas para seus clientes."}
+                {step === 2 && "Marque os itens abaixo para confirmar que está pronto."}
+                {step === 3 && "Conecte com a Meta em poucos cliques — login seguro, sem copiar códigos."}
+                {step === 4 && "Quase lá! Ajuste lembretes e textos das mensagens na seção abaixo."}
               </p>
             </div>
           </div>
 
-          {/* Conteúdo da etapa */}
           {step === 1 && (
             <div className="grid grid-cols-2 gap-3 text-left max-w-sm mx-auto">
               {[
@@ -293,10 +283,7 @@ export function WhatsAppConnectWizard({
                 { icon: <Send className="w-4 h-4 text-primary" />, text: "Mensagens automáticas" },
                 { icon: <Zap className="w-4 h-4 text-amber-500" />, text: "Atendimento automatizado" },
               ].map((item, i) => (
-                <div
-                  key={i}
-                  className="flex items-center gap-2.5 rounded-lg bg-muted/40 border border-border/60 px-3 py-2.5"
-                >
+                <div key={i} className="flex items-center gap-2.5 rounded-lg bg-muted/40 border border-border/60 px-3 py-2.5">
                   {item.icon}
                   <span className="text-xs font-medium text-foreground">{item.text}</span>
                 </div>
@@ -306,90 +293,57 @@ export function WhatsAppConnectWizard({
 
           {step === 2 && (
             <div className="max-w-sm mx-auto text-left space-y-3">
-              <label className="flex items-start gap-3 cursor-pointer rounded-lg border border-border bg-muted/30 p-3">
-                <Checkbox checked={checkFb} onCheckedChange={(v) => setCheckFb(v === true)} className="mt-0.5" />
-                <span className="text-sm text-foreground">
-                  Tenho uma conta <strong>Facebook ou Meta</strong> (pessoal ou da empresa)
-                </span>
-              </label>
-              <label className="flex items-start gap-3 cursor-pointer rounded-lg border border-border bg-muted/30 p-3">
-                <Checkbox
-                  checked={checkWaBusiness}
-                  onCheckedChange={(v) => setCheckWaBusiness(v === true)}
-                  className="mt-0.5"
-                />
-                <span className="text-sm text-foreground">
-                  Meu número já está no <strong>WhatsApp Business</strong> (app no celular)
-                </span>
-              </label>
-              <label className="flex items-start gap-3 cursor-pointer rounded-lg border border-border bg-muted/30 p-3">
-                <Checkbox checked={checkNumber} onCheckedChange={(v) => setCheckNumber(v === true)} className="mt-0.5" />
-                <span className="text-sm text-foreground">
-                  Sei qual é o <strong>número da barbearia</strong> que quero usar para os clientes
-                </span>
-              </label>
+              {[
+                { checked: checkFb, set: setCheckFb, text: "Tenho conta Facebook ou Meta" },
+                { checked: checkWaBusiness, set: setCheckWaBusiness, text: "Meu número está no WhatsApp Business" },
+                { checked: checkNumber, set: setCheckNumber, text: "Sei qual número da barbearia vou usar" },
+              ].map((item) => (
+                <label
+                  key={item.text}
+                  className="flex items-start gap-3 cursor-pointer rounded-lg border border-border bg-muted/30 p-3"
+                >
+                  <Checkbox checked={item.checked} onCheckedChange={(v) => item.set(v === true)} className="mt-0.5" />
+                  <span className="text-sm text-foreground">{item.text}</span>
+                </label>
+              ))}
             </div>
           )}
 
           {step === 3 && (
-            <div className="space-y-4 max-w-sm mx-auto">
-              <div className="rounded-xl border border-border bg-muted/30 p-4 text-left space-y-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-[#1877F2]/15 flex items-center justify-center">
-                    <Facebook className="w-5 h-5 text-[#1877F2]" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-foreground">Login oficial da Meta</p>
-                    <p className="text-xs text-muted-foreground">Você escolhe o número e autoriza em uma janela segura.</p>
-                  </div>
-                </div>
-                <ol className="text-xs text-muted-foreground space-y-1.5 list-decimal list-inside">
-                  <li>Clique em &quot;Conectar com a Meta&quot;</li>
-                  <li>Entre com Facebook ou Instagram Business</li>
-                  <li>Selecione ou crie sua conta WhatsApp Business</li>
-                  <li>Confirme o número — pronto!</li>
-                </ol>
-              </div>
-            </div>
-          )}
-
-          {step === 4 && (
-            <div className="max-w-sm mx-auto text-left space-y-4 rounded-xl border border-border bg-muted/30 p-4">
+            <div className="max-w-sm mx-auto rounded-xl border border-border bg-muted/30 p-4 text-left space-y-3">
               <div className="flex items-center gap-3">
-                <Switch checked={notifWa} onCheckedChange={onNotifWaChange} id="wizard-notif-wa" />
-                <label htmlFor="wizard-notif-wa" className="text-sm font-medium text-foreground cursor-pointer">
-                  Enviar lembretes por WhatsApp antes do horário
-                </label>
+                <div className="w-10 h-10 rounded-full bg-[#1877F2]/15 flex items-center justify-center">
+                  <Facebook className="w-5 h-5 text-[#1877F2]" />
+                </div>
+                <p className="text-sm font-medium text-foreground">Login oficial da Meta</p>
               </div>
               <p className="text-xs text-muted-foreground">
-                Recomendado: o cliente recebe um aviso 1 ou 2 horas antes. Você pode personalizar os textos na seção
-                abaixo depois.
+                Ao clicar, abre a janela da Meta para você autorizar o número. Sem token manual, sem complicação.
               </p>
             </div>
           )}
 
-          {/* Navegação — etapas 1 e 2 sempre clicáveis (orientação) */}
+          {step === 4 && (
+            <div className="max-w-sm mx-auto rounded-xl border border-green-500/30 bg-green-500/5 p-4 text-left">
+              <p className="text-sm text-foreground">
+                Use a seção <strong>Lembretes automáticos</strong> e <strong>Textos das mensagens</strong> abaixo para
+                personalizar o que seus clientes recebem.
+              </p>
+            </div>
+          )}
+
+          {/* Botões — sempre visíveis por etapa */}
           <div className="flex flex-col sm:flex-row items-center justify-center gap-2 pt-2">
-            {step > 1 && step < 5 && (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => goTo((step - 1) as WizardStep)}
-                disabled={busy || connecting}
-              >
+            {step > 1 && step <= 4 && (
+              <Button type="button" variant="outline" onClick={() => goTo(step - 1)} disabled={busy || connecting}>
                 <ArrowLeft className="w-4 h-4 mr-1" />
                 Voltar
               </Button>
             )}
 
             {step === 1 && (
-              <Button
-                type="button"
-                size="lg"
-                className="bg-green-600 hover:bg-green-700 text-white px-8"
-                onClick={() => goTo(2)}
-              >
-                Começar
+              <Button type="button" size="lg" className="bg-green-600 hover:bg-green-700 text-white px-10" onClick={() => goTo(2)}>
+                Começar configuração
                 <ArrowRight className="w-4 h-4 ml-2" />
               </Button>
             )}
@@ -398,7 +352,7 @@ export function WhatsAppConnectWizard({
               <Button
                 type="button"
                 size="lg"
-                className="bg-green-600 hover:bg-green-700 text-white px-8"
+                className="bg-green-600 hover:bg-green-700 text-white px-10"
                 disabled={!stepReady}
                 onClick={() => goTo(3)}
               >
@@ -407,121 +361,56 @@ export function WhatsAppConnectWizard({
               </Button>
             )}
 
-            {step === 3 && premium && (
+            {step === 3 && (
               <Button
                 type="button"
                 size="lg"
-                className="bg-green-600 hover:bg-green-700 text-white px-8"
-                disabled={!metaReady || busy || connecting}
+                className="bg-green-600 hover:bg-green-700 text-white px-10"
+                disabled={busy || connecting}
                 onClick={() => void handleConnectMeta()}
               >
-                {connecting ? "Conectando…" : "Conectar com a Meta"}
+                {connecting ? "Conectando…" : "Conectar WhatsApp"}
                 {!connecting && <Zap className="w-4 h-4 ml-2" />}
               </Button>
             )}
 
-            {step === 4 && premium && (
-              <Button
-                type="button"
-                size="lg"
-                className="bg-primary text-primary-foreground px-8"
-                disabled={notifBusy || !connected}
-                onClick={async () => {
-                  onNotifWaChange(true)
-                  const ok = await onSaveNotifications()
-                  if (ok) goTo(5)
-                }}
-              >
-                {notifBusy ? "Salvando…" : "Salvar e concluir"}
-                <CheckCircle2 className="w-4 h-4 ml-2" />
+            {step === 4 && (
+              <Button type="button" size="lg" className="bg-primary text-primary-foreground px-10" onClick={onScrollToSettings}>
+                <Settings2 className="w-4 h-4 mr-2" />
+                Ir para configurações
               </Button>
             )}
           </div>
 
           {step === 2 && !stepReady && (
-            <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-              Marque os três itens acima para continuar.
-            </p>
+            <p className="text-xs text-muted-foreground">Marque os três itens para continuar.</p>
           )}
 
           {!premium && step >= 3 && (
-            <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-5 space-y-3 max-w-sm mx-auto">
-              <p className="text-sm font-semibold text-foreground">Disponível no plano Premium</p>
-              <p className="text-xs text-muted-foreground">
-                Para conectar o WhatsApp e enviar mensagens automáticas, faça upgrade do seu plano.
-              </p>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => (window.location.href = "/painel/assinatura")}
-              >
-                Ver planos
-                <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
-              </Button>
-            </div>
-          )}
-
-          {premium && step === 3 && !metaReady && (
-            <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 px-4 py-2.5 max-w-sm mx-auto">
-              <p className="text-xs text-amber-600 dark:text-amber-400 font-medium">
-                A conexão automática com a Meta está sendo ativada. Em breve o botão acima abrirá o cadastro oficial.
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 max-w-sm mx-auto text-left">
+              <p className="text-sm font-medium text-foreground">Plano Premium</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                A conexão do WhatsApp exige Premium.{" "}
+                <a href="/painel/assinatura" className="text-primary underline">
+                  Ver planos
+                </a>
               </p>
             </div>
           )}
 
-          {premium && step === 4 && !connected && (
-            <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-              Conecte o WhatsApp na etapa anterior para ativar os lembretes automáticos.
-            </p>
-          )}
-
-          {step < 3 && !premium && (
-            <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-              Você pode seguir os passos de orientação. A conexão oficial exige o plano Premium.
-            </p>
-          )}
-
-          {error ? (
-            <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm max-w-sm mx-auto">
+          {error && (
+            <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm max-w-sm mx-auto text-left">
               {error}
             </div>
-          ) : null}
+          )}
+
+          {error && error.includes("Meta") && step === 3 && (
+            <Button type="button" variant="link" className="text-primary" onClick={() => { goTo(4); onScrollToSettings() }}>
+              Continuar e configurar mensagens abaixo
+            </Button>
+          )}
         </div>
       </CardContent>
     </Card>
-  )
-}
-
-function WizardProgress({ current }: { current: number }) {
-  return (
-    <div className="space-y-3 max-w-md mx-auto">
-      <p className="text-xs font-medium text-muted-foreground">
-        Etapa {current} de {TOTAL_STEPS}
-      </p>
-      <div className="flex gap-1">
-        {STEP_LABELS.map((label, i) => {
-          const n = i + 1
-          const done = n < current
-          const active = n === current
-          return (
-            <div key={label} className="flex-1 space-y-1">
-              <div
-                className={`h-1.5 rounded-full transition-colors ${
-                  done ? "bg-green-500" : active ? "bg-primary" : "bg-muted"
-                }`}
-              />
-              <p
-                className={`text-[10px] leading-tight truncate ${
-                  active ? "text-foreground font-medium" : "text-muted-foreground"
-                }`}
-              >
-                {label}
-              </p>
-            </div>
-          )
-        })}
-      </div>
-    </div>
   )
 }
