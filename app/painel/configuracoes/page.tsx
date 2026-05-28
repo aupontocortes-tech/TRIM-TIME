@@ -82,6 +82,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { renderNotificationTemplate } from "@/lib/notification-template"
+import { WhatsAppConnectWizard } from "@/components/painel/whatsapp-connect-wizard"
 
 const diasSemana = [
   { key: "segunda" as const, label: "Segunda-feira" },
@@ -988,11 +989,6 @@ export default function ConfiguracoesPage() {
     }
   }
 
-  const handleStartEmbeddedSignup = () => {
-    // TODO: Integrate Meta Embedded Signup SDK
-    // window.FB.login(callback, { config_id: '...', response_type: 'code', override_default_response_type: true })
-  }
-
   const handleWaDisconnect = async () => {
     if (!confirm("Desconectar o WhatsApp? As mensagens automáticas vão parar de ser enviadas.")) return
     setWaBusy(true)
@@ -1017,8 +1013,8 @@ export default function ConfiguracoesPage() {
     }
   }
 
-  const handleSaveNotificacoes = async () => {
-    if (!barbershop) return
+  const handleSaveNotificacoes = async (): Promise<boolean> => {
+    if (!barbershop) return false
     setNotifBusy(true)
     setNotifError(null)
     setNotifOk(false)
@@ -1032,14 +1028,18 @@ export default function ConfiguracoesPage() {
         if (m >= 5 && m <= 7 * 24 * 60) reminder_custom_minutes = m
       }
       if (offsets.length === 0 && reminder_custom_minutes == null) {
-        setNotifError("Escolha pelo menos um horário para enviar o lembrete antes do serviço.")
-        setNotifBusy(false)
-        return
+        if (notifWa) {
+          offsets = [60]
+        } else {
+          setNotifError("Escolha pelo menos um horário para enviar o lembrete antes do serviço.")
+          setNotifBusy(false)
+          return false
+        }
       }
       if (notifWa && !waPhone.replace(/\D/g, "").trim()) {
-        setNotifError("Para ativar lembrete por WhatsApp, cadastre o número da integração abaixo.")
+        setNotifError("Para ativar lembrete por WhatsApp, conecte o WhatsApp na etapa anterior.")
         setNotifBusy(false)
-        return
+        return false
       }
       const r = await fetch("/api/barbershops", {
         method: "PATCH",
@@ -1066,13 +1066,15 @@ export default function ConfiguracoesPage() {
       const j = await r.json().catch(() => ({}))
       if (!r.ok) {
         setNotifError(typeof j.error === "string" ? j.error : "Erro ao salvar notificações")
-        return
+        return false
       }
       setNotifOk(true)
       setTimeout(() => setNotifOk(false), 3000)
       await refetch()
+      return true
     } catch {
       setNotifError("Erro de rede ao salvar")
+      return false
     } finally {
       setNotifBusy(false)
     }
@@ -3673,14 +3675,7 @@ export default function ConfiguracoesPage() {
 
         <TabsContent value="integracao" className="space-y-6">
 
-          {waLoading ? (
-            <Card className="bg-card border-border">
-              <CardContent className="py-12 text-center">
-                <p className="text-muted-foreground text-sm">Carregando...</p>
-              </CardContent>
-            </Card>
-          ) : waApiConnected ? (
-            /* ── CONECTADO ── */
+          {waApiConnected ? (
             <Card className="bg-card border-green-500/20 overflow-hidden">
               <div className="h-1 bg-green-500" />
               <CardContent className="pt-6 pb-6">
@@ -3717,112 +3712,27 @@ export default function ConfiguracoesPage() {
               </CardContent>
             </Card>
           ) : (
-            /* ── NÃO CONECTADO ── */
-            <Card className="bg-card border-border overflow-hidden">
-              <CardContent className="pt-8 pb-10">
-                <div className="text-center space-y-8 max-w-lg mx-auto">
-                  <div className="space-y-4">
-                    <div className="mx-auto w-20 h-20 rounded-3xl bg-green-500/10 flex items-center justify-center">
-                      <MessageSquare className="w-10 h-10 text-green-500" />
-                    </div>
-                    <div className="space-y-2">
-                      <p className="text-2xl font-bold text-foreground">WhatsApp Business</p>
-                      <p className="text-sm text-muted-foreground leading-relaxed max-w-md mx-auto">
-                        Conecte seu WhatsApp Business oficial para enviar mensagens automáticas aos seus clientes.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3 text-left max-w-sm mx-auto">
-                    {[
-                      { icon: <CalendarCheck className="w-4 h-4 text-green-500" />, text: "Confirmação de agendamento" },
-                      { icon: <Clock3 className="w-4 h-4 text-blue-500" />, text: "Lembretes automáticos" },
-                      { icon: <Send className="w-4 h-4 text-primary" />, text: "Mensagens automáticas" },
-                      { icon: <Zap className="w-4 h-4 text-amber-500" />, text: "Atendimento automatizado" },
-                    ].map((item, i) => (
-                      <div key={i} className="flex items-center gap-2.5 rounded-lg bg-muted/40 border border-border/60 px-3 py-2.5">
-                        {item.icon}
-                        <span className="text-xs font-medium text-foreground">{item.text}</span>
-                      </div>
-                    ))}
-                  </div>
-
-                  {!whatsappIntegrationFeature ? (
-                    <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-5 space-y-3 max-w-sm mx-auto">
-                      <p className="text-sm font-semibold text-foreground">Disponível no plano Premium</p>
-                      <p className="text-xs text-muted-foreground">
-                        Faça upgrade para desbloquear o WhatsApp automático e enviar mensagens aos seus clientes.
-                      </p>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => window.location.href = "/painel/assinatura"}
-                      >
-                        Ver planos
-                        <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      <Button
-                        type="button"
-                        size="lg"
-                        className="bg-green-600/60 text-white px-10 h-12 text-base font-semibold cursor-not-allowed"
-                        disabled
-                      >
-                        <Zap className="w-5 h-5 mr-2" />
-                        Conectar WhatsApp
-                      </Button>
-                      <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 px-4 py-2.5 max-w-sm mx-auto">
-                        <p className="text-xs text-amber-600 dark:text-amber-400 font-medium">
-                          Em breve! A conexão oficial com a Meta está sendo finalizada.
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+            <WhatsAppConnectWizard
+              premium={whatsappIntegrationFeature}
+              loading={waLoading}
+              connected={waConnected}
+              phone={waPhone}
+              busy={waBusy}
+              error={waError}
+              onClearError={() => setWaError(null)}
+              onSetError={setWaError}
+              onReload={loadWhatsapp}
+              notifWa={notifWa}
+              onNotifWaChange={setNotifWa}
+              onSaveNotifications={handleSaveNotificacoes}
+              notifBusy={notifBusy}
+            />
           )}
 
-          {waError ? (
+          {(waError || notifError) && waApiConnected ? (
             <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
-              {waError}
+              {waError ?? notifError}
             </div>
-          ) : null}
-
-          {/* ── COMO FUNCIONA ── */}
-          {!waApiConnected && !waLoading ? (
-            <Card className="bg-card border-border">
-              <CardHeader>
-                <CardTitle className="text-foreground text-base">Como funciona</CardTitle>
-                <CardDescription className="text-muted-foreground">
-                  Em poucos cliques seu WhatsApp está conectado e funcionando.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                  {[
-                    { step: "1", icon: <Zap className="w-5 h-5" />, title: "Clique em Conectar", desc: "Abre a tela oficial da Meta" },
-                    { step: "2", icon: <Shield className="w-5 h-5" />, title: "Faça login", desc: "Entre com sua conta Facebook/Meta" },
-                    { step: "3", icon: <Smartphone className="w-5 h-5" />, title: "Autorize", desc: "Selecione o número WhatsApp" },
-                    { step: "4", icon: <CheckCircle2 className="w-5 h-5" />, title: "Pronto!", desc: "Mensagens enviadas automaticamente" },
-                  ].map((s) => (
-                    <div key={s.step} className="relative flex flex-col items-center text-center p-4 space-y-2">
-                      <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-                        {s.icon}
-                      </div>
-                      <p className="text-sm font-medium text-foreground">{s.title}</p>
-                      <p className="text-xs text-muted-foreground">{s.desc}</p>
-                      <div className="absolute -top-1 -left-1 w-5 h-5 rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center">
-                        {s.step}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
           ) : null}
 
           {/* ── CONFIGURAÇÕES (só aparece se conectado ou Premium) ── */}

@@ -5,6 +5,18 @@ import { hashPassword, verifyPassword } from "@/lib/auth/password"
 import { withBarbershopPasswordHash, getBarbershopPasswordHash } from "@/lib/barbershop-auth-settings"
 import { prisma } from "@/lib/prisma"
 
+function loginDbErrorMessage(e: unknown): string | null {
+  const msg = e instanceof Error ? e.message : String(e)
+  if (msg.includes("Invalid URL") || msg.includes("DATABASE_URL")) {
+    return (
+      "O banco de dados local não está configurado. No arquivo .env.local, cole as mesmas credenciais " +
+      "do Supabase que você usa na Vercel (trimtime.pro): DATABASE_URL, DIRECT_DATABASE_URL e chaves Supabase. " +
+      "Depois reinicie o servidor (npm run dev)."
+    )
+  }
+  return null
+}
+
 /**
  * Login do app barbearias: email → cookie → /dashboard-barbearia.
  * Super Admin também pode entrar por aqui para usar o painel como barbearia.
@@ -55,9 +67,10 @@ export async function POST(request: Request) {
       redirect: "/dashboard-barbearia",
     })
   } catch (e) {
+    const friendly = loginDbErrorMessage(e)
     return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Erro ao fazer login" },
-      { status: 500 }
+      { error: friendly ?? (e instanceof Error ? e.message : "Erro ao fazer login") },
+      { status: friendly ? 503 : 500 }
     )
   }
 }
