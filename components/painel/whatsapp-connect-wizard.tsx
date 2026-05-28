@@ -101,7 +101,9 @@ export function WhatsAppConnectWizard({
       return
     }
     const saved = loadSavedStep()
-    if (saved > 1 && saved < 5) setStep(saved)
+    if (saved > 1) {
+      setStep((current) => (current > 1 ? current : saved))
+    }
   }, [loading, connected])
 
   const handleConnectMeta = async () => {
@@ -348,14 +350,6 @@ export function WhatsAppConnectWizard({
                   <li>Confirme o número — pronto!</li>
                 </ol>
               </div>
-              {!metaReady && (
-                <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 px-4 py-2.5">
-                  <p className="text-xs text-amber-600 dark:text-amber-400 font-medium">
-                    A conexão automática com a Meta está sendo ativada na plataforma. Em breve este botão abrirá o
-                    cadastro oficial.
-                  </p>
-                </div>
-              )}
             </div>
           )}
 
@@ -374,82 +368,118 @@ export function WhatsAppConnectWizard({
             </div>
           )}
 
-          {/* Premium gate */}
-          {!premium ? (
+          {/* Navegação — etapas 1 e 2 sempre clicáveis (orientação) */}
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-2 pt-2">
+            {step > 1 && step < 5 && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => goTo((step - 1) as WizardStep)}
+                disabled={busy || connecting}
+              >
+                <ArrowLeft className="w-4 h-4 mr-1" />
+                Voltar
+              </Button>
+            )}
+
+            {step === 1 && (
+              <Button
+                type="button"
+                size="lg"
+                className="bg-green-600 hover:bg-green-700 text-white px-8"
+                onClick={() => goTo(2)}
+              >
+                Começar
+                <ArrowRight className="w-4 h-4 ml-2" />
+              </Button>
+            )}
+
+            {step === 2 && (
+              <Button
+                type="button"
+                size="lg"
+                className="bg-green-600 hover:bg-green-700 text-white px-8"
+                disabled={!stepReady}
+                onClick={() => goTo(3)}
+              >
+                Continuar
+                <ArrowRight className="w-4 h-4 ml-2" />
+              </Button>
+            )}
+
+            {step === 3 && premium && (
+              <Button
+                type="button"
+                size="lg"
+                className="bg-green-600 hover:bg-green-700 text-white px-8"
+                disabled={!metaReady || busy || connecting}
+                onClick={() => void handleConnectMeta()}
+              >
+                {connecting ? "Conectando…" : "Conectar com a Meta"}
+                {!connecting && <Zap className="w-4 h-4 ml-2" />}
+              </Button>
+            )}
+
+            {step === 4 && premium && (
+              <Button
+                type="button"
+                size="lg"
+                className="bg-primary text-primary-foreground px-8"
+                disabled={notifBusy || !connected}
+                onClick={async () => {
+                  onNotifWaChange(true)
+                  const ok = await onSaveNotifications()
+                  if (ok) goTo(5)
+                }}
+              >
+                {notifBusy ? "Salvando…" : "Salvar e concluir"}
+                <CheckCircle2 className="w-4 h-4 ml-2" />
+              </Button>
+            )}
+          </div>
+
+          {step === 2 && !stepReady && (
+            <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+              Marque os três itens acima para continuar.
+            </p>
+          )}
+
+          {!premium && step >= 3 && (
             <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-5 space-y-3 max-w-sm mx-auto">
               <p className="text-sm font-semibold text-foreground">Disponível no plano Premium</p>
               <p className="text-xs text-muted-foreground">
-                Faça upgrade para desbloquear o WhatsApp automático.
+                Para conectar o WhatsApp e enviar mensagens automáticas, faça upgrade do seu plano.
               </p>
-              <Button type="button" variant="outline" size="sm" onClick={() => (window.location.href = "/painel/assinatura")}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => (window.location.href = "/painel/assinatura")}
+              >
                 Ver planos
                 <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
               </Button>
             </div>
-          ) : (
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-2 pt-2">
-              {step > 1 && step < 5 && (
-                <Button type="button" variant="outline" onClick={() => goTo((step - 1) as WizardStep)} disabled={busy || connecting}>
-                  <ArrowLeft className="w-4 h-4 mr-1" />
-                  Voltar
-                </Button>
-              )}
+          )}
 
-              {step === 1 && (
-                <Button
-                  type="button"
-                  size="lg"
-                  className="bg-green-600 hover:bg-green-700 text-white px-8"
-                  onClick={() => goTo(2)}
-                >
-                  Começar
-                  <ArrowRight className="w-4 h-4 ml-2" />
-                </Button>
-              )}
-
-              {step === 2 && (
-                <Button
-                  type="button"
-                  size="lg"
-                  className="bg-green-600 hover:bg-green-700 text-white px-8"
-                  disabled={!stepReady}
-                  onClick={() => goTo(3)}
-                >
-                  Continuar
-                  <ArrowRight className="w-4 h-4 ml-2" />
-                </Button>
-              )}
-
-              {step === 3 && (
-                <Button
-                  type="button"
-                  size="lg"
-                  className="bg-green-600 hover:bg-green-700 text-white px-8"
-                  disabled={!metaReady || busy || connecting}
-                  onClick={() => void handleConnectMeta()}
-                >
-                  {connecting ? "Conectando…" : "Conectar com a Meta"}
-                  {!connecting && <Zap className="w-4 h-4 ml-2" />}
-                </Button>
-              )}
-
-              {step === 4 && (
-                <Button
-                  type="button"
-                  size="lg"
-                  className="bg-primary text-primary-foreground px-8"
-                  disabled={notifBusy}
-                  onClick={async () => {
-                    onNotifWaChange(true)
-                    const ok = await onSaveNotifications()
-                    if (ok) goTo(5)
-                  }}
-                >
-                  {notifBusy ? "Salvando…" : "Salvar e concluir"}
-                  <CheckCircle2 className="w-4 h-4 ml-2" />
-                </Button>
-              )}
+          {premium && step === 3 && !metaReady && (
+            <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 px-4 py-2.5 max-w-sm mx-auto">
+              <p className="text-xs text-amber-600 dark:text-amber-400 font-medium">
+                A conexão automática com a Meta está sendo ativada. Em breve o botão acima abrirá o cadastro oficial.
+              </p>
             </div>
+          )}
+
+          {premium && step === 4 && !connected && (
+            <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+              Conecte o WhatsApp na etapa anterior para ativar os lembretes automáticos.
+            </p>
+          )}
+
+          {step < 3 && !premium && (
+            <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+              Você pode seguir os passos de orientação. A conexão oficial exige o plano Premium.
+            </p>
           )}
 
           {error ? (
