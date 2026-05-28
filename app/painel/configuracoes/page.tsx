@@ -1019,7 +1019,7 @@ export default function ConfiguracoesPage() {
     setNotifError(null)
     setNotifOk(false)
     try {
-      const offsets = notifReminderOffsets.filter((m) => ALLOWED_REMINDER_MINUTES.has(m))
+      let offsets = notifReminderOffsets.filter((m) => ALLOWED_REMINDER_MINUTES.has(m))
       const rawH = notifCustomReminderHours.trim().replace(",", ".")
       const hours = rawH === "" ? NaN : Number(rawH)
       let reminder_custom_minutes: number | null = null

@@ -155,7 +155,7 @@ export function WhatsAppConnectWizard({
         document.body.appendChild(s)
       })
 
-      const w = window as Window & {
+      const w = window as unknown as {
         FB: {
           init: (p: { appId: string; cookie: boolean; xfbml: boolean; version: string }) => void
           login: (
@@ -163,6 +163,10 @@ export function WhatsAppConnectWizard({
             opts: Record<string, string | boolean>
           ) => void
         }
+      }
+
+      if (!w.FB) {
+        throw new Error("Não foi possível carregar o login da Meta")
       }
 
       w.FB.init({
