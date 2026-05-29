@@ -3683,6 +3683,8 @@ export default function ConfiguracoesPage() {
             loading={waLoading}
             connected={waApiConnected}
             phone={waPhone}
+            shopName={barbearia.nome || barbershop?.name || ""}
+            shopPhone={barbearia.telefone || barbershop?.phone || ""}
             busy={waBusy}
             error={waError}
             onClearError={() => setWaError(null)}

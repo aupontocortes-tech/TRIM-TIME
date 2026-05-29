@@ -15,15 +15,68 @@ import {
   ArrowLeft,
   Facebook,
   Settings2,
+  ExternalLink,
+  Smartphone,
+  Phone,
 } from "lucide-react"
 
 const STEPS = ["Conheça", "Prepare-se", "Conectar", "Pronto"] as const
+
+const REQUIRED_APPS = [
+  {
+    id: "wa-business",
+    name: "WhatsApp Business",
+    description: "Instale no celular do número da barbearia",
+    color: "#25D366",
+    links: [
+      { label: "Google Play", href: "https://play.google.com/store/apps/details?id=com.whatsapp.w4b" },
+      { label: "App Store", href: "https://apps.apple.com/app/whatsapp-business/id1386412985" },
+    ],
+  },
+  {
+    id: "meta-business",
+    name: "Meta Business Suite",
+    description: "Gerencie WhatsApp e anúncios da barbearia",
+    color: "#1877F2",
+    links: [
+      { label: "Google Play", href: "https://play.google.com/store/apps/details?id=com.facebook.pages.app" },
+      { label: "App Store", href: "https://apps.apple.com/app/meta-business-suite/id514643583" },
+      { label: "Versão web", href: "https://business.facebook.com/" },
+    ],
+  },
+  {
+    id: "facebook",
+    name: "Facebook",
+    description: "Use para entrar com sua conta Meta na conexão",
+    color: "#1877F2",
+    links: [
+      { label: "Google Play", href: "https://play.google.com/store/apps/details?id=com.facebook.katana" },
+      { label: "App Store", href: "https://apps.apple.com/app/facebook/id284882215" },
+    ],
+  },
+] as const
+
+const PREP_STEPS = [
+  "Baixe os apps abaixo no celular da barbearia (ou acesse a versão web da Meta).",
+  "Instale o WhatsApp Business no aparelho que usa o número que você vai conectar.",
+  "Confira se o número da barbearia está correto no card abaixo.",
+  "Marque os três itens e clique em Continuar.",
+] as const
+
+const CONNECT_STEPS = [
+  "Clique em Conectar WhatsApp — abre a tela oficial da Meta.",
+  "Faça login com Facebook ou conta Meta Business.",
+  "Selecione o número do WhatsApp Business da barbearia.",
+  "Autorize o Trim Time — pronto, mensagens automáticas ativadas.",
+] as const
 
 export type WhatsAppConnectWizardProps = {
   premium: boolean
   loading: boolean
   connected: boolean
   phone: string
+  shopName?: string
+  shopPhone?: string
   busy: boolean
   error: string | null
   onClearError: () => void
@@ -38,6 +91,8 @@ export function WhatsAppConnectWizard({
   loading,
   connected,
   phone,
+  shopName = "",
+  shopPhone = "",
   busy,
   error,
   onClearError,
@@ -62,6 +117,7 @@ export function WhatsAppConnectWizard({
   }
 
   const stepReady = checkFb && checkWaBusiness && checkNumber
+  const displayShopPhone = shopPhone.trim() || phone.trim()
 
   const handleConnectMeta = async () => {
     if (!premium) {
@@ -268,7 +324,7 @@ export function WhatsAppConnectWizard({
               <p className="text-2xl font-bold text-foreground">WhatsApp Business</p>
               <p className="text-sm text-muted-foreground leading-relaxed max-w-md mx-auto">
                 {step === 1 && "Envie confirmações, lembretes e mensagens automáticas para seus clientes."}
-                {step === 2 && "Marque os itens abaixo para confirmar que está pronto."}
+                {step === 2 && "Baixe os apps, confira o número da barbearia e confirme que está pronto para conectar."}
                 {step === 3 && "Conecte com a Meta em poucos cliques — login seguro, sem copiar códigos."}
                 {step === 4 && "Quase lá! Ajuste lembretes e textos das mensagens na seção abaixo."}
               </p>
@@ -292,34 +348,130 @@ export function WhatsAppConnectWizard({
           )}
 
           {step === 2 && (
-            <div className="max-w-sm mx-auto text-left space-y-3">
-              {[
-                { checked: checkFb, set: setCheckFb, text: "Tenho conta Facebook ou Meta" },
-                { checked: checkWaBusiness, set: setCheckWaBusiness, text: "Meu número está no WhatsApp Business" },
-                { checked: checkNumber, set: setCheckNumber, text: "Sei qual número da barbearia vou usar" },
-              ].map((item) => (
-                <label
-                  key={item.text}
-                  className="flex items-start gap-3 cursor-pointer rounded-lg border border-border bg-muted/30 p-3"
-                >
-                  <Checkbox checked={item.checked} onCheckedChange={(v) => item.set(v === true)} className="mt-0.5" />
-                  <span className="text-sm text-foreground">{item.text}</span>
-                </label>
-              ))}
+            <div className="max-w-md mx-auto text-left space-y-4">
+              <div className="rounded-xl border border-primary/25 bg-primary/5 p-4 space-y-2">
+                <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                  <Phone className="w-4 h-4 text-primary shrink-0" />
+                  Número da barbearia
+                </div>
+                <p className="text-lg font-semibold text-foreground tracking-wide">
+                  {displayShopPhone || "—"}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {shopName.trim() ? (
+                    <>
+                      Barbearia <strong className="text-foreground">{shopName.trim()}</strong> — use este número no
+                      WhatsApp Business ao conectar.
+                    </>
+                  ) : (
+                    "Cadastre o telefone em Configurações → Barbearia se ainda não aparecer aqui."
+                  )}
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-border bg-muted/20 p-4 space-y-3">
+                <p className="text-sm font-medium text-foreground flex items-center gap-2">
+                  <Smartphone className="w-4 h-4 text-primary" />
+                  Passo a passo
+                </p>
+                <ol className="space-y-2.5">
+                  {PREP_STEPS.map((text, i) => (
+                    <li key={text} className="flex gap-3 text-xs text-muted-foreground leading-relaxed">
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[10px] font-bold text-primary">
+                        {i + 1}
+                      </span>
+                      <span className="pt-0.5">{text}</span>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+
+              <div className="space-y-2.5">
+                <p className="text-sm font-medium text-foreground">Apps que você vai usar</p>
+                {REQUIRED_APPS.map((app) => (
+                  <div key={app.id} className="rounded-lg border border-border bg-muted/30 p-3 space-y-2">
+                    <div className="flex items-start gap-3">
+                      <div
+                        className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 text-white text-xs font-bold"
+                        style={{ backgroundColor: app.color }}
+                      >
+                        {app.name.charAt(0)}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-foreground">{app.name}</p>
+                        <p className="text-xs text-muted-foreground">{app.description}</p>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2 pl-12">
+                      {app.links.map((link) => (
+                        <a
+                          key={link.href}
+                          href={link.href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2.5 py-1 text-[11px] font-medium text-primary hover:bg-muted/50 transition-colors"
+                        >
+                          {link.label}
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="space-y-2 pt-1">
+                <p className="text-sm font-medium text-foreground">Confirme que está pronto</p>
+                {[
+                  { checked: checkFb, set: setCheckFb, text: "Tenho conta Facebook ou Meta" },
+                  { checked: checkWaBusiness, set: setCheckWaBusiness, text: "Meu número está no WhatsApp Business" },
+                  { checked: checkNumber, set: setCheckNumber, text: "Confirmei que é o número da barbearia acima" },
+                ].map((item) => (
+                  <label
+                    key={item.text}
+                    className="flex items-start gap-3 cursor-pointer rounded-lg border border-border bg-muted/30 p-3"
+                  >
+                    <Checkbox checked={item.checked} onCheckedChange={(v) => item.set(v === true)} className="mt-0.5" />
+                    <span className="text-sm text-foreground">{item.text}</span>
+                  </label>
+                ))}
+              </div>
             </div>
           )}
 
           {step === 3 && (
-            <div className="max-w-sm mx-auto rounded-xl border border-border bg-muted/30 p-4 text-left space-y-3">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-[#1877F2]/15 flex items-center justify-center">
-                  <Facebook className="w-5 h-5 text-[#1877F2]" />
+            <div className="max-w-md mx-auto space-y-4 text-left">
+              <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-[#1877F2]/15 flex items-center justify-center">
+                    <Facebook className="w-5 h-5 text-[#1877F2]" />
+                  </div>
+                  <p className="text-sm font-medium text-foreground">Login oficial da Meta</p>
                 </div>
-                <p className="text-sm font-medium text-foreground">Login oficial da Meta</p>
+                <p className="text-xs text-muted-foreground">
+                  Ao clicar, abre a janela da Meta para autorizar o número{" "}
+                  {displayShopPhone ? (
+                    <strong className="text-foreground">{displayShopPhone}</strong>
+                  ) : (
+                    "da barbearia"
+                  )}
+                  . Sem token manual, sem complicação.
+                </p>
               </div>
-              <p className="text-xs text-muted-foreground">
-                Ao clicar, abre a janela da Meta para você autorizar o número. Sem token manual, sem complicação.
-              </p>
+
+              <div className="rounded-xl border border-border bg-muted/20 p-4 space-y-3">
+                <p className="text-sm font-medium text-foreground">O que vai acontecer</p>
+                <ol className="space-y-2.5">
+                  {CONNECT_STEPS.map((text, i) => (
+                    <li key={text} className="flex gap-3 text-xs text-muted-foreground leading-relaxed">
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-green-500/15 text-[10px] font-bold text-green-600 dark:text-green-400">
+                        {i + 1}
+                      </span>
+                      <span className="pt-0.5">{text}</span>
+                    </li>
+                  ))}
+                </ol>
+              </div>
             </div>
           )}
 
