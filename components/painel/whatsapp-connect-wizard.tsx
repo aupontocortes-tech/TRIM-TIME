@@ -17,7 +17,6 @@ import {
   Settings2,
   ExternalLink,
   Smartphone,
-  Phone,
 } from "lucide-react"
 
 const STEPS = ["Conheça", "Prepare-se", "Conectar", "Pronto"] as const
@@ -285,20 +284,20 @@ export function WhatsAppConnectWizard({
 
   return (
     <Card className="bg-card border-border overflow-hidden">
-      <CardContent className="pt-8 pb-10 px-5 sm:px-8 md:px-10 lg:px-12">
-        <div className="text-center space-y-8 w-full max-w-5xl mx-auto">
+      <CardContent className="pt-8 pb-10 px-5 sm:px-8 md:px-10">
+        <div className="text-center space-y-7 w-full max-w-3xl mx-auto">
           {/* Indicador de etapas */}
           <div className="space-y-3">
-            <p className="text-sm md:text-base font-semibold uppercase tracking-wide text-primary">
+            <p className="text-sm font-semibold uppercase tracking-wide text-primary">
               Passo {step} de {STEPS.length}
             </p>
-            <div className="flex gap-3 sm:gap-5 justify-center">
+            <div className="flex gap-3 justify-center">
               {STEPS.map((label, i) => {
                 const n = i + 1
                 return (
-                  <div key={label} className="flex flex-col items-center gap-1.5 min-w-[4.5rem] sm:min-w-[5.5rem]">
+                  <div key={label} className="flex flex-col items-center gap-1.5 min-w-[4rem]">
                     <div
-                      className={`w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center text-sm sm:text-base font-bold transition-colors ${
+                      className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold transition-colors ${
                         n < step
                           ? "bg-green-500 text-white"
                           : n === step
@@ -308,7 +307,7 @@ export function WhatsAppConnectWizard({
                     >
                       {n < step ? "✓" : n}
                     </div>
-                    <span className={`text-xs sm:text-sm ${n === step ? "text-foreground font-semibold" : "text-muted-foreground"}`}>
+                    <span className={`text-xs ${n === step ? "text-foreground font-medium" : "text-muted-foreground"}`}>
                       {label}
                     </span>
                   </div>
@@ -317,13 +316,13 @@ export function WhatsAppConnectWizard({
             </div>
           </div>
 
-          <div className="space-y-5">
-            <div className="mx-auto w-20 h-20 sm:w-24 sm:h-24 rounded-3xl bg-green-500/10 flex items-center justify-center">
-              <MessageSquare className="w-10 h-10 sm:w-12 sm:h-12 text-green-500" />
+          <div className="space-y-4">
+            <div className="mx-auto w-16 h-16 rounded-2xl bg-green-500/10 flex items-center justify-center">
+              <MessageSquare className="w-8 h-8 text-green-500" />
             </div>
-            <div className="space-y-3">
-              <p className="text-2xl sm:text-3xl md:text-4xl font-bold text-foreground">WhatsApp Business</p>
-              <p className="text-base sm:text-lg text-muted-foreground leading-relaxed max-w-3xl mx-auto px-2">
+            <div className="space-y-2">
+              <p className="text-2xl font-bold text-foreground">WhatsApp Business</p>
+              <p className="text-base text-muted-foreground leading-relaxed">
                 {step === 1 && "Envie confirmações, lembretes e mensagens automáticas para seus clientes."}
                 {step === 2 && "Baixe os apps, confira o número da barbearia e confirme que está pronto para conectar."}
                 {step === 3 && "Conecte com a Meta em poucos cliques — login seguro, sem copiar códigos."}
@@ -333,99 +332,114 @@ export function WhatsAppConnectWizard({
           </div>
 
           {step === 1 && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-left w-full">
+            <div className="flex flex-col gap-3 text-left w-full">
               {[
-                { icon: <CalendarCheck className="w-5 h-5 sm:w-6 sm:h-6 text-green-500" />, text: "Confirmação de agendamento" },
-                { icon: <Clock3 className="w-5 h-5 sm:w-6 sm:h-6 text-blue-500" />, text: "Lembretes automáticos" },
-                { icon: <Send className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />, text: "Mensagens automáticas" },
-                { icon: <Zap className="w-5 h-5 sm:w-6 sm:h-6 text-amber-500" />, text: "Atendimento automatizado" },
+                { icon: <CalendarCheck className="w-5 h-5 text-green-500" />, text: "Confirmação de agendamento" },
+                { icon: <Clock3 className="w-5 h-5 text-blue-500" />, text: "Lembretes automáticos" },
+                { icon: <Send className="w-5 h-5 text-primary" />, text: "Mensagens automáticas" },
+                { icon: <Zap className="w-5 h-5 text-amber-500" />, text: "Atendimento automatizado" },
               ].map((item, i) => (
-                <div key={i} className="flex items-center gap-3 rounded-xl bg-muted/40 border border-border/60 px-4 py-4 sm:py-5">
+                <div key={i} className="flex items-center gap-3 rounded-xl bg-muted/40 border border-border/60 px-4 py-3.5">
                   {item.icon}
-                  <span className="text-sm sm:text-base font-medium text-foreground leading-snug">{item.text}</span>
+                  <span className="text-base font-medium text-foreground">{item.text}</span>
                 </div>
               ))}
             </div>
           )}
 
           {step === 2 && (
-            <div className="w-full text-left space-y-6 lg:space-y-0 lg:grid lg:grid-cols-2 lg:gap-8 lg:items-start">
-              <div className="space-y-5">
-                <div className="rounded-xl border border-primary/25 bg-primary/5 p-5 sm:p-6 space-y-3">
-                  <div className="flex items-center gap-2.5 text-base sm:text-lg font-semibold text-foreground">
-                    <Phone className="w-5 h-5 sm:w-6 sm:h-6 text-primary shrink-0" />
-                    Número da barbearia
-                  </div>
-                  <p className="text-2xl sm:text-3xl font-bold text-foreground tracking-wide">
-                    {displayShopPhone || "—"}
-                  </p>
-                  <p className="text-sm sm:text-base text-muted-foreground leading-relaxed">
-                    {shopName.trim() ? (
-                      <>
-                        Barbearia <strong className="text-foreground">{shopName.trim()}</strong> — use este número no
-                        WhatsApp Business ao conectar.
-                      </>
-                    ) : (
-                      "Cadastre o telefone em Configurações → Barbearia se ainda não aparecer aqui."
-                    )}
-                  </p>
+            <div className="w-full text-left space-y-5">
+              <section className="rounded-xl border border-primary/25 bg-primary/5 p-5 space-y-3">
+                <div className="flex items-center gap-2">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-bold">
+                    1
+                  </span>
+                  <p className="text-base font-semibold text-foreground">Número da barbearia</p>
                 </div>
+                {shopName.trim() ? (
+                  <p className="text-base text-foreground font-medium pl-9">{shopName.trim()}</p>
+                ) : null}
+                <p className="text-xl font-bold text-foreground tracking-wide pl-9">
+                  {displayShopPhone || "—"}
+                </p>
+                <p className="text-base text-muted-foreground leading-relaxed pl-9">
+                  {shopName.trim()
+                    ? "Use este número no WhatsApp Business ao conectar."
+                    : "Cadastre o telefone em Configurações → Barbearia se ainda não aparecer aqui."}
+                </p>
+              </section>
 
-                <div className="rounded-xl border border-border bg-muted/20 p-5 sm:p-6 space-y-4">
-                  <p className="text-base sm:text-lg font-semibold text-foreground flex items-center gap-2.5">
-                    <Smartphone className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
+              <section className="rounded-xl border border-border bg-muted/20 p-5 space-y-4">
+                <div className="flex items-center gap-2">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-bold">
+                    2
+                  </span>
+                  <p className="text-base font-semibold text-foreground flex items-center gap-2">
+                    <Smartphone className="w-5 h-5 text-primary" />
                     Passo a passo
                   </p>
-                  <ol className="space-y-3.5">
-                    {PREP_STEPS.map((text, i) => (
-                      <li key={text} className="flex gap-3.5 text-sm sm:text-base text-muted-foreground leading-relaxed">
-                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/15 text-sm font-bold text-primary">
-                          {i + 1}
-                        </span>
-                        <span className="pt-0.5">{text}</span>
-                      </li>
-                    ))}
-                  </ol>
                 </div>
-              </div>
+                <ol className="space-y-3 pl-9">
+                  {PREP_STEPS.map((text, i) => (
+                    <li key={text} className="flex gap-3 text-base text-muted-foreground leading-relaxed">
+                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary">
+                        {i + 1}
+                      </span>
+                      <span className="pt-0.5">{text}</span>
+                    </li>
+                  ))}
+                </ol>
+              </section>
 
-              <div className="space-y-5">
-                <div className="space-y-3">
-                  <p className="text-base sm:text-lg font-semibold text-foreground">Apps que você vai usar</p>
+              <section className="rounded-xl border border-border bg-muted/20 p-5 space-y-4">
+                <div className="flex items-center gap-2">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-bold">
+                    3
+                  </span>
+                  <p className="text-base font-semibold text-foreground">Apps que você vai usar</p>
+                </div>
+                <div className="space-y-3 pl-9">
                   {REQUIRED_APPS.map((app) => (
-                    <div key={app.id} className="rounded-xl border border-border bg-muted/30 p-4 sm:p-5 space-y-3">
-                      <div className="flex items-start gap-4">
+                    <div key={app.id} className="rounded-lg border border-border bg-muted/30 p-4 space-y-3">
+                      <div className="flex items-start gap-3">
                         <div
-                          className="w-11 h-11 sm:w-12 sm:h-12 rounded-lg flex items-center justify-center shrink-0 text-white text-base font-bold"
+                          className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 text-white text-sm font-bold"
                           style={{ backgroundColor: app.color }}
                         >
                           {app.name.charAt(0)}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="text-base sm:text-lg font-semibold text-foreground">{app.name}</p>
-                          <p className="text-sm sm:text-base text-muted-foreground mt-0.5">{app.description}</p>
+                          <p className="text-base font-semibold text-foreground">{app.name}</p>
+                          <p className="text-base text-muted-foreground mt-0.5">{app.description}</p>
                         </div>
                       </div>
-                      <div className="flex flex-wrap gap-2.5 pl-0 sm:pl-[3.75rem]">
+                      <div className="flex flex-wrap gap-2">
                         {app.links.map((link) => (
                           <a
                             key={link.href}
                             href={link.href}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3.5 py-2 text-sm font-medium text-primary hover:bg-muted/50 transition-colors"
+                            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-sm font-medium text-primary hover:bg-muted/50 transition-colors"
                           >
                             {link.label}
-                            <ExternalLink className="w-4 h-4" />
+                            <ExternalLink className="w-3.5 h-3.5" />
                           </a>
                         ))}
                       </div>
                     </div>
                   ))}
                 </div>
+              </section>
 
-                <div className="space-y-3">
-                  <p className="text-base sm:text-lg font-semibold text-foreground">Confirme que está pronto</p>
+              <section className="rounded-xl border border-border bg-muted/20 p-5 space-y-3">
+                <div className="flex items-center gap-2">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-bold">
+                    4
+                  </span>
+                  <p className="text-base font-semibold text-foreground">Confirme que está pronto</p>
+                </div>
+                <div className="space-y-2.5 pl-9">
                   {[
                     { checked: checkFb, set: setCheckFb, text: "Tenho conta Facebook ou Meta" },
                     { checked: checkWaBusiness, set: setCheckWaBusiness, text: "Meu número está no WhatsApp Business" },
@@ -433,27 +447,27 @@ export function WhatsAppConnectWizard({
                   ].map((item) => (
                     <label
                       key={item.text}
-                      className="flex items-start gap-3.5 cursor-pointer rounded-xl border border-border bg-muted/30 p-4 sm:p-5"
+                      className="flex items-start gap-3 cursor-pointer rounded-lg border border-border bg-muted/30 p-4"
                     >
-                      <Checkbox checked={item.checked} onCheckedChange={(v) => item.set(v === true)} className="mt-1 size-5" />
-                      <span className="text-sm sm:text-base text-foreground leading-relaxed">{item.text}</span>
+                      <Checkbox checked={item.checked} onCheckedChange={(v) => item.set(v === true)} className="mt-0.5 size-5" />
+                      <span className="text-base text-foreground leading-relaxed">{item.text}</span>
                     </label>
                   ))}
                 </div>
-              </div>
+              </section>
             </div>
           )}
 
           {step === 3 && (
-            <div className="w-full max-w-3xl mx-auto space-y-5 text-left lg:grid lg:grid-cols-2 lg:gap-6 lg:space-y-0">
-              <div className="rounded-xl border border-border bg-muted/30 p-5 sm:p-6 space-y-4">
-                <div className="flex items-center gap-3.5">
-                  <div className="w-12 h-12 rounded-full bg-[#1877F2]/15 flex items-center justify-center">
-                    <Facebook className="w-6 h-6 text-[#1877F2]" />
+            <div className="w-full space-y-5 text-left">
+              <section className="rounded-xl border border-border bg-muted/30 p-5 space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-[#1877F2]/15 flex items-center justify-center">
+                    <Facebook className="w-5 h-5 text-[#1877F2]" />
                   </div>
-                  <p className="text-base sm:text-lg font-semibold text-foreground">Login oficial da Meta</p>
+                  <p className="text-base font-semibold text-foreground">Login oficial da Meta</p>
                 </div>
-                <p className="text-sm sm:text-base text-muted-foreground leading-relaxed">
+                <p className="text-base text-muted-foreground leading-relaxed">
                   Ao clicar, abre a janela da Meta para autorizar o número{" "}
                   {displayShopPhone ? (
                     <strong className="text-foreground">{displayShopPhone}</strong>
@@ -462,27 +476,27 @@ export function WhatsAppConnectWizard({
                   )}
                   . Sem token manual, sem complicação.
                 </p>
-              </div>
+              </section>
 
-              <div className="rounded-xl border border-border bg-muted/20 p-5 sm:p-6 space-y-4">
-                <p className="text-base sm:text-lg font-semibold text-foreground">O que vai acontecer</p>
-                <ol className="space-y-3.5">
+              <section className="rounded-xl border border-border bg-muted/20 p-5 space-y-4">
+                <p className="text-base font-semibold text-foreground">O que vai acontecer</p>
+                <ol className="space-y-3">
                   {CONNECT_STEPS.map((text, i) => (
-                    <li key={text} className="flex gap-3.5 text-sm sm:text-base text-muted-foreground leading-relaxed">
-                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-green-500/15 text-sm font-bold text-green-600 dark:text-green-400">
+                    <li key={text} className="flex gap-3 text-base text-muted-foreground leading-relaxed">
+                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-green-500/15 text-xs font-bold text-green-600 dark:text-green-400">
                         {i + 1}
                       </span>
                       <span className="pt-0.5">{text}</span>
                     </li>
                   ))}
                 </ol>
-              </div>
+              </section>
             </div>
           )}
 
           {step === 4 && (
-            <div className="w-full max-w-3xl mx-auto rounded-xl border border-green-500/30 bg-green-500/5 p-5 sm:p-6 text-left">
-              <p className="text-base sm:text-lg text-foreground leading-relaxed">
+            <div className="w-full rounded-xl border border-green-500/30 bg-green-500/5 p-5 text-left">
+              <p className="text-base text-foreground leading-relaxed">
                 Use a seção <strong>Lembretes automáticos</strong> e <strong>Textos das mensagens</strong> abaixo para
                 personalizar o que seus clientes recebem.
               </p>
@@ -490,7 +504,7 @@ export function WhatsAppConnectWizard({
           )}
 
           {/* Botões — sempre visíveis por etapa */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3 pt-2">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3 pt-1">
             {step > 1 && step <= 4 && (
               <Button type="button" variant="outline" onClick={() => goTo(step - 1)} disabled={busy || connecting}>
                 <ArrowLeft className="w-4 h-4 mr-1" />
@@ -499,9 +513,9 @@ export function WhatsAppConnectWizard({
             )}
 
             {step === 1 && (
-              <Button type="button" size="lg" className="bg-green-600 hover:bg-green-700 text-white px-10 text-base sm:text-lg h-12 sm:h-14" onClick={() => goTo(2)}>
+              <Button type="button" size="lg" className="bg-green-600 hover:bg-green-700 text-white px-8" onClick={() => goTo(2)}>
                 Começar configuração
-                <ArrowRight className="w-5 h-5 ml-2" />
+                <ArrowRight className="w-4 h-4 ml-2" />
               </Button>
             )}
 
@@ -509,12 +523,12 @@ export function WhatsAppConnectWizard({
               <Button
                 type="button"
                 size="lg"
-                className="bg-green-600 hover:bg-green-700 text-white px-10 text-base sm:text-lg h-12 sm:h-14"
+                className="bg-green-600 hover:bg-green-700 text-white px-8"
                 disabled={!stepReady}
                 onClick={() => goTo(3)}
               >
                 Continuar
-                <ArrowRight className="w-5 h-5 ml-2" />
+                <ArrowRight className="w-4 h-4 ml-2" />
               </Button>
             )}
 
@@ -522,31 +536,31 @@ export function WhatsAppConnectWizard({
               <Button
                 type="button"
                 size="lg"
-                className="bg-green-600 hover:bg-green-700 text-white px-10 text-base sm:text-lg h-12 sm:h-14"
+                className="bg-green-600 hover:bg-green-700 text-white px-8"
                 disabled={busy || connecting}
                 onClick={() => void handleConnectMeta()}
               >
                 {connecting ? "Conectando…" : "Conectar WhatsApp"}
-                {!connecting && <Zap className="w-5 h-5 ml-2" />}
+                {!connecting && <Zap className="w-4 h-4 ml-2" />}
               </Button>
             )}
 
             {step === 4 && (
-              <Button type="button" size="lg" className="bg-primary text-primary-foreground px-10 text-base sm:text-lg h-12 sm:h-14" onClick={onScrollToSettings}>
-                <Settings2 className="w-5 h-5 mr-2" />
+              <Button type="button" size="lg" className="bg-primary text-primary-foreground px-8" onClick={onScrollToSettings}>
+                <Settings2 className="w-4 h-4 mr-2" />
                 Ir para configurações
               </Button>
             )}
           </div>
 
           {step === 2 && !stepReady && (
-            <p className="text-sm sm:text-base text-muted-foreground">Marque os três itens para continuar.</p>
+            <p className="text-base text-muted-foreground">Marque os três itens para continuar.</p>
           )}
 
           {!premium && step >= 3 && (
-            <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-5 py-4 w-full max-w-3xl mx-auto text-left">
-              <p className="text-base sm:text-lg font-semibold text-foreground">Plano Premium</p>
-              <p className="text-sm sm:text-base text-muted-foreground mt-1.5">
+            <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-5 py-4 w-full text-left">
+              <p className="text-base font-semibold text-foreground">Plano Premium</p>
+              <p className="text-base text-muted-foreground mt-1">
                 A conexão do WhatsApp exige Premium.{" "}
                 <a href="/painel/assinatura" className="text-primary underline font-medium">
                   Ver planos
@@ -556,7 +570,7 @@ export function WhatsAppConnectWizard({
           )}
 
           {error && (
-            <div className="p-4 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-sm sm:text-base w-full max-w-3xl mx-auto text-left">
+            <div className="p-4 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-base w-full text-left">
               {error}
             </div>
           )}
