@@ -1,17 +1,16 @@
 import { NextResponse } from "next/server"
 import { cookies } from "next/headers"
-import { createServiceRoleClient } from "@/lib/supabase/server"
 import { prisma } from "@/lib/prisma"
 import { BARBERSHOP_UNIT_COOKIE, requireBarbershopId } from "@/lib/tenant"
 import { resolveEffectivePlanForActiveSession } from "@/lib/barbershop-effective-plan-server"
 import { hasFeature } from "@/lib/plans"
-import type { BarbershopUnit } from "@/lib/db/types"
 import {
   migrateLegacyNullAppointmentsToPrincipalUnit,
   repairMissingPrincipalWhenSingleMismatchedUnit,
   seedPrimaryUnitIfNoUnits,
 } from "@/lib/barbershop-units-seed"
 import { normalizeGoogleMapsUrl } from "@/lib/google-maps-url"
+import { barbershopUnitToApi } from "@/lib/barbershop-unit-api"
 
 function optStr(v: unknown): string | null {
   if (v === undefined || v === null) return null
@@ -26,24 +25,21 @@ export async function GET() {
     await repairMissingPrincipalWhenSingleMismatchedUnit(barbershopId)
     await migrateLegacyNullAppointmentsToPrincipalUnit(barbershopId)
 
-    const supabase = createServiceRoleClient()
-    const { data, error } = await supabase
-      .from("barbershop_units")
-      .select("*")
-      .eq("barbershop_id", barbershopId)
-      .order("created_at", { ascending: true })
-
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    const rows = await prisma.barbershopUnit.findMany({
+      where: { barbershopId },
+      orderBy: { createdAt: "asc" },
+    })
+    const units = rows.map(barbershopUnitToApi)
 
     const cookieStore = await cookies()
     const selectedUnitId = cookieStore.get(BARBERSHOP_UNIT_COOKIE)?.value ?? null
-    const selectedValid = selectedUnitId != null && (data ?? []).some((u) => u.id === selectedUnitId)
+    const selectedValid = selectedUnitId != null && units.some((u) => u.id === selectedUnitId)
     if (selectedUnitId != null && !selectedValid) {
       cookieStore.delete(BARBERSHOP_UNIT_COOKIE)
     }
 
     return NextResponse.json({
-      units: (data ?? []) as BarbershopUnit[],
+      units,
       selected_unit_id: selectedValid ? selectedUnitId : null,
     })
   } catch (e) {
@@ -115,20 +111,7 @@ export async function POST(request: Request) {
       },
     })
 
-    const payload: BarbershopUnit = {
-      id: row.id,
-      barbershop_id: row.barbershopId,
-      name: row.name,
-      phone: row.phone,
-      address: row.address,
-      city: row.city,
-      state: row.state,
-      cep: row.cep,
-      maps_url: row.mapsUrl,
-      active: row.active,
-      created_at: row.createdAt.toISOString(),
-      updated_at: row.updatedAt.toISOString(),
-    }
+    const payload = barbershopUnitToApi(row)
     return NextResponse.json(payload)
   } catch (e) {
     return NextResponse.json(

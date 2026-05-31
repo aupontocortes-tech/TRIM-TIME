@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server"
-import { createServiceRoleClient } from "@/lib/supabase/server"
+import { prisma } from "@/lib/prisma"
 import { requireBarbershopId } from "@/lib/tenant"
 import { resolveEffectivePlanForActiveSession } from "@/lib/barbershop-effective-plan-server"
 import { hasFeature } from "@/lib/plans"
-import type { BarbershopUnit } from "@/lib/db/types"
 import { normalizeGoogleMapsUrl } from "@/lib/google-maps-url"
+import { barbershopUnitToApi } from "@/lib/barbershop-unit-api"
 
 function optStr(v: unknown): string | null {
   if (v === undefined || v === null) return null
@@ -37,9 +37,17 @@ export async function PATCH(
       maps_url?: string | null
     }
 
-    const updates: Record<string, unknown> = {
-      updated_at: new Date().toISOString(),
-    }
+    const updates: {
+      name?: string
+      active?: boolean
+      phone?: string | null
+      address?: string | null
+      city?: string | null
+      state?: string | null
+      cep?: string | null
+      mapsUrl?: string | null
+    } = {}
+
     if (body.name !== undefined) updates.name = body.name.trim()
     if (body.active !== undefined) updates.active = body.active
     if (body.phone !== undefined) updates.phone = optStr(body.phone)
@@ -48,20 +56,25 @@ export async function PATCH(
     if (body.state !== undefined) updates.state = optStr(body.state)
     if (body.cep !== undefined) updates.cep = optStr(body.cep)
     if (body.maps_url !== undefined) {
-      updates.maps_url = normalizeGoogleMapsUrl(body.maps_url)
+      updates.mapsUrl = normalizeGoogleMapsUrl(body.maps_url)
     }
 
-    const supabase = createServiceRoleClient()
-    const { data, error } = await supabase
-      .from("barbershop_units")
-      .update(updates)
-      .eq("id", id)
-      .eq("barbershop_id", barbershopId)
-      .select("*")
-      .single()
+    const row = await prisma.barbershopUnit.updateMany({
+      where: { id, barbershopId },
+      data: updates,
+    })
+    if (row.count === 0) {
+      return NextResponse.json({ error: "Unidade não encontrada" }, { status: 404 })
+    }
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json(data as BarbershopUnit)
+    const updated = await prisma.barbershopUnit.findFirst({
+      where: { id, barbershopId },
+    })
+    if (!updated) {
+      return NextResponse.json({ error: "Unidade não encontrada" }, { status: 404 })
+    }
+
+    return NextResponse.json(barbershopUnitToApi(updated))
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Erro ao atualizar unidade" },
