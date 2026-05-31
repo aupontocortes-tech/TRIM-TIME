@@ -29,6 +29,7 @@ import { formatCpfDisplay } from "@/lib/cpf"
 import { publicBookingUrl } from "@/lib/booking-public-url"
 import { normalizeGoogleMapsUrl } from "@/lib/google-maps-url"
 import { MapsLinkFieldLabel } from "@/components/maps-link-field-label"
+import { DeleteUnitDialog } from "@/components/painel/delete-unit-dialog"
 import { compressImageToJpegDataUrl } from "@/lib/client-image-compress"
 import { MAX_PROFILE_PHOTO_DATA_URL_CHARS } from "@/lib/photo-data-url"
 import { Button } from "@/components/ui/button"
@@ -320,6 +321,8 @@ export default function ConfiguracoesPage() {
   const [editUnitState, setEditUnitState] = useState("")
   const [editUnitCep, setEditUnitCep] = useState("")
   const [editUnitMapsUrl, setEditUnitMapsUrl] = useState("")
+  const [unitDeleteOpen, setUnitDeleteOpen] = useState(false)
+  const [unitToDelete, setUnitToDelete] = useState<BarbershopUnit | null>(null)
   const [subscriptionBusy, setSubscriptionBusy] = useState(false)
   const [subscriptionError, setSubscriptionError] = useState<string | null>(null)
   const [subscriptionOk, setSubscriptionOk] = useState<string | null>(null)
@@ -1243,6 +1246,38 @@ export default function ConfiguracoesPage() {
       await refetchUnits()
     } catch {
       setUnitError("Erro de rede ao atualizar unidade")
+    } finally {
+      setUnitBusy(false)
+    }
+  }
+
+  const openDeleteUnit = (unit: BarbershopUnit) => {
+    setUnitToDelete(unit)
+    setUnitDeleteOpen(true)
+  }
+
+  const handleDeleteUnit = async () => {
+    if (!unitToDelete) return
+    setUnitBusy(true)
+    setUnitError(null)
+    try {
+      const r = await fetch(`/api/units/${unitToDelete.id}`, {
+        method: "DELETE",
+        credentials: "include",
+      })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) {
+        setUnitError(typeof j.error === "string" ? j.error : "Erro ao excluir unidade")
+        return
+      }
+      setUnitDeleteOpen(false)
+      setUnitToDelete(null)
+      if (selectedUnitId === unitToDelete.id) {
+        await changeUnit(null)
+      }
+      await refetchUnits()
+    } catch {
+      setUnitError("Erro de rede ao excluir unidade")
     } finally {
       setUnitBusy(false)
     }
@@ -3422,6 +3457,16 @@ export default function ConfiguracoesPage() {
                         >
                           {unit.active ? "Desativar" : "Ativar"}
                         </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="border-destructive/40 text-destructive hover:bg-destructive/10"
+                          onClick={() => openDeleteUnit(unit)}
+                          disabled={unitBusy || !multiUnitsFeature || units.length <= 1}
+                        >
+                          <Trash2 className="w-4 h-4 mr-1" aria-hidden />
+                          Excluir
+                        </Button>
                       </div>
                     </div>
                   ))}
@@ -3429,6 +3474,17 @@ export default function ConfiguracoesPage() {
               )}
             </CardContent>
           </Card>
+
+          <DeleteUnitDialog
+            unit={unitToDelete}
+            open={unitDeleteOpen}
+            busy={unitBusy}
+            onOpenChange={(open) => {
+              setUnitDeleteOpen(open)
+              if (!open) setUnitToDelete(null)
+            }}
+            onConfirm={handleDeleteUnit}
+          />
 
           <Dialog
             open={unitEditOpen}

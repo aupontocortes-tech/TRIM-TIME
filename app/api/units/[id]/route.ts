@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
+import { cookies } from "next/headers"
 import { prisma } from "@/lib/prisma"
-import { requireBarbershopId } from "@/lib/tenant"
+import { BARBERSHOP_UNIT_COOKIE, requireBarbershopId } from "@/lib/tenant"
 import { resolveEffectivePlanForActiveSession } from "@/lib/barbershop-effective-plan-server"
 import { hasFeature } from "@/lib/plans"
 import { normalizeGoogleMapsUrl } from "@/lib/google-maps-url"
@@ -78,6 +79,52 @@ export async function PATCH(
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Erro ao atualizar unidade" },
+      { status: e instanceof Error && e.message.includes("não identificada") ? 401 : 500 }
+    )
+  }
+}
+
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const barbershopId = await requireBarbershopId()
+    const effectivePlan = await resolveEffectivePlanForActiveSession(barbershopId)
+    if (!effectivePlan || !hasFeature(effectivePlan, "multi_units")) {
+      return NextResponse.json(
+        { error: "Multiunidade disponível apenas no plano Premium." },
+        { status: 403 }
+      )
+    }
+
+    const { id } = await params
+    const unit = await prisma.barbershopUnit.findFirst({
+      where: { id, barbershopId },
+    })
+    if (!unit) {
+      return NextResponse.json({ error: "Unidade não encontrada" }, { status: 404 })
+    }
+
+    const totalUnits = await prisma.barbershopUnit.count({ where: { barbershopId } })
+    if (totalUnits <= 1) {
+      return NextResponse.json(
+        { error: "Não é possível excluir a única unidade da barbearia." },
+        { status: 400 }
+      )
+    }
+
+    await prisma.barbershopUnit.delete({ where: { id } })
+
+    const cookieStore = await cookies()
+    if (cookieStore.get(BARBERSHOP_UNIT_COOKIE)?.value === id) {
+      cookieStore.delete(BARBERSHOP_UNIT_COOKIE)
+    }
+
+    return NextResponse.json({ ok: true })
+  } catch (e) {
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : "Erro ao excluir unidade" },
       { status: e instanceof Error && e.message.includes("não identificada") ? 401 : 500 }
     )
   }
