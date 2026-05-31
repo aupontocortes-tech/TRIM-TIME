@@ -10,8 +10,7 @@ import { resolveEffectivePlanForBarbershop } from "@/lib/barbershop-effective-pl
 import { hasFeature } from "@/lib/plans"
 import type { BarbershopSettings } from "@/lib/db/types"
 import {
-  expireStaleWaitlistNotifications,
-  expireOldWaitingItems,
+  maintainWaitlist,
   estimateWaitMinutes,
   getWaitlistAcceptDeadlineMinutes,
   getWaitlistQueuePosition,
@@ -35,8 +34,7 @@ export async function GET(
       return NextResponse.json({ error: "Lista de espera não disponível neste plano." }, { status: 403 })
     }
 
-    await expireStaleWaitlistNotifications(shop.id)
-    await expireOldWaitingItems(shop.id)
+    await maintainWaitlist(shop.id)
 
     const cookieStore = await cookies()
     const rawSession = cookieStore.get(publicClientCookieName(slug))?.value
@@ -108,7 +106,7 @@ export async function POST(
       return NextResponse.json({ error: "Lista de espera não disponível neste plano." }, { status: 403 })
     }
 
-    await expireStaleWaitlistNotifications(shop.id)
+    await maintainWaitlist(shop.id)
 
     const cookieStore = await cookies()
     const rawSession = cookieStore.get(publicClientCookieName(slug))?.value

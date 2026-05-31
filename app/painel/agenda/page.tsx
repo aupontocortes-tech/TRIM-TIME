@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -43,6 +43,7 @@ import {
 import { Separator } from "@/components/ui/separator"
 import type { Appointment, Barber, Client, RetailProduct, Service, WaitingListItem } from "@/lib/db/types"
 import { useUnits } from "@/hooks/use-units"
+import { formatWaitlistDayLabel, shopTodayYmd } from "@/lib/waitlist-expiry"
 import { isSlotPastGraceFromYmd } from "@/lib/appointment-reminder-time"
 
 type AgendaItem = {
@@ -208,6 +209,7 @@ export default function AgendaPage() {
   const [waitlistLoading, setWaitlistLoading] = useState(false)
   const [waitlistError, setWaitlistError] = useState("")
   const [waitlistActionId, setWaitlistActionId] = useState<string | null>(null)
+  const [waitlistView, setWaitlistView] = useState<"active" | "history">("active")
   const [visao, setVisao] = useState<"dia" | "semana" | "mes">("dia")
   const [dataSelecionada, setDataSelecionada] = useState(new Date())
   const [filtroProf, setFiltroProf] = useState("Todos")
@@ -248,11 +250,14 @@ export default function AgendaPage() {
     [barbers]
   )
 
-  const carregarListaEspera = async () => {
+  const carregarListaEspera = useCallback(async (view: "active" | "history" = waitlistView) => {
     setWaitlistLoading(true)
     setWaitlistError("")
     try {
-      const res = await fetch("/api/waiting-list", { credentials: "include", cache: "no-store" })
+      const res = await fetch(`/api/waiting-list?view=${encodeURIComponent(view)}`, {
+        credentials: "include",
+        cache: "no-store",
+      })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
         setWaitlistRows([])
@@ -266,7 +271,7 @@ export default function AgendaPage() {
     } finally {
       setWaitlistLoading(false)
     }
-  }
+  }, [waitlistView])
 
   const carregarDependencias = async () => {
     const [barbersRes, servicesRes, clientsRes, retailRes] = await Promise.all([
@@ -707,9 +712,38 @@ export default function AgendaPage() {
         <Card className="bg-card border-border">
           <CardHeader>
             <CardTitle className="text-foreground">Lista de espera</CardTitle>
-            <CardDescription>Fila ordenada por prioridade (VIP) e depois por ordem de entrada. Itens expiram automaticamente após 7 dias.</CardDescription>
+            <CardDescription>
+              Fila por dia e horário desejado. Após o fechamento da loja naquele dia, os itens expiram
+              automaticamente. Ordem: VIP → ordem de entrada.
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant={waitlistView === "active" ? "default" : "outline"}
+                className={waitlistView === "active" ? "bg-primary text-primary-foreground" : "border-border"}
+                onClick={() => {
+                  setWaitlistView("active")
+                  void carregarListaEspera("active")
+                }}
+              >
+                Fila ativa
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={waitlistView === "history" ? "default" : "outline"}
+                className={waitlistView === "history" ? "bg-primary text-primary-foreground" : "border-border"}
+                onClick={() => {
+                  setWaitlistView("history")
+                  void carregarListaEspera("history")
+                }}
+              >
+                Histórico
+              </Button>
+            </div>
             {waitlistLoading ? (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
@@ -741,11 +775,34 @@ export default function AgendaPage() {
                     {waitlistRows.length === 0 ? (
                       <tr>
                         <td colSpan={9} className="p-8 text-muted-foreground text-center">
-                          Nenhum cliente na fila no momento.
+                          {waitlistView === "active"
+                            ? "Nenhum cliente na fila ativa no momento."
+                            : "Nenhum registro no histórico."}
                         </td>
                       </tr>
                     ) : (
-                      waitlistRows.map((row, idx) => {
+                      (() => {
+                        const todayYmd = shopTodayYmd()
+                        let lastDayKey = ""
+                        let rowNum = 0
+                        const nodes: ReactNode[] = []
+                        for (const row of waitlistRows) {
+                          const dayKey = row.desired_date ?? "sem-data"
+                          if (waitlistView === "active" && dayKey !== lastDayKey) {
+                            lastDayKey = dayKey
+                            const label =
+                              dayKey === "sem-data"
+                                ? "Sem data definida"
+                                : formatWaitlistDayLabel(dayKey, todayYmd)
+                            nodes.push(
+                              <tr key={`day-${dayKey}`} className="bg-muted/40">
+                                <td colSpan={9} className="p-2 text-xs font-semibold text-foreground uppercase tracking-wide">
+                                  {label}
+                                </td>
+                              </tr>
+                            )
+                          }
+                          rowNum += 1
                         const waitingSince = row.created_at
                           ? Math.round((Date.now() - new Date(row.created_at).getTime()) / 60_000)
                           : null
@@ -766,9 +823,9 @@ export default function AgendaPage() {
                           expired: "Expirado",
                           canceled: "Cancelado",
                         }
-                        return (
+                        nodes.push(
                           <tr key={row.id} className="border-t border-border hover:bg-muted/30 transition-colors">
-                            <td className="p-2 align-top text-muted-foreground">{idx + 1}</td>
+                            <td className="p-2 align-top text-muted-foreground">{rowNum}</td>
                             <td className="p-2 align-top font-medium">{row.client?.name ?? "—"}</td>
                             <td className="p-2 align-top">{row.service?.name ?? "—"}</td>
                             <td className="p-2 align-top">{row.barber?.name ?? "—"}</td>
@@ -792,6 +849,7 @@ export default function AgendaPage() {
                               )}
                             </td>
                             <td className="p-2 align-top">
+                              {waitlistView === "active" ? (
                               <div className="flex flex-wrap gap-1">
                                 <Button
                                   type="button"
@@ -872,10 +930,15 @@ export default function AgendaPage() {
                                   Remover
                                 </Button>
                               </div>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">—</span>
+                              )}
                             </td>
                           </tr>
                         )
-                      })
+                        }
+                        return nodes
+                      })()
                     )}
                   </tbody>
                 </table>

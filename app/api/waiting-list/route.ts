@@ -3,11 +3,18 @@ import { prisma } from "@/lib/prisma"
 import { requireBarbershopId } from "@/lib/tenant"
 import { hasFeature, getUpgradeMessage } from "@/lib/plans"
 import { resolveEffectivePlanForActiveSession } from "@/lib/barbershop-effective-plan-server"
-import { expireStaleWaitlistNotifications } from "@/lib/waitlist-service"
+import { maintainWaitlist } from "@/lib/waitlist-service"
 import { waitlistApiInclude, mapWaitingListRowToApi } from "@/lib/waitlist-map"
+import {
+  type WaitlistView,
+  waitlistActiveOrderBy,
+  waitlistHistoryOrderBy,
+  waitlistWhereForView,
+} from "@/lib/waitlist-query"
 import type { Prisma, WaitingListStatus } from "@prisma/client"
 
 const WAITLIST_STATUS_FILTERS = new Set<string>(["waiting", "notified", "accepted", "expired", "canceled"])
+const WAITLIST_VIEWS = new Set<string>(["active", "history", "all"])
 
 export async function GET(request: Request) {
   try {
@@ -16,20 +23,25 @@ export async function GET(request: Request) {
     if (!plan || !hasFeature(plan, "waiting_list")) {
       return NextResponse.json({ error: getUpgradeMessage("waiting_list") }, { status: 403 })
     }
-    await expireStaleWaitlistNotifications(barbershopId)
+    await maintainWaitlist(barbershopId)
 
     const { searchParams } = new URL(request.url)
     const status = searchParams.get("status")?.trim()
+    const viewParam = searchParams.get("view")?.trim() ?? "active"
+    const view: WaitlistView = WAITLIST_VIEWS.has(viewParam) ? (viewParam as WaitlistView) : "active"
 
-    const where: Prisma.WaitingListItemWhereInput = { barbershopId }
+    const where: Prisma.WaitingListItemWhereInput = waitlistWhereForView(barbershopId, view)
     if (status && WAITLIST_STATUS_FILTERS.has(status)) {
       where.status = status as WaitingListStatus
     }
 
+    const orderBy =
+      view === "history" ? waitlistHistoryOrderBy : view === "active" ? waitlistActiveOrderBy : [{ createdAt: "desc" as const }]
+
     const rows = await prisma.waitingListItem.findMany({
       where,
       include: waitlistApiInclude,
-      orderBy: [{ priority: "desc" }, { createdAt: "asc" }],
+      orderBy,
     })
 
     return NextResponse.json(rows.map(mapWaitingListRowToApi))

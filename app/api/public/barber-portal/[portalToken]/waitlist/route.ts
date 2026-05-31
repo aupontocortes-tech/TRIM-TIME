@@ -5,7 +5,8 @@ import { isValidPortalToken } from "@/lib/barber-portal-resolve"
 import { barberPortalCookieName, verifyBarberPortalSession } from "@/lib/barber-portal-session"
 import { resolveEffectivePlanForBarbershop } from "@/lib/barbershop-effective-plan-server"
 import { hasFeature } from "@/lib/plans"
-import { expireStaleWaitlistNotifications } from "@/lib/waitlist-service"
+import { maintainWaitlist } from "@/lib/waitlist-service"
+import { waitlistActiveOrderBy, waitlistActiveWhere } from "@/lib/waitlist-query"
 import { waitlistApiInclude, mapWaitingListRowToApi } from "@/lib/waitlist-map"
 
 export async function GET(
@@ -45,16 +46,15 @@ export async function GET(
       })
     }
 
-    await expireStaleWaitlistNotifications(barber.barbershopId)
+    await maintainWaitlist(barber.barbershopId)
 
     const rows = await prisma.waitingListItem.findMany({
       where: {
-        barbershopId: barber.barbershopId,
+        ...waitlistActiveWhere(barber.barbershopId),
         barberId: barber.id,
-        status: { in: ["waiting", "notified"] },
       },
       include: waitlistApiInclude,
-      orderBy: [{ priority: "desc" }, { createdAt: "asc" }],
+      orderBy: waitlistActiveOrderBy,
     })
 
     return NextResponse.json({

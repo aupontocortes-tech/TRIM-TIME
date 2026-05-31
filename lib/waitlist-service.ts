@@ -1,12 +1,15 @@
 /**
  * Lista de espera: expiração por prazo, próximo da fila ao liberar vaga, métricas de posição.
  */
-import type { WaitingListStatus } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import type { Appointment, BarbershopSettings } from "@/lib/db/types"
 import { parseAppointmentDate } from "@/lib/appointment-prisma-helpers"
 import type { Prisma } from "@prisma/client"
 import { sendWebPushToClient } from "@/lib/web-push-send"
+import {
+  expireOldWaitingItemsWithoutDate,
+  expirePastDesiredDateWaitlistItems,
+} from "@/lib/waitlist-query"
 
 export const WAITLIST_DEFAULT_ACCEPT_MINUTES = 15
 
@@ -41,19 +44,16 @@ export function parseExtraServiceIds(value: Prisma.JsonValue | null | undefined)
   return value.filter((x): x is string => typeof x === "string" && x.length > 0)
 }
 
-const WAITLIST_TTL_DAYS = 7
+/** Mantém a fila: prazos de notificação, fim do dia (fechamento) e TTL sem data. */
+export async function maintainWaitlist(barbershopId: string): Promise<void> {
+  await expireStaleWaitlistNotifications(barbershopId)
+  await expirePastDesiredDateWaitlistItems(barbershopId)
+  await expireOldWaitingItemsWithoutDate(barbershopId)
+}
 
-/** Expira itens 'waiting' que ultrapassaram o TTL (7 dias sem receber vaga). */
+/** @deprecated Use maintainWaitlist */
 export async function expireOldWaitingItems(barbershopId: string): Promise<void> {
-  const cutoff = new Date(Date.now() - WAITLIST_TTL_DAYS * 24 * 60 * 60_000)
-  await prisma.waitingListItem.updateMany({
-    where: {
-      barbershopId,
-      status: "waiting",
-      createdAt: { lt: cutoff },
-    },
-    data: { status: "expired" },
-  })
+  await expireOldWaitingItemsWithoutDate(barbershopId)
 }
 
 /** Expira notificações antigas e notifica o próximo da fila com o mesmo horário ofertado. */
@@ -116,12 +116,17 @@ export async function notifyNextWaitingForFreedSlot(
 ): Promise<string | null> {
   await expireStaleWaitlistNotifications(barbershopId)
 
+  const offeredDate = parseAppointmentDate(freed.date)
+  const offeredTime = normalizeWaitlistTime(freed.time)
+
   const next = await prisma.waitingListItem.findFirst({
     where: {
       barbershopId,
       status: "waiting",
       barberId: freed.barberId,
       serviceId: freed.serviceId,
+      desiredDate: offeredDate,
+      desiredTime: offeredTime,
     },
     orderBy: [{ priority: "desc" }, { createdAt: "asc" }],
     select: { id: true },
@@ -129,15 +134,13 @@ export async function notifyNextWaitingForFreedSlot(
 
   if (!next) return null
 
-  const offeredDate = parseAppointmentDate(freed.date)
-
   const row = await prisma.waitingListItem.update({
     where: { id: next.id },
     data: {
       status: "notified",
       notifiedAt: new Date(),
       offeredDate,
-      offeredTime: normalizeWaitlistTime(freed.time),
+      offeredTime,
     },
     select: { clientId: true },
   })
@@ -196,17 +199,23 @@ export async function getWaitlistQueuePosition(args: {
       barberId: args.barberId,
       serviceId: args.serviceId,
     },
-    select: { id: true },
+    select: { id: true, desiredDate: true, desiredTime: true },
   })
   if (!item) return null
 
+  const slotWhere: Prisma.WaitingListItemWhereInput = {
+    barbershopId: args.barbershopId,
+    barberId: args.barberId,
+    serviceId: args.serviceId,
+    status: { in: ["waiting", "notified"] },
+  }
+  if (item.desiredDate) {
+    slotWhere.desiredDate = item.desiredDate
+    if (item.desiredTime) slotWhere.desiredTime = normalizeWaitlistTime(item.desiredTime)
+  }
+
   const ordered = await prisma.waitingListItem.findMany({
-    where: {
-      barbershopId: args.barbershopId,
-      barberId: args.barberId,
-      serviceId: args.serviceId,
-      status: { in: ["waiting", "notified"] },
-    },
+    where: slotWhere,
     orderBy: [{ priority: "desc" }, { createdAt: "asc" }],
     select: { id: true },
   })
