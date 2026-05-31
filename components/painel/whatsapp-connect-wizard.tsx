@@ -235,8 +235,8 @@ export function WhatsAppConnectWizard({
   if (loading) {
     return (
       <Card className="bg-card border-border">
-        <CardContent className="py-12 text-center">
-          <p className="text-muted-foreground text-sm">Carregando…</p>
+        <CardContent className="py-16 text-center">
+          <p className="text-muted-foreground text-base md:text-lg">Carregando…</p>
         </CardContent>
       </Card>
     )
@@ -245,38 +245,39 @@ export function WhatsAppConnectWizard({
   if (connected) {
     return (
       <Card className="bg-card border-green-500/20 overflow-hidden">
-        <div className="h-1 bg-green-500" />
-        <CardContent className="pt-6 pb-6 space-y-4">
-          <div className="flex items-start gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-green-500/10 flex items-center justify-center shrink-0">
-              <CheckCircle2 className="w-7 h-7 text-green-500" />
+        <div className="h-1.5 bg-green-500" />
+        <CardContent className="pt-8 pb-8 px-6 md:px-10 space-y-5">
+          <div className="flex items-start gap-5">
+            <div className="w-16 h-16 rounded-2xl bg-green-500/10 flex items-center justify-center shrink-0">
+              <CheckCircle2 className="w-8 h-8 text-green-500" />
             </div>
-            <div className="flex-1 space-y-1.5">
-              <p className="text-lg font-semibold text-foreground">WhatsApp conectado</p>
-              <p className="text-sm text-muted-foreground">
-                Número: <span className="text-foreground font-medium">{phone.trim() || "—"}</span>
+            <div className="flex-1 space-y-2">
+              <p className="text-xl md:text-2xl font-semibold text-foreground">WhatsApp conectado</p>
+              <p className="text-base md:text-lg text-muted-foreground">
+                Número: <span className="text-foreground font-semibold">{phone.trim() || "—"}</span>
               </p>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-sm md:text-base text-muted-foreground">
                 Seus clientes já podem receber confirmações e lembretes automáticos.
               </p>
             </div>
           </div>
-          <Button type="button" variant="outline" size="sm" onClick={onScrollToSettings}>
-            <Settings2 className="w-4 h-4 mr-2" />
-            Ajustar lembretes e mensagens
-          </Button>
-          {onDisconnect ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="text-muted-foreground hover:text-destructive"
-              disabled={busy}
-              onClick={onDisconnect}
-            >
-              {busy ? "…" : "Desconectar"}
+          <div className="flex flex-wrap gap-3">
+            <Button type="button" variant="outline" onClick={onScrollToSettings}>
+              <Settings2 className="w-5 h-5 mr-2" />
+              Ajustar lembretes e mensagens
             </Button>
-          ) : null}
+            {onDisconnect ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="text-muted-foreground hover:text-destructive"
+                disabled={busy}
+                onClick={onDisconnect}
+              >
+                {busy ? "…" : "Desconectar"}
+              </Button>
+            ) : null}
+          </div>
         </CardContent>
       </Card>
     )
@@ -284,20 +285,20 @@ export function WhatsAppConnectWizard({
 
   return (
     <Card className="bg-card border-border overflow-hidden">
-      <CardContent className="pt-8 pb-10">
-        <div className="text-center space-y-6 max-w-lg mx-auto">
+      <CardContent className="pt-8 pb-10 px-5 sm:px-8 md:px-10 lg:px-12">
+        <div className="text-center space-y-8 w-full max-w-5xl mx-auto">
           {/* Indicador de etapas */}
-          <div className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-primary">
+          <div className="space-y-3">
+            <p className="text-sm md:text-base font-semibold uppercase tracking-wide text-primary">
               Passo {step} de {STEPS.length}
             </p>
-            <div className="flex gap-2 justify-center">
+            <div className="flex gap-3 sm:gap-5 justify-center">
               {STEPS.map((label, i) => {
                 const n = i + 1
                 return (
-                  <div key={label} className="flex flex-col items-center gap-1 min-w-[4rem]">
+                  <div key={label} className="flex flex-col items-center gap-1.5 min-w-[4.5rem] sm:min-w-[5.5rem]">
                     <div
-                      className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${
+                      className={`w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center text-sm sm:text-base font-bold transition-colors ${
                         n < step
                           ? "bg-green-500 text-white"
                           : n === step
@@ -307,7 +308,7 @@ export function WhatsAppConnectWizard({
                     >
                       {n < step ? "✓" : n}
                     </div>
-                    <span className={`text-[10px] ${n === step ? "text-foreground font-medium" : "text-muted-foreground"}`}>
+                    <span className={`text-xs sm:text-sm ${n === step ? "text-foreground font-semibold" : "text-muted-foreground"}`}>
                       {label}
                     </span>
                   </div>
@@ -316,13 +317,13 @@ export function WhatsAppConnectWizard({
             </div>
           </div>
 
-          <div className="space-y-4">
-            <div className="mx-auto w-20 h-20 rounded-3xl bg-green-500/10 flex items-center justify-center">
-              <MessageSquare className="w-10 h-10 text-green-500" />
+          <div className="space-y-5">
+            <div className="mx-auto w-20 h-20 sm:w-24 sm:h-24 rounded-3xl bg-green-500/10 flex items-center justify-center">
+              <MessageSquare className="w-10 h-10 sm:w-12 sm:h-12 text-green-500" />
             </div>
-            <div className="space-y-2">
-              <p className="text-2xl font-bold text-foreground">WhatsApp Business</p>
-              <p className="text-sm text-muted-foreground leading-relaxed max-w-md mx-auto">
+            <div className="space-y-3">
+              <p className="text-2xl sm:text-3xl md:text-4xl font-bold text-foreground">WhatsApp Business</p>
+              <p className="text-base sm:text-lg text-muted-foreground leading-relaxed max-w-3xl mx-auto px-2">
                 {step === 1 && "Envie confirmações, lembretes e mensagens automáticas para seus clientes."}
                 {step === 2 && "Baixe os apps, confira o número da barbearia e confirme que está pronto para conectar."}
                 {step === 3 && "Conecte com a Meta em poucos cliques — login seguro, sem copiar códigos."}
@@ -332,123 +333,127 @@ export function WhatsAppConnectWizard({
           </div>
 
           {step === 1 && (
-            <div className="grid grid-cols-2 gap-3 text-left max-w-sm mx-auto">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-left w-full">
               {[
-                { icon: <CalendarCheck className="w-4 h-4 text-green-500" />, text: "Confirmação de agendamento" },
-                { icon: <Clock3 className="w-4 h-4 text-blue-500" />, text: "Lembretes automáticos" },
-                { icon: <Send className="w-4 h-4 text-primary" />, text: "Mensagens automáticas" },
-                { icon: <Zap className="w-4 h-4 text-amber-500" />, text: "Atendimento automatizado" },
+                { icon: <CalendarCheck className="w-5 h-5 sm:w-6 sm:h-6 text-green-500" />, text: "Confirmação de agendamento" },
+                { icon: <Clock3 className="w-5 h-5 sm:w-6 sm:h-6 text-blue-500" />, text: "Lembretes automáticos" },
+                { icon: <Send className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />, text: "Mensagens automáticas" },
+                { icon: <Zap className="w-5 h-5 sm:w-6 sm:h-6 text-amber-500" />, text: "Atendimento automatizado" },
               ].map((item, i) => (
-                <div key={i} className="flex items-center gap-2.5 rounded-lg bg-muted/40 border border-border/60 px-3 py-2.5">
+                <div key={i} className="flex items-center gap-3 rounded-xl bg-muted/40 border border-border/60 px-4 py-4 sm:py-5">
                   {item.icon}
-                  <span className="text-xs font-medium text-foreground">{item.text}</span>
+                  <span className="text-sm sm:text-base font-medium text-foreground leading-snug">{item.text}</span>
                 </div>
               ))}
             </div>
           )}
 
           {step === 2 && (
-            <div className="max-w-md mx-auto text-left space-y-4">
-              <div className="rounded-xl border border-primary/25 bg-primary/5 p-4 space-y-2">
-                <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-                  <Phone className="w-4 h-4 text-primary shrink-0" />
-                  Número da barbearia
-                </div>
-                <p className="text-lg font-semibold text-foreground tracking-wide">
-                  {displayShopPhone || "—"}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {shopName.trim() ? (
-                    <>
-                      Barbearia <strong className="text-foreground">{shopName.trim()}</strong> — use este número no
-                      WhatsApp Business ao conectar.
-                    </>
-                  ) : (
-                    "Cadastre o telefone em Configurações → Barbearia se ainda não aparecer aqui."
-                  )}
-                </p>
-              </div>
-
-              <div className="rounded-xl border border-border bg-muted/20 p-4 space-y-3">
-                <p className="text-sm font-medium text-foreground flex items-center gap-2">
-                  <Smartphone className="w-4 h-4 text-primary" />
-                  Passo a passo
-                </p>
-                <ol className="space-y-2.5">
-                  {PREP_STEPS.map((text, i) => (
-                    <li key={text} className="flex gap-3 text-xs text-muted-foreground leading-relaxed">
-                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[10px] font-bold text-primary">
-                        {i + 1}
-                      </span>
-                      <span className="pt-0.5">{text}</span>
-                    </li>
-                  ))}
-                </ol>
-              </div>
-
-              <div className="space-y-2.5">
-                <p className="text-sm font-medium text-foreground">Apps que você vai usar</p>
-                {REQUIRED_APPS.map((app) => (
-                  <div key={app.id} className="rounded-lg border border-border bg-muted/30 p-3 space-y-2">
-                    <div className="flex items-start gap-3">
-                      <div
-                        className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 text-white text-xs font-bold"
-                        style={{ backgroundColor: app.color }}
-                      >
-                        {app.name.charAt(0)}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-foreground">{app.name}</p>
-                        <p className="text-xs text-muted-foreground">{app.description}</p>
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap gap-2 pl-12">
-                      {app.links.map((link) => (
-                        <a
-                          key={link.href}
-                          href={link.href}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2.5 py-1 text-[11px] font-medium text-primary hover:bg-muted/50 transition-colors"
-                        >
-                          {link.label}
-                          <ExternalLink className="w-3 h-3" />
-                        </a>
-                      ))}
-                    </div>
+            <div className="w-full text-left space-y-6 lg:space-y-0 lg:grid lg:grid-cols-2 lg:gap-8 lg:items-start">
+              <div className="space-y-5">
+                <div className="rounded-xl border border-primary/25 bg-primary/5 p-5 sm:p-6 space-y-3">
+                  <div className="flex items-center gap-2.5 text-base sm:text-lg font-semibold text-foreground">
+                    <Phone className="w-5 h-5 sm:w-6 sm:h-6 text-primary shrink-0" />
+                    Número da barbearia
                   </div>
-                ))}
+                  <p className="text-2xl sm:text-3xl font-bold text-foreground tracking-wide">
+                    {displayShopPhone || "—"}
+                  </p>
+                  <p className="text-sm sm:text-base text-muted-foreground leading-relaxed">
+                    {shopName.trim() ? (
+                      <>
+                        Barbearia <strong className="text-foreground">{shopName.trim()}</strong> — use este número no
+                        WhatsApp Business ao conectar.
+                      </>
+                    ) : (
+                      "Cadastre o telefone em Configurações → Barbearia se ainda não aparecer aqui."
+                    )}
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-border bg-muted/20 p-5 sm:p-6 space-y-4">
+                  <p className="text-base sm:text-lg font-semibold text-foreground flex items-center gap-2.5">
+                    <Smartphone className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
+                    Passo a passo
+                  </p>
+                  <ol className="space-y-3.5">
+                    {PREP_STEPS.map((text, i) => (
+                      <li key={text} className="flex gap-3.5 text-sm sm:text-base text-muted-foreground leading-relaxed">
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/15 text-sm font-bold text-primary">
+                          {i + 1}
+                        </span>
+                        <span className="pt-0.5">{text}</span>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
               </div>
 
-              <div className="space-y-2 pt-1">
-                <p className="text-sm font-medium text-foreground">Confirme que está pronto</p>
-                {[
-                  { checked: checkFb, set: setCheckFb, text: "Tenho conta Facebook ou Meta" },
-                  { checked: checkWaBusiness, set: setCheckWaBusiness, text: "Meu número está no WhatsApp Business" },
-                  { checked: checkNumber, set: setCheckNumber, text: "Confirmei que é o número da barbearia acima" },
-                ].map((item) => (
-                  <label
-                    key={item.text}
-                    className="flex items-start gap-3 cursor-pointer rounded-lg border border-border bg-muted/30 p-3"
-                  >
-                    <Checkbox checked={item.checked} onCheckedChange={(v) => item.set(v === true)} className="mt-0.5" />
-                    <span className="text-sm text-foreground">{item.text}</span>
-                  </label>
-                ))}
+              <div className="space-y-5">
+                <div className="space-y-3">
+                  <p className="text-base sm:text-lg font-semibold text-foreground">Apps que você vai usar</p>
+                  {REQUIRED_APPS.map((app) => (
+                    <div key={app.id} className="rounded-xl border border-border bg-muted/30 p-4 sm:p-5 space-y-3">
+                      <div className="flex items-start gap-4">
+                        <div
+                          className="w-11 h-11 sm:w-12 sm:h-12 rounded-lg flex items-center justify-center shrink-0 text-white text-base font-bold"
+                          style={{ backgroundColor: app.color }}
+                        >
+                          {app.name.charAt(0)}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-base sm:text-lg font-semibold text-foreground">{app.name}</p>
+                          <p className="text-sm sm:text-base text-muted-foreground mt-0.5">{app.description}</p>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-2.5 pl-0 sm:pl-[3.75rem]">
+                        {app.links.map((link) => (
+                          <a
+                            key={link.href}
+                            href={link.href}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3.5 py-2 text-sm font-medium text-primary hover:bg-muted/50 transition-colors"
+                          >
+                            {link.label}
+                            <ExternalLink className="w-4 h-4" />
+                          </a>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="space-y-3">
+                  <p className="text-base sm:text-lg font-semibold text-foreground">Confirme que está pronto</p>
+                  {[
+                    { checked: checkFb, set: setCheckFb, text: "Tenho conta Facebook ou Meta" },
+                    { checked: checkWaBusiness, set: setCheckWaBusiness, text: "Meu número está no WhatsApp Business" },
+                    { checked: checkNumber, set: setCheckNumber, text: "Confirmei que é o número da barbearia acima" },
+                  ].map((item) => (
+                    <label
+                      key={item.text}
+                      className="flex items-start gap-3.5 cursor-pointer rounded-xl border border-border bg-muted/30 p-4 sm:p-5"
+                    >
+                      <Checkbox checked={item.checked} onCheckedChange={(v) => item.set(v === true)} className="mt-1 size-5" />
+                      <span className="text-sm sm:text-base text-foreground leading-relaxed">{item.text}</span>
+                    </label>
+                  ))}
+                </div>
               </div>
             </div>
           )}
 
           {step === 3 && (
-            <div className="max-w-md mx-auto space-y-4 text-left">
-              <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-[#1877F2]/15 flex items-center justify-center">
-                    <Facebook className="w-5 h-5 text-[#1877F2]" />
+            <div className="w-full max-w-3xl mx-auto space-y-5 text-left lg:grid lg:grid-cols-2 lg:gap-6 lg:space-y-0">
+              <div className="rounded-xl border border-border bg-muted/30 p-5 sm:p-6 space-y-4">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-12 h-12 rounded-full bg-[#1877F2]/15 flex items-center justify-center">
+                    <Facebook className="w-6 h-6 text-[#1877F2]" />
                   </div>
-                  <p className="text-sm font-medium text-foreground">Login oficial da Meta</p>
+                  <p className="text-base sm:text-lg font-semibold text-foreground">Login oficial da Meta</p>
                 </div>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-sm sm:text-base text-muted-foreground leading-relaxed">
                   Ao clicar, abre a janela da Meta para autorizar o número{" "}
                   {displayShopPhone ? (
                     <strong className="text-foreground">{displayShopPhone}</strong>
@@ -459,12 +464,12 @@ export function WhatsAppConnectWizard({
                 </p>
               </div>
 
-              <div className="rounded-xl border border-border bg-muted/20 p-4 space-y-3">
-                <p className="text-sm font-medium text-foreground">O que vai acontecer</p>
-                <ol className="space-y-2.5">
+              <div className="rounded-xl border border-border bg-muted/20 p-5 sm:p-6 space-y-4">
+                <p className="text-base sm:text-lg font-semibold text-foreground">O que vai acontecer</p>
+                <ol className="space-y-3.5">
                   {CONNECT_STEPS.map((text, i) => (
-                    <li key={text} className="flex gap-3 text-xs text-muted-foreground leading-relaxed">
-                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-green-500/15 text-[10px] font-bold text-green-600 dark:text-green-400">
+                    <li key={text} className="flex gap-3.5 text-sm sm:text-base text-muted-foreground leading-relaxed">
+                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-green-500/15 text-sm font-bold text-green-600 dark:text-green-400">
                         {i + 1}
                       </span>
                       <span className="pt-0.5">{text}</span>
@@ -476,8 +481,8 @@ export function WhatsAppConnectWizard({
           )}
 
           {step === 4 && (
-            <div className="max-w-sm mx-auto rounded-xl border border-green-500/30 bg-green-500/5 p-4 text-left">
-              <p className="text-sm text-foreground">
+            <div className="w-full max-w-3xl mx-auto rounded-xl border border-green-500/30 bg-green-500/5 p-5 sm:p-6 text-left">
+              <p className="text-base sm:text-lg text-foreground leading-relaxed">
                 Use a seção <strong>Lembretes automáticos</strong> e <strong>Textos das mensagens</strong> abaixo para
                 personalizar o que seus clientes recebem.
               </p>
@@ -485,7 +490,7 @@ export function WhatsAppConnectWizard({
           )}
 
           {/* Botões — sempre visíveis por etapa */}
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-2 pt-2">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3 pt-2">
             {step > 1 && step <= 4 && (
               <Button type="button" variant="outline" onClick={() => goTo(step - 1)} disabled={busy || connecting}>
                 <ArrowLeft className="w-4 h-4 mr-1" />
@@ -494,9 +499,9 @@ export function WhatsAppConnectWizard({
             )}
 
             {step === 1 && (
-              <Button type="button" size="lg" className="bg-green-600 hover:bg-green-700 text-white px-10" onClick={() => goTo(2)}>
+              <Button type="button" size="lg" className="bg-green-600 hover:bg-green-700 text-white px-10 text-base sm:text-lg h-12 sm:h-14" onClick={() => goTo(2)}>
                 Começar configuração
-                <ArrowRight className="w-4 h-4 ml-2" />
+                <ArrowRight className="w-5 h-5 ml-2" />
               </Button>
             )}
 
@@ -504,12 +509,12 @@ export function WhatsAppConnectWizard({
               <Button
                 type="button"
                 size="lg"
-                className="bg-green-600 hover:bg-green-700 text-white px-10"
+                className="bg-green-600 hover:bg-green-700 text-white px-10 text-base sm:text-lg h-12 sm:h-14"
                 disabled={!stepReady}
                 onClick={() => goTo(3)}
               >
                 Continuar
-                <ArrowRight className="w-4 h-4 ml-2" />
+                <ArrowRight className="w-5 h-5 ml-2" />
               </Button>
             )}
 
@@ -517,33 +522,33 @@ export function WhatsAppConnectWizard({
               <Button
                 type="button"
                 size="lg"
-                className="bg-green-600 hover:bg-green-700 text-white px-10"
+                className="bg-green-600 hover:bg-green-700 text-white px-10 text-base sm:text-lg h-12 sm:h-14"
                 disabled={busy || connecting}
                 onClick={() => void handleConnectMeta()}
               >
                 {connecting ? "Conectando…" : "Conectar WhatsApp"}
-                {!connecting && <Zap className="w-4 h-4 ml-2" />}
+                {!connecting && <Zap className="w-5 h-5 ml-2" />}
               </Button>
             )}
 
             {step === 4 && (
-              <Button type="button" size="lg" className="bg-primary text-primary-foreground px-10" onClick={onScrollToSettings}>
-                <Settings2 className="w-4 h-4 mr-2" />
+              <Button type="button" size="lg" className="bg-primary text-primary-foreground px-10 text-base sm:text-lg h-12 sm:h-14" onClick={onScrollToSettings}>
+                <Settings2 className="w-5 h-5 mr-2" />
                 Ir para configurações
               </Button>
             )}
           </div>
 
           {step === 2 && !stepReady && (
-            <p className="text-xs text-muted-foreground">Marque os três itens para continuar.</p>
+            <p className="text-sm sm:text-base text-muted-foreground">Marque os três itens para continuar.</p>
           )}
 
           {!premium && step >= 3 && (
-            <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 max-w-sm mx-auto text-left">
-              <p className="text-sm font-medium text-foreground">Plano Premium</p>
-              <p className="text-xs text-muted-foreground mt-1">
+            <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-5 py-4 w-full max-w-3xl mx-auto text-left">
+              <p className="text-base sm:text-lg font-semibold text-foreground">Plano Premium</p>
+              <p className="text-sm sm:text-base text-muted-foreground mt-1.5">
                 A conexão do WhatsApp exige Premium.{" "}
-                <a href="/painel/assinatura" className="text-primary underline">
+                <a href="/painel/assinatura" className="text-primary underline font-medium">
                   Ver planos
                 </a>
               </p>
@@ -551,7 +556,7 @@ export function WhatsAppConnectWizard({
           )}
 
           {error && (
-            <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm max-w-sm mx-auto text-left">
+            <div className="p-4 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-sm sm:text-base w-full max-w-3xl mx-auto text-left">
               {error}
             </div>
           )}
