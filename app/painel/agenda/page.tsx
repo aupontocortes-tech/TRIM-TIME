@@ -205,6 +205,7 @@ function mapAgendaItem(appointment: Appointment): AgendaItem {
 
 export default function AgendaPage() {
   const { units, selectedUnitId, changeUnit, loading: unitsLoading } = useUnits()
+  const needsUnitPick = units.length > 1 && !selectedUnitId
   const [secaoAgenda, setSecaoAgenda] = useState<"agenda" | "lista_espera">("agenda")
   const [waitlistRows, setWaitlistRows] = useState<WaitingListItem[]>([])
   const [waitlistLoading, setWaitlistLoading] = useState(false)
@@ -275,6 +276,23 @@ export default function AgendaPage() {
   }, [waitlistView])
 
   const carregarDependencias = async () => {
+    if (needsUnitPick) {
+      setBarbers([])
+      const [servicesRes, clientsRes, retailRes] = await Promise.all([
+        fetch("/api/services", { credentials: "include", cache: "no-store" }),
+        fetch("/api/clients", { credentials: "include" }),
+        fetch("/api/retail-products", { credentials: "include", cache: "no-store" }),
+      ])
+      const [servicesData, clientsData, retailData] = await Promise.all([
+        servicesRes.ok ? servicesRes.json() : [],
+        clientsRes.ok ? clientsRes.json() : [],
+        retailRes.ok ? retailRes.json() : [],
+      ])
+      setServices(Array.isArray(servicesData) ? (servicesData as Service[]) : [])
+      setClients(Array.isArray(clientsData) ? (clientsData as Client[]) : [])
+      setRetailProducts(Array.isArray(retailData) ? (retailData as RetailProduct[]) : [])
+      return
+    }
     const [barbersRes, servicesRes, clientsRes, retailRes] = await Promise.all([
       fetch(barbersListUrl(selectedUnitId), { credentials: "include", cache: "no-store" }),
       fetch("/api/services", { credentials: "include", cache: "no-store" }),
@@ -321,6 +339,12 @@ export default function AgendaPage() {
   }, [])
 
   const carregarAgendamentos = async () => {
+    if (needsUnitPick) {
+      setAgendamentos([])
+      setLoading(false)
+      setError("")
+      return
+    }
     setLoading(true)
     setError("")
     try {
@@ -378,7 +402,7 @@ export default function AgendaPage() {
 
   useEffect(() => {
     void carregarAgendamentos()
-  }, [dataSelecionada, filtroProf, barbers, visao, selectedUnitId, unitsLoading])
+  }, [dataSelecionada, filtroProf, barbers, visao, selectedUnitId, unitsLoading, needsUnitPick])
 
   const mudarDia = (dias: number) => {
     const novaData = new Date(dataSelecionada)
@@ -960,21 +984,16 @@ export default function AgendaPage() {
         </div>
       ) : null}
 
+      {!unitsLoading && needsUnitPick ? (
+        <div className="rounded-lg border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-foreground">
+          Selecione uma unidade em <strong>Unidade ativa</strong> na barra lateral. Cada loja tem agenda e equipe
+          próprias — use <strong>Toda a rede</strong> no Financeiro para somar o faturamento de todas.
+        </div>
+      ) : null}
       {!unitsLoading && selectedUnitId && nomeUnidadeAtiva ? (
-        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-          <span>
-            Filtro de unidade ativo: <strong className="text-foreground">{nomeUnidadeAtiva}</strong>. Só aparecem
-            agendamentos desta unidade ou sem unidade. Para ver tudo, use &quot;Todas unidades&quot; no topo do painel.
-          </span>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="border-amber-600/40 text-foreground shrink-0"
-            onClick={() => void changeUnit(null)}
-          >
-            Ver todas as unidades
-          </Button>
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
+          Agenda da unidade <strong className="text-foreground">{nomeUnidadeAtiva}</strong> — só agendamentos desta
+          loja.
         </div>
       ) : null}
 

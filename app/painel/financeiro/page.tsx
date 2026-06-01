@@ -96,7 +96,11 @@ type FinancialSummary = {
 }
 
 export default function FinanceiroPage() {
-  const { selectedUnitId, loading: unitsLoading } = useUnits()
+  const { units, selectedUnitId, loading: unitsLoading } = useUnits()
+  const isNetworkView = units.length > 1 && !selectedUnitId
+  const activeUnitName = selectedUnitId
+    ? units.find((u) => u.id === selectedUnitId)?.name ?? null
+    : null
   const [periodoSelecionado, setPeriodoSelecionado] = useState("Este Mês")
   const [commissionSummary, setCommissionSummary] = useState<CommissionsSummaryResponse | null>(null)
   const [commissionLoading, setCommissionLoading] = useState(true)
@@ -112,15 +116,18 @@ export default function FinanceiroPage() {
     const today = toYMD(new Date())
 
     try {
+      const commissionQs = new URLSearchParams({ from, to })
+      const financialQs = new URLSearchParams({ from, to, today })
+      if (isNetworkView) {
+        commissionQs.set("scope", "network")
+      }
+      const financialPath = isNetworkView
+        ? "/api/financial/network-summary"
+        : "/api/financial/summary"
+
       const [cRes, fRes] = await Promise.all([
-        fetch(
-          `/api/commissions/summary?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
-          { credentials: "include" }
-        ),
-        fetch(
-          `/api/financial/summary?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&today=${encodeURIComponent(today)}`,
-          { credentials: "include" }
-        ),
+        fetch(`/api/commissions/summary?${commissionQs}`, { credentials: "include" }),
+        fetch(`${financialPath}?${financialQs}`, { credentials: "include" }),
       ])
 
       if (cRes.ok) {
@@ -144,12 +151,12 @@ export default function FinanceiroPage() {
       setCommissionLoading(false)
       setFinancialLoading(false)
     }
-  }, [])
+  }, [isNetworkView])
 
   useEffect(() => {
     if (unitsLoading) return
     void loadPeriod(periodoSelecionado)
-  }, [periodoSelecionado, loadPeriod, selectedUnitId, unitsLoading])
+  }, [periodoSelecionado, loadPeriod, selectedUnitId, unitsLoading, isNetworkView])
 
   const prev = financial?.revenue_previous ?? 0
   const rev = financial?.revenue ?? 0
@@ -186,6 +193,29 @@ export default function FinanceiroPage() {
           <Link href="/painel/agenda">Ver agenda</Link>
         </Button>
       </div>
+
+      {!unitsLoading && units.length > 1 ? (
+        <div
+          className={`rounded-lg border px-4 py-3 text-sm ${
+            isNetworkView
+              ? "border-primary/30 bg-primary/10 text-foreground"
+              : "border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-100"
+          }`}
+        >
+          {isNetworkView ? (
+            <>
+              <strong className="text-foreground">Toda a rede</strong> — valores somados de{" "}
+              {units.length} unidades (hoje, semana, mês e ano conforme o filtro acima). Para ver o
+              financeiro de uma loja, escolha a unidade em &quot;Unidade ativa&quot; na barra lateral.
+            </>
+          ) : (
+            <>
+              Financeiro da unidade <strong className="text-foreground">{activeUnitName ?? "—"}</strong>.
+              Agendamentos e equipe desta loja são independentes das outras unidades.
+            </>
+          )}
+        </div>
+      ) : null}
 
       <div className="flex items-center gap-2 overflow-x-auto pb-2">
         <Filter className="w-4 h-4 text-muted-foreground flex-shrink-0" />

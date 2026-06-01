@@ -3,8 +3,8 @@ import { requireBarbershopId } from "@/lib/tenant"
 import { resolveEffectivePlanForActiveSession } from "@/lib/barbershop-effective-plan-server"
 import { getUpgradeMessage, hasFeature } from "@/lib/plans"
 import { buildFinancialSummary } from "@/lib/financial-summary-server"
-import { resolveSelectedUnitId } from "@/lib/unit-context"
 
+/** Faturamento somado de todas as unidades (ignora unidade ativa no cookie). */
 export async function GET(request: Request) {
   try {
     const barbershopId = await requireBarbershopId()
@@ -27,12 +27,11 @@ export async function GET(request: Request) {
       to = s
     }
 
-    const selectedUnitId = await resolveSelectedUnitId(barbershopId)
-    const payload = await buildFinancialSummary(barbershopId, from, to, today, selectedUnitId)
+    const payload = await buildFinancialSummary(barbershopId, from, to, today, null)
     return NextResponse.json(payload)
   } catch (e) {
     return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Erro ao carregar resumo financeiro" },
+      { error: e instanceof Error ? e.message : "Erro ao carregar resumo da rede" },
       { status: e instanceof Error && e.message.includes("não identificada") ? 401 : 500 }
     )
   }

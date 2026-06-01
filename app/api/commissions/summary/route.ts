@@ -39,13 +39,15 @@ export async function GET(request: Request) {
     }
 
     const supabase = createServiceRoleClient()
-    const selectedUnitId = await resolveSelectedUnitId(barbershopId)
+    const scope = searchParams.get("scope")
+    const unitIdForQuery =
+      scope === "network" ? null : await resolveSelectedUnitId(barbershopId)
     const { total, byBarber } = await aggregateCommissionsForRange(
       supabase,
       barbershopId,
       from,
       to,
-      selectedUnitId
+      unitIdForQuery
     )
 
     const payload: CommissionsSummaryResponse = {

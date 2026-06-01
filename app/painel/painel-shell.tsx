@@ -86,7 +86,9 @@ function PainelLayoutInner({ children }: { children: React.ReactNode }) {
   const selectedUnitLabel =
     selectedUnitId && units.length > 0
       ? units.find((u) => u.id === selectedUnitId)?.name ?? "Unidade"
-      : "Todas unidades"
+      : units.length > 1
+        ? "Toda a rede"
+        : "Todas unidades"
 
   /** Nome em destaque acima do seletor: unidade ativa ou nome da rede quando “Todas unidades”. */
   const sidebarBrandName =
@@ -143,7 +145,9 @@ function PainelLayoutInner({ children }: { children: React.ReactNode }) {
                   await changeUnit(next)
                 }}
               >
-                <option value="__all__">Todas unidades</option>
+                <option value="__all__">
+                  {units.length > 1 ? "Toda a rede (soma financeira)" : "Todas unidades"}
+                </option>
                 {units.map((u) => (
                   <option key={u.id} value={u.id}>
                     {u.name}
@@ -262,7 +266,9 @@ function PainelLayoutInner({ children }: { children: React.ReactNode }) {
                     await changeUnit(next)
                   }}
                 >
-                  <option value="__all__">Todas unidades</option>
+                  <option value="__all__">
+                    {units.length > 1 ? "Toda a rede (soma financeira)" : "Todas unidades"}
+                  </option>
                   {units.map((u) => (
                     <option key={u.id} value={u.id}>
                       {u.name}

@@ -18,8 +18,9 @@ export default function MinhaRedePage() {
       <div>
         <h1 className="text-2xl font-bold text-foreground tracking-tight">Minha rede</h1>
         <p className="text-muted-foreground mt-1 text-sm">
-          Supervisione a operação da sua marca: unidades, agenda e clientes por local. Use o seletor
-          &quot;Unidade ativa&quot; na barra lateral para alternar o contexto do painel.
+          Supervisione a operação da sua marca: cada unidade tem equipe e agenda próprias. No seletor
+          &quot;Unidade ativa&quot;, escolha uma loja para operar; use &quot;Toda a rede&quot; no Financeiro para ver o
+          faturamento somado (hoje, semana, mês e ano).
         </p>
       </div>
 

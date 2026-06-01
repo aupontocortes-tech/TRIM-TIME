@@ -406,6 +406,11 @@ export default function ConfiguracoesPage() {
   }
 
   const loadBarbers = useCallback(async () => {
+    if (units.length > 1 && !selectedUnitId) {
+      setBarbers([])
+      setBarbersLoading(false)
+      return
+    }
     setBarbersLoading(true)
     setEquipeError(null)
     try {
@@ -424,7 +429,7 @@ export default function ConfiguracoesPage() {
     } finally {
       setBarbersLoading(false)
     }
-  }, [selectedUnitId])
+  }, [selectedUnitId, units.length])
 
   const loadServices = useCallback(async () => {
     setServicosLoading(true)
@@ -2477,8 +2482,8 @@ export default function ConfiguracoesPage() {
                 {units.length > 1 ? (
                   <p className="text-sm text-primary font-medium mt-1">
                     {selectedUnitId
-                      ? `Unidade: ${units.find((u) => u.id === selectedUnitId)?.name ?? "—"} — só profissionais desta loja`
-                      : 'Modo "Todas unidades": mostra a equipe inteira. Escolha uma unidade na barra lateral para ver só os profissionais daquela loja.'}
+                      ? `Unidade: ${units.find((u) => u.id === selectedUnitId)?.name ?? "—"} — equipe e convites só desta loja`
+                      : 'Selecione uma unidade em "Unidade ativa" na barra lateral. Cada loja tem sua própria equipe e agenda.'}
                   </p>
                 ) : null}
                 <CardDescription className="text-muted-foreground">
@@ -2698,7 +2703,11 @@ export default function ConfiguracoesPage() {
               {barbersLoading ? (
                 <p className="text-sm text-muted-foreground py-8 text-center">Carregando equipe…</p>
               ) : barbers.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-8 text-center">Nenhum profissional cadastrado.</p>
+                <p className="text-sm text-muted-foreground py-8 text-center">
+                  {units.length > 1 && !selectedUnitId
+                    ? "Selecione uma unidade na barra lateral para ver e gerenciar a equipe desta loja."
+                    : "Nenhum profissional cadastrado."}
+                </p>
               ) : (
                 <div className="space-y-3">
                   {barbers.map((prof) => (
