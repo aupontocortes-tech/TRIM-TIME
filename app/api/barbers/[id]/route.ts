@@ -8,6 +8,7 @@ import { prismaBarberUpdateWithPhotoPositionFallback } from "@/lib/barber-mutati
 import { fetchBarberPhotoPositionById } from "@/lib/barber-queries"
 import { resolveEffectivePlanForActiveSession } from "@/lib/barbershop-effective-plan-server"
 import { assertValidProfilePhotoDataUrl } from "@/lib/photo-data-url"
+import { withBarbersUnitSchema } from "@/lib/barber-unit-schema"
 
 export async function PATCH(
   _request: Request,
@@ -125,7 +126,7 @@ export async function PATCH(
       })
     }
 
-    const data = await prismaBarberUpdateWithPhotoPositionFallback(id, update)
+    const data = await withBarbersUnitSchema(() => prismaBarberUpdateWithPhotoPositionFallback(id, update))
     let photoPositionFromDb: number | null = null
     try {
       photoPositionFromDb = await fetchBarberPhotoPositionById(id)

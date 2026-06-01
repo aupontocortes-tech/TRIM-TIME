@@ -127,8 +127,7 @@ export async function assignBarbersWithoutUnit(barbershopId: string): Promise<vo
       orderBy: { _count: { id: "desc" } },
     })
 
-    const topUnitId = grouped[0]?.unitId
-    if (!topUnitId) continue
+    const topUnitId = grouped[0]?.unitId ?? activeUnits[0].id
 
     await prisma.barber.update({
       where: { id: barberId },

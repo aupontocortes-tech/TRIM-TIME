@@ -8,6 +8,7 @@ import { prismaBarberCreateWithPhotoPositionFallback } from "@/lib/barber-mutati
 import { fetchBarberPhotoPositionsByBarbershopId } from "@/lib/barber-queries"
 import type { Barber } from "@/lib/db/types"
 import { assertValidProfilePhotoDataUrl } from "@/lib/photo-data-url"
+import { withBarbersUnitSchema } from "@/lib/barber-unit-schema"
 import { assignBarbersWithoutUnit } from "@/lib/barbershop-units-seed"
 import {
   prismaBarberUnitFilter,
@@ -60,38 +61,43 @@ export async function GET(request: Request) {
   try {
     const barbershopId = await requireBarbershopId()
     const queryUnit = new URL(request.url).searchParams.get("unit_id")
-    await assignBarbersWithoutUnit(barbershopId)
 
-    const activeUnitCount = await prisma.barbershopUnit.count({
-      where: { barbershopId, active: true },
-    })
-    const multiUnit = activeUnitCount > 1
+    const payload = await withBarbersUnitSchema(async () => {
+      await assignBarbersWithoutUnit(barbershopId)
 
-    const selectedUnitId = await resolveBarberListUnitId(barbershopId, queryUnit)
-    const unitFilter = prismaBarberUnitFilter(selectedUnitId, multiUnit)
-    let data = await prisma.barber.findMany({
-      where: { barbershopId, ...unitFilter },
-      orderBy: { name: "asc" },
-    })
-    const missingPortal = data.filter((b) => !b.portalToken)
-    if (missingPortal.length > 0) {
-      await Promise.all(
-        missingPortal.map((b) =>
-          prisma.barber.update({ where: { id: b.id }, data: { portalToken: randomUUID() } })
-        )
-      )
-      data = await prisma.barber.findMany({
+      const activeUnitCount = await prisma.barbershopUnit.count({
+        where: { barbershopId, active: true },
+      })
+      const multiUnit = activeUnitCount > 1
+
+      const selectedUnitId = await resolveBarberListUnitId(barbershopId, queryUnit)
+      const unitFilter = prismaBarberUnitFilter(selectedUnitId, multiUnit)
+      let data = await prisma.barber.findMany({
         where: { barbershopId, ...unitFilter },
         orderBy: { name: "asc" },
       })
-    }
-    let positions = new Map<string, number>()
-    try {
-      positions = await fetchBarberPhotoPositionsByBarbershopId(barbershopId)
-    } catch {
-      /* coluna/tabela inacessível via SQL: usa só o Prisma */
-    }
-    return NextResponse.json(data.map((b) => mapBarberRow(b, positions)))
+      const missingPortal = data.filter((b) => !b.portalToken)
+      if (missingPortal.length > 0) {
+        await Promise.all(
+          missingPortal.map((b) =>
+            prisma.barber.update({ where: { id: b.id }, data: { portalToken: randomUUID() } })
+          )
+        )
+        data = await prisma.barber.findMany({
+          where: { barbershopId, ...unitFilter },
+          orderBy: { name: "asc" },
+        })
+      }
+      let positions = new Map<string, number>()
+      try {
+        positions = await fetchBarberPhotoPositionsByBarbershopId(barbershopId)
+      } catch {
+        /* coluna/tabela inacessível via SQL: usa só o Prisma */
+      }
+      return data.map((b) => mapBarberRow(b, positions))
+    })
+
+    return NextResponse.json(payload)
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Não autorizado" },
@@ -174,20 +180,22 @@ export async function POST(request: Request) {
     }
 
     const photoPosition = Math.min(100, Math.max(0, Math.round(Number(body.photo_position ?? 50))))
-    const data = await prismaBarberCreateWithPhotoPositionFallback({
-      barbershopId,
-      unitId,
-      name: body.name.trim(),
-      phone: phoneTrim,
-      email: emailTrim,
-      cpf: cpfNorm,
-      photoUrl,
-      photoPosition,
-      commission,
-      active: true,
-      portalToken: randomUUID(),
-    })
-    return NextResponse.json(mapBarberRow(data, new Map([[data.id, data.photoPosition ?? 50]])))
+    const created = await withBarbersUnitSchema(() =>
+      prismaBarberCreateWithPhotoPositionFallback({
+        barbershopId,
+        unitId,
+        name: body.name.trim(),
+        phone: phoneTrim,
+        email: emailTrim,
+        cpf: cpfNorm,
+        photoUrl,
+        photoPosition,
+        commission,
+        active: true,
+        portalToken: randomUUID(),
+      })
+    )
+    return NextResponse.json(mapBarberRow(created, new Map([[created.id, created.photoPosition ?? 50]])))
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Erro ao criar barbeiro" },
