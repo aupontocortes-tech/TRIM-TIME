@@ -13,11 +13,12 @@ import { loadUnitMapsUrlByBarbershopId } from "@/lib/barbershop-unit-maps"
  * Dados públicos da barbearia (sem auth) — nome, contato/endereço da conta + unidades ativas.
  */
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ slug: string }> }
 ) {
   try {
     const { slug } = await params
+    const unitIdParam = new URL(req.url).searchParams.get("unit_id")?.trim() || null
     if (!slug?.trim()) {
       return NextResponse.json({ error: "slug obrigatório" }, { status: 400 })
     }
@@ -45,13 +46,17 @@ export async function GET(
           orderBy: { createdAt: "asc" },
         },
         barbers: {
-          where: { active: true },
+          where: {
+            active: true,
+            ...(unitIdParam ? { unitId: unitIdParam } : {}),
+          },
           select: {
             id: true,
             name: true,
             phone: true,
             photoUrl: true,
             photoPosition: true,
+            unitId: true,
           },
           orderBy: { createdAt: "asc" },
         },
@@ -120,6 +125,7 @@ export async function GET(
       }),
       barbers: b.barbers.map((barber) => ({
         id: barber.id,
+        unit_id: barber.unitId,
         name: barber.name,
         phone: barber.phone,
         photo_url: barber.photoUrl,

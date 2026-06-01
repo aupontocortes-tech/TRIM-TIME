@@ -17,6 +17,7 @@ import { appointmentStartsAtUtcFromYmd } from "@/lib/appointment-reminder-time"
 import type { BarbershopSettings } from "@/lib/db/types"
 import { resolveEffectivePlanForBarbershop } from "@/lib/barbershop-effective-plan-server"
 import { hasFeature } from "@/lib/plans"
+import { validateBarberForUnit } from "@/lib/unit-context"
 
 function localYmd(d: Date): string {
   const y = d.getFullYear()
@@ -256,6 +257,16 @@ export async function POST(
     if (!barber) {
       return NextResponse.json({ error: "Profissional inválido" }, { status: 400 })
     }
+
+    const barberUnitCheck = await validateBarberForUnit({
+      barbershopId: shop.id,
+      barberId,
+      unitId: effectiveUnitId,
+    })
+    if (!barberUnitCheck.ok) {
+      return NextResponse.json({ error: barberUnitCheck.error }, { status: barberUnitCheck.status })
+    }
+
     if (services.length !== serviceIds.length) {
       return NextResponse.json({ error: "Um ou mais serviços não estão disponíveis" }, { status: 400 })
     }

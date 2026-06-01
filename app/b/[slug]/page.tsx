@@ -217,7 +217,14 @@ type PublicShopPayload = {
   waitlist_accept_deadline_minutes?: number | null
   units: PublicUnit[]
   services: { id: string; name: string; description?: string; price: number; duration: number }[]
-  barbers: { id: string; name: string; phone: string | null; photo_url?: string | null; photo_position?: number }[]
+  barbers: {
+    id: string
+    unit_id?: string | null
+    name: string
+    phone: string | null
+    photo_url?: string | null
+    photo_position?: number
+  }[]
 }
 
 type CurrentPublicAppointmentPayload = {
@@ -380,6 +387,14 @@ export default function BarbeariaPage() {
       setSelectedUnitId(saved)
     }
   }, [publicMeta, slug])
+
+  useEffect(() => {
+    if (!profissionalSelecionado || !publicMeta?.barbers?.length) return
+    const stillValid = publicMeta.barbers.some(
+      (b) => b.id === profissionalSelecionado && (!selectedUnitId || b.unit_id === selectedUnitId)
+    )
+    if (!stillValid) setProfissionalSelecionado(null)
+  }, [selectedUnitId, publicMeta?.barbers, profissionalSelecionado])
 
   useEffect(() => {
     if (authPhase !== "codigo") return
@@ -1207,13 +1222,15 @@ export default function BarbeariaPage() {
           })),
     profissionais:
       publicMeta?.barbers?.length
-        ? publicMeta.barbers.map((barber) => ({
-            id: barber.id,
-            nome: barber.name,
-            foto: barber.photo_url || "/placeholder.svg",
-            fotoPosition: barber.photo_position ?? 50,
-            especialidade: barber.phone ? `Contato: ${barber.phone}` : "Profissional",
-          }))
+        ? publicMeta.barbers
+            .filter((barber) => !selectedUnitId || barber.unit_id === selectedUnitId)
+            .map((barber) => ({
+              id: barber.id,
+              nome: barber.name,
+              foto: barber.photo_url || "/placeholder.svg",
+              fotoPosition: barber.photo_position ?? 50,
+              especialidade: barber.phone ? `Contato: ${barber.phone}` : "Profissional",
+            }))
         : barbeariaData.profissionais.map((barber) => ({ ...barber, id: String(barber.id) })),
   }
   const dias = gerarDias()

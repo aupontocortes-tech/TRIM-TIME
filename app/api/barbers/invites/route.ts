@@ -4,6 +4,7 @@ import { requireBarbershopId } from "@/lib/tenant"
 import { prisma } from "@/lib/prisma"
 import { canAddBarber, getBarberLimitMessage } from "@/lib/plans"
 import { resolveEffectivePlanForActiveSession } from "@/lib/barbershop-effective-plan-server"
+import { requireSelectedUnitForBarberCreate } from "@/lib/unit-context"
 
 const DEFAULT_DAYS = 7
 const MAX_DAYS = 30
@@ -37,9 +38,15 @@ export async function POST(request: Request) {
     const expiresAt = new Date()
     expiresAt.setDate(expiresAt.getDate() + days)
 
+    const { unitId, error: unitError } = await requireSelectedUnitForBarberCreate(barbershopId)
+    if (unitError) {
+      return NextResponse.json({ error: unitError }, { status: 400 })
+    }
+
     await prisma.barberInvite.create({
       data: {
         barbershopId,
+        unitId,
         token,
         expiresAt,
       },

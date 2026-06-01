@@ -120,6 +120,7 @@ export async function POST(
         select: {
           id: true,
           barbershopId: true,
+          unitId: true,
           expiresAt: true,
           usedAt: true,
           barbershop: {
@@ -164,6 +165,7 @@ export async function POST(
       const barber = await tx.barber.create({
         data: {
           barbershopId,
+          unitId: invite.unitId,
           name,
           phone: phone || null,
           email,

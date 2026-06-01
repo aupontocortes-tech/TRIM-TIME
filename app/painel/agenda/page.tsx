@@ -373,7 +373,7 @@ export default function AgendaPage() {
 
   useEffect(() => {
     void carregarDependencias()
-  }, [])
+  }, [selectedUnitId])
 
   useEffect(() => {
     void carregarAgendamentos()

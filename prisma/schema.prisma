@@ -159,6 +159,8 @@ model BarberInvite {
   id           String     @id @default(uuid()) @db.Uuid
   barbershopId String     @map("barbershop_id") @db.Uuid
   barbershop   Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  unitId       String?    @map("unit_id") @db.Uuid
+  unit         BarbershopUnit? @relation(fields: [unitId], references: [id], onDelete: SetNull)
   token        String     @unique
   expiresAt    DateTime   @map("expires_at") @db.Timestamptz
   usedAt       DateTime?  @map("used_at") @db.Timestamptz
@@ -203,6 +205,8 @@ model BarbershopUnit {
 
   appointments   Appointment[]
   trimPlayScores TrimPlayScore[]
+  barbers        Barber[]
+  barberInvites  BarberInvite[]
 
   @@index([barbershopId])
   @@map("barbershop_units")
@@ -310,6 +314,9 @@ model Barber {
   id           String   @id @default(uuid()) @db.Uuid
   barbershopId String   @map("barbershop_id") @db.Uuid
   barbershop   Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  /// Unidade onde o profissional atende (obrigatório quando há várias unidades ativas).
+  unitId       String?  @map("unit_id") @db.Uuid
+  unit         BarbershopUnit? @relation(fields: [unitId], references: [id], onDelete: SetNull)
   name         String
   phone        String?
   email        String?
@@ -335,6 +342,8 @@ model Barber {
 
   @@index([barbershopId])
   @@index([barbershopId, role])
+  @@index([barbershopId, unitId])
+  @@index([unitId])
 }
 
 // ========== CLIENTS ==========

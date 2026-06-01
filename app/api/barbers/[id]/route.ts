@@ -129,6 +129,7 @@ export async function PATCH(
     return NextResponse.json({
       id: data.id,
       barbershop_id: data.barbershopId,
+      unit_id: data.unitId,
       name: data.name,
       phone: data.phone,
       email: data.email,

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { requireBarbershopId } from "@/lib/tenant"
 import { hasBarberSlotConflict } from "@/lib/scheduling"
 import { saleCommissionAmount } from "@/lib/commissions"
-import { resolveSelectedUnitId } from "@/lib/unit-context"
+import { resolveSelectedUnitId, validateBarberForUnit } from "@/lib/unit-context"
 import type { Appointment, AppointmentStatus } from "@/lib/db/types"
 import { prisma } from "@/lib/prisma"
 import {
@@ -204,6 +204,16 @@ export async function PATCH(
           { error: "Este horário já está ocupado para o barbeiro escolhido." },
           { status: 409 }
         )
+      }
+
+      const unitForBarber = before.unitId ?? selectedUnitId
+      const barberUnitCheck = await validateBarberForUnit({
+        barbershopId,
+        barberId: nextBarberId,
+        unitId: unitForBarber,
+      })
+      if (!barberUnitCheck.ok) {
+        return NextResponse.json({ error: barberUnitCheck.error }, { status: barberUnitCheck.status })
       }
     }
 

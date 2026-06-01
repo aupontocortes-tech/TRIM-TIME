@@ -22,6 +22,7 @@ async function setBarberPhotoPositionRow(barberId: string, pos: number): Promise
 
 export type BarberCreateWithPositionInput = {
   barbershopId: string
+  unitId?: string | null
   name: string
   phone: string
   email: string | null

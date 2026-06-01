@@ -407,7 +407,7 @@ export default function ConfiguracoesPage() {
     setBarbersLoading(true)
     setEquipeError(null)
     try {
-      const r = await fetch("/api/barbers", { credentials: "include" })
+      const r = await fetch("/api/barbers", { credentials: "include", cache: "no-store" })
       if (!r.ok) {
         const j = await r.json().catch(() => ({}))
         setEquipeError(typeof j.error === "string" ? j.error : "Erro ao carregar equipe")
@@ -422,7 +422,7 @@ export default function ConfiguracoesPage() {
     } finally {
       setBarbersLoading(false)
     }
-  }, [])
+  }, [selectedUnitId])
 
   const loadServices = useCallback(async () => {
     setServicosLoading(true)
@@ -2468,6 +2468,13 @@ export default function ConfiguracoesPage() {
             <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <CardTitle className="text-foreground">Equipe</CardTitle>
+                {units.length > 1 ? (
+                  <p className="text-sm text-primary font-medium mt-1">
+                    {selectedUnitId
+                      ? `Unidade: ${units.find((u) => u.id === selectedUnitId)?.name ?? "—"} — só profissionais desta loja`
+                      : "Selecione uma unidade na barra lateral para ver e gerenciar a equipe."}
+                  </p>
+                ) : null}
                 <CardDescription className="text-muted-foreground">
                   Cada profissional pode abrir o <span className="text-foreground font-medium">app da equipe</span>{" "}
                   (agenda dia/semana/mês e lista de espera no nome dele) com e-mail, telefone, senha e código de 6

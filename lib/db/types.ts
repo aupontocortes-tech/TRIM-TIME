@@ -126,6 +126,8 @@ export type BarberRole = "admin_barbershop" | "user"
 export interface Barber {
   id: string
   barbershop_id: string
+  /** Unidade onde o profissional atende (quando a barbearia tem várias unidades). */
+  unit_id?: string | null
   name: string
   phone: string | null
   email?: string | null

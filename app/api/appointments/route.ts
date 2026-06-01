@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server"
 import { requireBarbershopId } from "@/lib/tenant"
 import { hasBarberSlotConflict, normalizeAppointmentTime } from "@/lib/scheduling"
-import { prismaAppointmentUnitFilter, resolveSelectedUnitId } from "@/lib/unit-context"
+import {
+  prismaAppointmentUnitFilter,
+  resolveSelectedUnitId,
+  validateBarberForUnit,
+} from "@/lib/unit-context"
 import type { Appointment } from "@/lib/db/types"
 import type { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
@@ -88,6 +92,16 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Unidade inválida para esta barbearia" }, { status: 400 })
       }
     }
+
+    const barberUnitCheck = await validateBarberForUnit({
+      barbershopId,
+      barberId: body.barber_id,
+      unitId: effectiveUnitId,
+    })
+    if (!barberUnitCheck.ok) {
+      return NextResponse.json({ error: barberUnitCheck.error }, { status: barberUnitCheck.status })
+    }
+
     const apptDate = parseAppointmentDate(body.date)
     const dayRange = utcDayRangeForYmd(body.date)
     const existing = await clientHasBlockingAppointmentOnDay({
