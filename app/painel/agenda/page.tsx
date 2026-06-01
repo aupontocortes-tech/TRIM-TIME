@@ -987,7 +987,7 @@ export default function AgendaPage() {
       {!unitsLoading && needsUnitPick ? (
         <div className="rounded-lg border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-foreground">
           Selecione uma unidade em <strong>Unidade ativa</strong> na barra lateral. Cada loja tem agenda e equipe
-          próprias — use <strong>Toda a rede</strong> no Financeiro para somar o faturamento de todas.
+          próprias — no Financeiro, use <strong>Todas as unidades</strong> para ver o faturamento geral.
         </div>
       ) : null}
       {!unitsLoading && selectedUnitId && nomeUnidadeAtiva ? (

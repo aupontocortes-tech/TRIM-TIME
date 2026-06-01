@@ -25,33 +25,21 @@ async function main() {
     return
   }
 
+  const fallbackByShop = new Map()
   let updated = 0
   for (const b of barbers) {
-    const rows = await prisma.appointment.groupBy({
-      by: ["unitId"],
-      where: {
-        barberId: b.id,
-        barbershopId: b.barbershopId,
-        unitId: { not: null },
-      },
-      _count: { id: true },
-      orderBy: { _count: { id: "desc" } },
-    })
-    const top = rows[0]?.unitId
-    if (!top) {
-      const fallback = await prisma.barbershopUnit.findFirst({
+    let fallback = fallbackByShop.get(b.barbershopId)
+    if (!fallback) {
+      fallback = await prisma.barbershopUnit.findFirst({
         where: { barbershopId: b.barbershopId, active: true },
         orderBy: { createdAt: "asc" },
-        select: { id: true },
+        select: { id: true, name: true },
       })
       if (!fallback) continue
-      await prisma.barber.update({ where: { id: b.id }, data: { unitId: fallback.id } })
-      console.log(`${b.name} → unidade padrão (sem histórico)`)
-      updated++
-      continue
+      fallbackByShop.set(b.barbershopId, fallback)
     }
-    await prisma.barber.update({ where: { id: b.id }, data: { unitId: top } })
-    console.log(`${b.name} → unidade ${top}`)
+    await prisma.barber.update({ where: { id: b.id }, data: { unitId: fallback.id } })
+    console.log(`${b.name} → ${fallback.name}`)
     updated++
   }
 

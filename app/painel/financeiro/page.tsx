@@ -204,7 +204,7 @@ export default function FinanceiroPage() {
         >
           {isNetworkView ? (
             <>
-              <strong className="text-foreground">Toda a rede</strong> — valores somados de{" "}
+              <strong className="text-foreground">Todas as unidades</strong> — faturamento somado de{" "}
               {units.length} unidades (hoje, semana, mês e ano conforme o filtro acima). Para ver o
               financeiro de uma loja, escolha a unidade em &quot;Unidade ativa&quot; na barra lateral.
             </>
