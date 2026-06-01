@@ -15,11 +15,27 @@ export async function resolveSelectedUnitId(barbershopId: string): Promise<strin
   if (!unitId) return null
 
   const row = await prisma.barbershopUnit.findFirst({
-    where: { id: unitId, barbershopId },
+    where: { id: unitId, barbershopId, active: true },
     select: { id: true },
   })
 
   return row?.id ?? null
+}
+
+/** Unidade para listar equipe: query `unit_id` tem prioridade sobre o cookie. */
+export async function resolveBarberListUnitId(
+  barbershopId: string,
+  queryUnitId?: string | null
+): Promise<string | null> {
+  const fromQuery = queryUnitId?.trim() || null
+  if (fromQuery) {
+    const row = await prisma.barbershopUnit.findFirst({
+      where: { id: fromQuery, barbershopId, active: true },
+      select: { id: true },
+    })
+    return row?.id ?? null
+  }
+  return resolveSelectedUnitId(barbershopId)
 }
 
 /**
@@ -35,10 +51,19 @@ export function prismaAppointmentUnitFilter(selectedUnitId: string | null): Pris
 /**
  * Filtro de equipe no painel: com unidade escolhida, só profissionais dessa unidade.
  * Sem unidade (Todas): todos da barbearia.
+ * Com 2+ unidades e unidade escolhida: não inclui barbeiros sem `unit_id` (legado).
  */
-export function prismaBarberUnitFilter(selectedUnitId: string | null): Prisma.BarberWhereInput {
+export function prismaBarberUnitFilter(
+  selectedUnitId: string | null,
+  multiUnit: boolean
+): Prisma.BarberWhereInput {
   if (!selectedUnitId) return {}
-  return { unitId: selectedUnitId }
+  if (multiUnit) {
+    return { unitId: selectedUnitId }
+  }
+  return {
+    OR: [{ unitId: selectedUnitId }, { unitId: null }],
+  }
 }
 
 /**

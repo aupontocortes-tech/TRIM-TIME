@@ -18,7 +18,7 @@ export async function PATCH(
     const { id } = await params
     const body = await _request.json() as Partial<
       Pick<Barber, "name" | "phone" | "email" | "cpf" | "photo_url" | "photo_position" | "commission" | "active">
-    >
+    > & { unit_id?: string | null }
     const barbershop = await prisma.barbershop.findUnique({
       where: { id: barbershopId },
       select: { role: true, isTest: true },
@@ -34,6 +34,7 @@ export async function PATCH(
       photoPosition?: number
       active?: boolean
       commission?: number
+      unitId?: string | null
     } = {}
     if (body.name !== undefined) {
       const n = String(body.name).trim()
@@ -75,6 +76,21 @@ export async function PATCH(
     if (body.active !== undefined) update.active = Boolean(body.active)
     if (body.photo_position !== undefined) {
       update.photoPosition = Math.min(100, Math.max(0, Math.round(Number(body.photo_position ?? 50))))
+    }
+
+    if (body.unit_id !== undefined) {
+      if (body.unit_id === null || body.unit_id === "") {
+        update.unitId = null
+      } else {
+        const unit = await prisma.barbershopUnit.findFirst({
+          where: { id: body.unit_id.trim(), barbershopId, active: true },
+          select: { id: true },
+        })
+        if (!unit) {
+          return NextResponse.json({ error: "Unidade inválida" }, { status: 400 })
+        }
+        update.unitId = unit.id
+      }
     }
 
     if (body.commission !== undefined) {

@@ -78,6 +78,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { renderNotificationTemplate } from "@/lib/notification-template"
+import { barbersListUrl } from "@/lib/barbers-list-url"
 import { WhatsAppConnectWizard } from "@/components/painel/whatsapp-connect-wizard"
 
 const diasSemana = [
@@ -244,6 +245,7 @@ export default function ConfiguracoesPage() {
   const [editPhotoPosition, setEditPhotoPosition] = useState(50)
   const [editCommission, setEditCommission] = useState("50")
   const [editActive, setEditActive] = useState(true)
+  const [editUnitId, setEditUnitId] = useState<string>("")
   const [inviteUrl, setInviteUrl] = useState<string | null>(null)
   const [inviteExpiry, setInviteExpiry] = useState<string | null>(null)
   const [inviteBusy, setInviteBusy] = useState(false)
@@ -407,7 +409,7 @@ export default function ConfiguracoesPage() {
     setBarbersLoading(true)
     setEquipeError(null)
     try {
-      const r = await fetch("/api/barbers", { credentials: "include", cache: "no-store" })
+      const r = await fetch(barbersListUrl(selectedUnitId), { credentials: "include", cache: "no-store" })
       if (!r.ok) {
         const j = await r.json().catch(() => ({}))
         setEquipeError(typeof j.error === "string" ? j.error : "Erro ao carregar equipe")
@@ -1220,6 +1222,7 @@ export default function ConfiguracoesPage() {
     setEditPhotoPosition(b.photo_position ?? 50)
     setEditCommission(String(Number(b.commission) || 0))
     setEditActive(b.active)
+    setEditUnitId(b.unit_id ?? selectedUnitId ?? "")
     setEditOpen(true)
   }
 
@@ -1327,6 +1330,9 @@ export default function ConfiguracoesPage() {
           return
         }
         patch.commission = c
+      }
+      if (units.length > 1 && editUnitId.trim()) {
+        ;(patch as Record<string, unknown>).unit_id = editUnitId.trim()
       }
       const r = await fetch(`/api/barbers/${editing.id}`, {
         method: "PATCH",
@@ -2472,7 +2478,7 @@ export default function ConfiguracoesPage() {
                   <p className="text-sm text-primary font-medium mt-1">
                     {selectedUnitId
                       ? `Unidade: ${units.find((u) => u.id === selectedUnitId)?.name ?? "—"} — só profissionais desta loja`
-                      : "Selecione uma unidade na barra lateral para ver e gerenciar a equipe."}
+                      : 'Modo "Todas unidades": mostra a equipe inteira. Escolha uma unidade na barra lateral para ver só os profissionais daquela loja.'}
                   </p>
                 ) : null}
                 <CardDescription className="text-muted-foreground">
@@ -2814,6 +2820,26 @@ export default function ConfiguracoesPage() {
                       onChange={(e) => setEditName(e.target.value)}
                     />
                   </Field>
+                  {units.length > 1 ? (
+                    <Field>
+                      <FieldLabel>Unidade</FieldLabel>
+                      <select
+                        className="mt-1 flex h-9 w-full rounded-md border border-border bg-input px-3 py-1 text-sm text-foreground"
+                        value={editUnitId}
+                        onChange={(e) => setEditUnitId(e.target.value)}
+                      >
+                        <option value="">— Selecione —</option>
+                        {units.filter((u) => u.active).map((u) => (
+                          <option key={u.id} value={u.id}>
+                            {u.name}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Cada profissional pertence a uma unidade. Troque aqui se ele mudou de loja.
+                      </p>
+                    </Field>
+                  ) : null}
                   <Field>
                     <FieldLabel>Foto do profissional</FieldLabel>
                     <input

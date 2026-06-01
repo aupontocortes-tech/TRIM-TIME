@@ -43,6 +43,7 @@ import {
 import { Separator } from "@/components/ui/separator"
 import type { Appointment, Barber, Client, RetailProduct, Service, WaitingListItem } from "@/lib/db/types"
 import { useUnits } from "@/hooks/use-units"
+import { barbersListUrl } from "@/lib/barbers-list-url"
 import { formatWaitlistDayLabel, shopTodayYmd } from "@/lib/waitlist-expiry"
 import { isSlotPastGraceFromYmd } from "@/lib/appointment-reminder-time"
 
@@ -275,7 +276,7 @@ export default function AgendaPage() {
 
   const carregarDependencias = async () => {
     const [barbersRes, servicesRes, clientsRes, retailRes] = await Promise.all([
-      fetch("/api/barbers", { credentials: "include" }),
+      fetch(barbersListUrl(selectedUnitId), { credentials: "include", cache: "no-store" }),
       fetch("/api/services", { credentials: "include", cache: "no-store" }),
       fetch("/api/clients", { credentials: "include" }),
       fetch("/api/retail-products", { credentials: "include", cache: "no-store" }),

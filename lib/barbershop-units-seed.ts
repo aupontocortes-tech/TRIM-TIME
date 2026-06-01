@@ -87,3 +87,52 @@ export async function repairMissingPrincipalWhenSingleMismatchedUnit(barbershopI
     },
   })
 }
+
+/**
+ * Vincula barbeiros sem `unit_id` à unidade correta (histórico de agendamentos ou unidade única).
+ * Necessário em barbearias com 2+ unidades — a migration 028 só preenche automaticamente quando há 1 unidade.
+ */
+export async function assignBarbersWithoutUnit(barbershopId: string): Promise<void> {
+  const orphans = await prisma.barber.findMany({
+    where: { barbershopId, unitId: null },
+    select: { id: true },
+  })
+  if (orphans.length === 0) return
+
+  const activeUnits = await prisma.barbershopUnit.findMany({
+    where: { barbershopId, active: true },
+    orderBy: { createdAt: "asc" },
+    select: { id: true },
+  })
+
+  if (activeUnits.length === 0) return
+
+  if (activeUnits.length === 1) {
+    await prisma.barber.updateMany({
+      where: { barbershopId, unitId: null },
+      data: { unitId: activeUnits[0].id },
+    })
+    return
+  }
+
+  for (const { id: barberId } of orphans) {
+    const grouped = await prisma.appointment.groupBy({
+      by: ["unitId"],
+      where: {
+        barberId,
+        barbershopId,
+        unitId: { not: null },
+      },
+      _count: { id: true },
+      orderBy: { _count: { id: "desc" } },
+    })
+
+    const topUnitId = grouped[0]?.unitId
+    if (!topUnitId) continue
+
+    await prisma.barber.update({
+      where: { id: barberId },
+      data: { unitId: topUnitId },
+    })
+  }
+}

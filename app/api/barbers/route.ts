@@ -8,10 +8,11 @@ import { prismaBarberCreateWithPhotoPositionFallback } from "@/lib/barber-mutati
 import { fetchBarberPhotoPositionsByBarbershopId } from "@/lib/barber-queries"
 import type { Barber } from "@/lib/db/types"
 import { assertValidProfilePhotoDataUrl } from "@/lib/photo-data-url"
+import { assignBarbersWithoutUnit } from "@/lib/barbershop-units-seed"
 import {
   prismaBarberUnitFilter,
   requireSelectedUnitForBarberCreate,
-  resolveSelectedUnitId,
+  resolveBarberListUnitId,
 } from "@/lib/unit-context"
 
 function mapBarberRow(
@@ -55,11 +56,19 @@ function mapBarberRow(
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const barbershopId = await requireBarbershopId()
-    const selectedUnitId = await resolveSelectedUnitId(barbershopId)
-    const unitFilter = prismaBarberUnitFilter(selectedUnitId)
+    const queryUnit = new URL(request.url).searchParams.get("unit_id")
+    await assignBarbersWithoutUnit(barbershopId)
+
+    const activeUnitCount = await prisma.barbershopUnit.count({
+      where: { barbershopId, active: true },
+    })
+    const multiUnit = activeUnitCount > 1
+
+    const selectedUnitId = await resolveBarberListUnitId(barbershopId, queryUnit)
+    const unitFilter = prismaBarberUnitFilter(selectedUnitId, multiUnit)
     let data = await prisma.barber.findMany({
       where: { barbershopId, ...unitFilter },
       orderBy: { name: "asc" },
