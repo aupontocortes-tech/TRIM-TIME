@@ -2831,7 +2831,20 @@ export default function ConfiguracoesPage() {
                         </p>
                         <p className="text-xs text-muted-foreground">comissão</p>
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex gap-2 flex-wrap justify-end">
+                        {prof.photo_url ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-8 text-xs gap-1"
+                            disabled={equipeBusy}
+                            onClick={() => openEdit(prof)}
+                          >
+                            <Camera className="w-3.5 h-3.5" />
+                            Ajustar foto
+                          </Button>
+                        ) : null}
                         <Button
                           type="button"
                           size="icon"

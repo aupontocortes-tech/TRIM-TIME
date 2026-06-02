@@ -4,11 +4,14 @@ import { prisma } from "@/lib/prisma"
 let schemaReadyPromise: Promise<void> | null = null
 let resolvedBarbersTable: string | null = null
 
-function isMissingUnitIdColumnError(error: unknown): boolean {
+function isMissingBarberColumnError(error: unknown): boolean {
   const msg = error instanceof Error ? error.message : String(error)
   return (
-    msg.includes("does not exist") &&
-    (msg.includes("unit_id") || msg.includes("unitId") || msg.includes("(not available)"))
+    (msg.includes("does not exist") || msg.includes("(not available)")) &&
+    (msg.includes("unit_id") ||
+      msg.includes("unitId") ||
+      msg.includes("photo_scale") ||
+      msg.includes("photoScale"))
   )
 }
 
@@ -47,7 +50,7 @@ function quoteTable(name: string): string {
   return name === "Barber" ? '"Barber"' : "barbers"
 }
 
-async function barbersTableHasUnitIdColumn(table: string): Promise<boolean> {
+async function barbersTableHasColumn(table: string, columnName: string): Promise<boolean> {
   const tableName = table === "Barber" ? "Barber" : "barbers"
   try {
     const rows = await prisma.$queryRaw<{ ok: number }[]>(Prisma.sql`
@@ -55,7 +58,7 @@ async function barbersTableHasUnitIdColumn(table: string): Promise<boolean> {
       FROM information_schema.columns
       WHERE table_schema = 'public'
         AND table_name = ${tableName}
-        AND column_name = 'unit_id'
+        AND column_name = ${columnName}
       LIMIT 1
     `)
     return rows.length > 0
@@ -64,17 +67,28 @@ async function barbersTableHasUnitIdColumn(table: string): Promise<boolean> {
   }
 }
 
-/** Garante coluna `unit_id` na tabela de barbeiros — idempotente. */
+async function barbersTableHasUnitIdColumn(table: string): Promise<boolean> {
+  return barbersTableHasColumn(table, "unit_id")
+}
+
+async function barbersTableHasPhotoScaleColumn(table: string): Promise<boolean> {
+  return barbersTableHasColumn(table, "photo_scale")
+}
+
+/** Garante colunas `unit_id` e `photo_scale` na tabela de barbeiros — idempotente. */
 export async function ensureBarbersUnitSchemaReady(): Promise<void> {
   const table = await getBarbersTableName()
   const q = quoteTable(table)
 
-  if (await barbersTableHasUnitIdColumn(table)) return
+  const hasUnitId = await barbersTableHasUnitIdColumn(table)
+  const hasPhotoScale = await barbersTableHasPhotoScaleColumn(table)
+  if (hasUnitId && hasPhotoScale) return
 
-  await prisma.$executeRawUnsafe(`ALTER TABLE ${q} ADD COLUMN IF NOT EXISTS unit_id UUID;`)
+  if (!hasUnitId) {
+    await prisma.$executeRawUnsafe(`ALTER TABLE ${q} ADD COLUMN IF NOT EXISTS unit_id UUID;`)
 
-  const fkName = table === "Barber" ? "Barber_unit_id_fkey" : "barbers_unit_id_fkey"
-  await prisma.$executeRawUnsafe(`
+    const fkName = table === "Barber" ? "Barber_unit_id_fkey" : "barbers_unit_id_fkey"
+    await prisma.$executeRawUnsafe(`
     DO $$
     BEGIN
       IF NOT EXISTS (
@@ -87,18 +101,18 @@ export async function ensureBarbersUnitSchemaReady(): Promise<void> {
     END $$;
   `)
 
-  const idxUnit = table === "Barber" ? "Barber_unit_id_idx" : "idx_barbers_unit"
-  const idxShopUnit = table === "Barber" ? "Barber_barbershop_id_unit_id_idx" : "idx_barbers_barbershop_unit"
-  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS ${idxUnit} ON ${q}(unit_id);`)
-  await prisma.$executeRawUnsafe(
-    `CREATE INDEX IF NOT EXISTS ${idxShopUnit} ON ${q}(barbershop_id, unit_id);`
-  )
+    const idxUnit = table === "Barber" ? "Barber_unit_id_idx" : "idx_barbers_unit"
+    const idxShopUnit = table === "Barber" ? "Barber_barbershop_id_unit_id_idx" : "idx_barbers_barbershop_unit"
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS ${idxUnit} ON ${q}(unit_id);`)
+    await prisma.$executeRawUnsafe(
+      `CREATE INDEX IF NOT EXISTS ${idxShopUnit} ON ${q}(barbershop_id, unit_id);`
+    )
 
-  await prisma.$executeRawUnsafe(`
+    await prisma.$executeRawUnsafe(`
     ALTER TABLE barber_invites ADD COLUMN IF NOT EXISTS unit_id UUID;
   `)
 
-  await prisma.$executeRawUnsafe(`
+    await prisma.$executeRawUnsafe(`
     UPDATE ${q} b
     SET unit_id = sub.unit_id
     FROM (
@@ -117,6 +131,25 @@ export async function ensureBarbersUnitSchemaReady(): Promise<void> {
         WHERE u.barbershop_id = b.barbershop_id
       ) = 1;
   `)
+  }
+
+  if (!hasPhotoScale) {
+    await prisma.$executeRawUnsafe(
+      `ALTER TABLE ${q} ADD COLUMN IF NOT EXISTS photo_scale INTEGER NOT NULL DEFAULT 100;`
+    )
+    await prisma.$executeRawUnsafe(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'barbers_photo_scale_range'
+        ) THEN
+          ALTER TABLE ${q}
+            ADD CONSTRAINT barbers_photo_scale_range
+            CHECK (photo_scale >= 75 AND photo_scale <= 125);
+        END IF;
+      END $$;
+    `)
+  }
 }
 
 export function ensureBarbersUnitSchemaReadyOnce(): Promise<void> {
@@ -134,7 +167,7 @@ export async function withBarbersUnitSchema<T>(fn: () => Promise<T>): Promise<T>
     await ensureBarbersUnitSchemaReadyOnce()
     return await fn()
   } catch (e) {
-    if (isMissingUnitIdColumnError(e) || isRelationDoesNotExistError(e)) {
+    if (isMissingBarberColumnError(e) || isRelationDoesNotExistError(e)) {
       resolvedBarbersTable = null
       schemaReadyPromise = null
       await ensureBarbersUnitSchemaReady()

@@ -14,6 +14,7 @@ import {
   requireSelectedUnitForClientCreate,
   resolveClientListUnitId,
 } from "@/lib/unit-context"
+import { ensureClientsUnitSchemaReady } from "@/lib/client-unit-schema"
 
 function mapClient(c: {
   id: string
@@ -52,6 +53,7 @@ export async function GET(request: Request) {
     const q = searchParams.get("q")?.trim() || ""
     const queryUnit = searchParams.get("unit_id")
 
+    await ensureClientsUnitSchemaReady()
     await assignClientsWithoutUnit(barbershopId)
 
     const multiUnit = await barbershopHasMultipleUnits(barbershopId)
@@ -90,6 +92,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const barbershopId = await requireBarbershopId()
+    await ensureClientsUnitSchemaReady()
     const body = await request.json() as {
       name: string
       phone?: string
