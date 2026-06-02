@@ -1,20 +1,19 @@
 import { NextResponse } from "next/server"
 import { requireBarbershopId } from "@/lib/tenant"
 import { hasBarberSlotConflict, normalizeAppointmentTime } from "@/lib/scheduling"
-import {
-  prismaAppointmentUnitFilter,
-  resolveSelectedUnitId,
-  validateBarberForUnit,
-} from "@/lib/unit-context"
+import { resolveSelectedUnitId, validateBarberForUnit } from "@/lib/unit-context"
 import type { Appointment } from "@/lib/db/types"
 import type { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import {
-  appointmentApiInclude,
   mapAppointmentRowToApi,
   parseAppointmentDate,
   utcDayRangeForYmd,
 } from "@/lib/appointment-prisma-helpers"
+import {
+  buildAppointmentListWhere,
+  fetchAppointmentsWithRelations,
+} from "@/lib/appointment-queries"
 import { withServiceDescriptionsFromDb } from "@/lib/service-queries"
 import { trySendWhatsAppAppointmentConfirmation } from "@/lib/whatsapp-appointment-events"
 import { expireStaleAppointmentsForBarbershop } from "@/lib/appointment-expiry"
@@ -49,19 +48,12 @@ export async function GET(request: Request) {
       return undefined
     })()
 
-    const list = await withAppointmentDbSchema(async () => {
-      const rows = await prisma.appointment.findMany({
-        where: {
-          barbershopId,
-          ...prismaAppointmentUnitFilter(selectedUnitId),
-          ...(dateFilter ? { date: dateFilter } : {}),
-          ...(barberId ? { barberId } : {}),
-        },
-        include: appointmentApiInclude,
-        orderBy: [{ date: "asc" }, { time: "asc" }],
-      })
-      return rows.map(mapAppointmentRowToApi) as Appointment[]
+    const where = await buildAppointmentListWhere(barbershopId, selectedUnitId, {
+      ...(dateFilter ? { date: dateFilter } : {}),
+      ...(barberId ? { barberId } : {}),
     })
+    const rows = await fetchAppointmentsWithRelations(where)
+    const list = rows.map(mapAppointmentRowToApi) as Appointment[]
     return NextResponse.json(await withServiceDescriptionsFromDb(list))
   } catch (e) {
     return NextResponse.json(
@@ -177,11 +169,35 @@ export async function POST(request: Request) {
               }
             : {}),
         },
-        include: appointmentApiInclude,
+        include: {
+          client: true,
+          barber: {
+            select: {
+              id: true,
+              barbershopId: true,
+              unitId: true,
+              name: true,
+              phone: true,
+              email: true,
+              cpf: true,
+              photoUrl: true,
+              commission: true,
+              active: true,
+              role: true,
+              createdAt: true,
+              updatedAt: true,
+            },
+          },
+          service: true,
+          appointmentRetailLines: { include: { retailProduct: true } },
+          appointmentServiceLines: { include: { service: true } },
+        },
       })
     )
     void trySendWhatsAppAppointmentConfirmation(barbershopId, created.id)
-    return NextResponse.json(mapAppointmentRowToApi(created) as Appointment)
+    return NextResponse.json(
+      mapAppointmentRowToApi(created as Parameters<typeof mapAppointmentRowToApi>[0]) as Appointment
+    )
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Erro ao criar agendamento" },

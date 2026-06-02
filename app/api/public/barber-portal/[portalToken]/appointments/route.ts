@@ -3,11 +3,8 @@ import { cookies } from "next/headers"
 import { prisma } from "@/lib/prisma"
 import { isValidPortalToken } from "@/lib/barber-portal-resolve"
 import { barberPortalCookieName, verifyBarberPortalSession } from "@/lib/barber-portal-session"
-import {
-  appointmentApiInclude,
-  mapAppointmentRowToApi,
-  parseAppointmentDate,
-} from "@/lib/appointment-prisma-helpers"
+import { mapAppointmentRowToApi, parseAppointmentDate } from "@/lib/appointment-prisma-helpers"
+import { fetchAppointmentsWithRelations } from "@/lib/appointment-queries"
 import type { Prisma } from "@prisma/client"
 import { withServiceDescriptionsFromDb } from "@/lib/service-queries"
 import { expireStaleAppointmentsForBarbershop } from "@/lib/appointment-expiry"
@@ -60,19 +57,13 @@ export async function GET(
       return undefined
     })()
 
-    const list = await withAppointmentDbSchema(async () => {
-      const rows = await prisma.appointment.findMany({
-        where: {
-          barbershopId: barber.barbershopId,
-          barberId: barber.id,
-          ...(dateFilter ? { date: dateFilter } : {}),
-          status: { not: "no_show" },
-        },
-        include: appointmentApiInclude,
-        orderBy: [{ date: "asc" }, { time: "asc" }],
-      })
-      return rows.map(mapAppointmentRowToApi) as Appointment[]
+    const rows = await fetchAppointmentsWithRelations({
+      barbershopId: barber.barbershopId,
+      barberId: barber.id,
+      ...(dateFilter ? { date: dateFilter } : {}),
+      status: { not: "no_show" },
     })
+    const list = rows.map(mapAppointmentRowToApi) as Appointment[]
     return NextResponse.json(await withServiceDescriptionsFromDb(list))
   } catch (e) {
     return NextResponse.json(
