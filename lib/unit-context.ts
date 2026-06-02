@@ -53,7 +53,12 @@ export const resolveClientListUnitId = resolveBarberListUnitId
  */
 export function prismaAppointmentUnitFilter(selectedUnitId: string | null): Prisma.AppointmentWhereInput {
   if (!selectedUnitId) return {}
-  return { unitId: selectedUnitId }
+  return {
+    OR: [
+      { unitId: selectedUnitId },
+      { unitId: null, barber: { unitId: selectedUnitId } },
+    ],
+  }
 }
 
 /**

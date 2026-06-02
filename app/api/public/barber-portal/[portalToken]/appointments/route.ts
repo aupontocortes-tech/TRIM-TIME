@@ -11,6 +11,7 @@ import {
 import type { Prisma } from "@prisma/client"
 import { withServiceDescriptionsFromDb } from "@/lib/service-queries"
 import { expireStaleAppointmentsForBarbershop } from "@/lib/appointment-expiry"
+import { withAppointmentDbSchema } from "@/lib/appointment-db-schema"
 import type { Appointment } from "@/lib/db/types"
 
 export async function GET(
@@ -41,7 +42,7 @@ export async function GET(
       return NextResponse.json({ error: "Sessão inválida" }, { status: 401 })
     }
 
-    await expireStaleAppointmentsForBarbershop(barber.barbershopId)
+    await withAppointmentDbSchema(() => expireStaleAppointmentsForBarbershop(barber.barbershopId))
 
     const { searchParams } = new URL(request.url)
     const date = searchParams.get("date")?.trim()
@@ -59,18 +60,19 @@ export async function GET(
       return undefined
     })()
 
-    const rows = await prisma.appointment.findMany({
-      where: {
-        barbershopId: barber.barbershopId,
-        barberId: barber.id,
-        ...(dateFilter ? { date: dateFilter } : {}),
-        status: { not: "no_show" },
-      },
-      include: appointmentApiInclude,
-      orderBy: [{ date: "asc" }, { time: "asc" }],
+    const list = await withAppointmentDbSchema(async () => {
+      const rows = await prisma.appointment.findMany({
+        where: {
+          barbershopId: barber.barbershopId,
+          barberId: barber.id,
+          ...(dateFilter ? { date: dateFilter } : {}),
+          status: { not: "no_show" },
+        },
+        include: appointmentApiInclude,
+        orderBy: [{ date: "asc" }, { time: "asc" }],
+      })
+      return rows.map(mapAppointmentRowToApi) as Appointment[]
     })
-
-    const list = rows.map(mapAppointmentRowToApi) as Appointment[]
     return NextResponse.json(await withServiceDescriptionsFromDb(list))
   } catch (e) {
     return NextResponse.json(

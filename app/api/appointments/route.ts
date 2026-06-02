@@ -19,11 +19,18 @@ import { withServiceDescriptionsFromDb } from "@/lib/service-queries"
 import { trySendWhatsAppAppointmentConfirmation } from "@/lib/whatsapp-appointment-events"
 import { expireStaleAppointmentsForBarbershop } from "@/lib/appointment-expiry"
 import { clientHasBlockingAppointmentOnDay } from "@/lib/client-same-day-appointment"
+import {
+  syncAppointmentUnitsFromBarbers,
+  withAppointmentDbSchema,
+} from "@/lib/appointment-db-schema"
 
 export async function GET(request: Request) {
   try {
     const barbershopId = await requireBarbershopId()
-    await expireStaleAppointmentsForBarbershop(barbershopId)
+    await withAppointmentDbSchema(async () => {
+      await syncAppointmentUnitsFromBarbers(barbershopId)
+      await expireStaleAppointmentsForBarbershop(barbershopId)
+    })
     const { searchParams } = new URL(request.url)
     const date = searchParams.get("date") // YYYY-MM-DD
     const from = searchParams.get("from")
@@ -42,17 +49,19 @@ export async function GET(request: Request) {
       return undefined
     })()
 
-    const rows = await prisma.appointment.findMany({
-      where: {
-        barbershopId,
-        ...prismaAppointmentUnitFilter(selectedUnitId),
-        ...(dateFilter ? { date: dateFilter } : {}),
-        ...(barberId ? { barberId } : {}),
-      },
-      include: appointmentApiInclude,
-      orderBy: [{ date: "asc" }, { time: "asc" }],
+    const list = await withAppointmentDbSchema(async () => {
+      const rows = await prisma.appointment.findMany({
+        where: {
+          barbershopId,
+          ...prismaAppointmentUnitFilter(selectedUnitId),
+          ...(dateFilter ? { date: dateFilter } : {}),
+          ...(barberId ? { barberId } : {}),
+        },
+        include: appointmentApiInclude,
+        orderBy: [{ date: "asc" }, { time: "asc" }],
+      })
+      return rows.map(mapAppointmentRowToApi) as Appointment[]
     })
-    const list = rows.map(mapAppointmentRowToApi) as Appointment[]
     return NextResponse.json(await withServiceDescriptionsFromDb(list))
   } catch (e) {
     return NextResponse.json(
@@ -65,7 +74,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const barbershopId = await requireBarbershopId()
-    await expireStaleAppointmentsForBarbershop(barbershopId)
+    await withAppointmentDbSchema(() => expireStaleAppointmentsForBarbershop(barbershopId))
     const body = await request.json() as {
       client_id: string
       barber_id: string
@@ -132,33 +141,45 @@ export async function POST(request: Request) {
       select: { price: true },
     })
     const totalPrice = body.total_price ?? (service != null ? Number(service.price) : 0)
-    const created = await prisma.appointment.create({
-      data: {
-        barbershopId,
-        clientId: body.client_id,
-        barberId: body.barber_id,
-        serviceId: body.service_id,
-        unitId: effectiveUnitId ?? null,
-        date: apptDate,
-        time: normalizeAppointmentTime(body.time),
-        status: "pending",
-        totalPrice,
-        ...(service
-          ? {
-              appointmentServiceLines: {
-                create: [
-                  {
-                    serviceId: body.service_id,
-                    quantity: 1,
-                    unitPrice: Number(service.price),
-                  },
-                ],
-              },
-            }
-          : {}),
-      },
-      include: appointmentApiInclude,
-    })
+    const unitFromBarber =
+      effectiveUnitId ??
+      (
+        await prisma.barber.findFirst({
+          where: { id: body.barber_id, barbershopId },
+          select: { unitId: true },
+        })
+      )?.unitId ??
+      null
+
+    const created = await withAppointmentDbSchema(() =>
+      prisma.appointment.create({
+        data: {
+          barbershopId,
+          clientId: body.client_id,
+          barberId: body.barber_id,
+          serviceId: body.service_id,
+          unitId: unitFromBarber,
+          date: apptDate,
+          time: normalizeAppointmentTime(body.time),
+          status: "pending",
+          totalPrice,
+          ...(service
+            ? {
+                appointmentServiceLines: {
+                  create: [
+                    {
+                      serviceId: body.service_id,
+                      quantity: 1,
+                      unitPrice: Number(service.price),
+                    },
+                  ],
+                },
+              }
+            : {}),
+        },
+        include: appointmentApiInclude,
+      })
+    )
     void trySendWhatsAppAppointmentConfirmation(barbershopId, created.id)
     return NextResponse.json(mapAppointmentRowToApi(created) as Appointment)
   } catch (e) {

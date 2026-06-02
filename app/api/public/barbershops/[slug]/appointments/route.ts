@@ -18,6 +18,7 @@ import type { BarbershopSettings } from "@/lib/db/types"
 import { resolveEffectivePlanForBarbershop } from "@/lib/barbershop-effective-plan-server"
 import { hasFeature } from "@/lib/plans"
 import { validateBarberForUnit } from "@/lib/unit-context"
+import { withAppointmentDbSchema } from "@/lib/appointment-db-schema"
 
 function localYmd(d: Date): string {
   const y = d.getFullYear()
@@ -84,7 +85,7 @@ export async function GET(
       return NextResponse.json({ error: "Barbearia não encontrada" }, { status: 404 })
     }
 
-    await expireStaleAppointmentsForBarbershop(shop.id)
+    await withAppointmentDbSchema(() => expireStaleAppointmentsForBarbershop(shop.id))
 
     let unitId: string | null = null
     if (unitIdParam) {
@@ -102,17 +103,23 @@ export async function GET(
       return NextResponse.json({ occupied_times: [] })
     }
 
-    const appointments = await prisma.appointment.findMany({
-      where: {
-        barbershopId: shop.id,
-        barberId,
-        ...(unitId ? { unitId } : {}),
-        date: { gte: dayBounds.gte, lt: dayBounds.lt },
-        status: { in: ["pending", "confirmed"] },
-      },
-      select: { time: true },
-      orderBy: { time: "asc" },
-    })
+    const appointments = await withAppointmentDbSchema(() =>
+      prisma.appointment.findMany({
+        where: {
+          barbershopId: shop.id,
+          barberId,
+          ...(unitId
+            ? {
+                OR: [{ unitId }, { unitId: null, barber: { unitId } }],
+              }
+            : {}),
+          date: { gte: dayBounds.gte, lt: dayBounds.lt },
+          status: { in: ["pending", "confirmed"] },
+        },
+        select: { time: true },
+        orderBy: { time: "asc" },
+      })
+    )
 
     return NextResponse.json({
       occupied_times: appointments.map((a) => normalizeTime(a.time)),
@@ -136,7 +143,7 @@ export async function POST(
       return NextResponse.json({ error: "Barbearia não encontrada" }, { status: 404 })
     }
 
-    await expireStaleAppointmentsForBarbershop(shop.id)
+    await withAppointmentDbSchema(() => expireStaleAppointmentsForBarbershop(shop.id))
 
     const planForWaitlist = await resolveEffectivePlanForBarbershop(shop.id)
     const waitlistAvailable = !!(planForWaitlist && hasFeature(planForWaitlist, "waiting_list"))
@@ -246,7 +253,7 @@ export async function POST(
     const [barber, services] = await Promise.all([
       prisma.barber.findFirst({
         where: { id: barberId, barbershopId: shop.id, active: true },
-        select: { id: true },
+        select: { id: true, unitId: true },
       }),
       prisma.service.findMany({
         where: { id: { in: serviceIds }, barbershopId: shop.id, active: true },
@@ -256,6 +263,10 @@ export async function POST(
 
     if (!barber) {
       return NextResponse.json({ error: "Profissional inválido" }, { status: 400 })
+    }
+
+    if (!effectiveUnitId && barber.unitId) {
+      effectiveUnitId = barber.unitId
     }
 
     const barberUnitCheck = await validateBarberForUnit({
@@ -395,19 +406,21 @@ export async function POST(
       return { service, time: addMinutes(time, minutesBefore) }
     })
 
-    const conflicts = await prisma.appointment.findMany({
-      where: {
-        barbershopId: shop.id,
-        barberId,
-        date: { gte: apptDayBounds.gte, lt: apptDayBounds.lt },
-        status: { in: ["pending", "confirmed"] },
-        time: { in: times.map((item) => item.time) },
-        ...(remarcaAppointmentIds.length
-          ? { id: { notIn: remarcaAppointmentIds } }
-          : {}),
-      },
-      select: { time: true },
-    })
+    const conflicts = await withAppointmentDbSchema(() =>
+      prisma.appointment.findMany({
+        where: {
+          barbershopId: shop.id,
+          barberId,
+          date: { gte: apptDayBounds.gte, lt: apptDayBounds.lt },
+          status: { in: ["pending", "confirmed"] },
+          time: { in: times.map((item) => item.time) },
+          ...(remarcaAppointmentIds.length
+            ? { id: { notIn: remarcaAppointmentIds } }
+            : {}),
+        },
+        select: { time: true },
+      })
+    )
     if (conflicts.length > 0) {
       return NextResponse.json(
         {
@@ -419,7 +432,8 @@ export async function POST(
       )
     }
 
-    const created = await prisma.$transaction(async (tx) => {
+    const created = await withAppointmentDbSchema(() =>
+      prisma.$transaction(async (tx) => {
       const inserted = await Promise.all(
         times.map((item) =>
           tx.appointment.create({
@@ -428,7 +442,7 @@ export async function POST(
               clientId: client.id,
               barberId,
               serviceId: item.service.id,
-              unitId: effectiveUnitId,
+              unitId: effectiveUnitId ?? barber.unitId,
               date: apptDate,
               time: item.time,
               status: "pending",
@@ -463,7 +477,8 @@ export async function POST(
       }
 
       return inserted
-    })
+      })
+    )
 
     if (created.length > 0) {
       void trySendWhatsAppAppointmentConfirmation(shop.id, created[0].id)
