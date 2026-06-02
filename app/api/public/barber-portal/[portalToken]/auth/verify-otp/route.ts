@@ -84,7 +84,14 @@ export async function POST(
     }
 
     const hasPw = !!barber.passwordHash
+    const hasGoogle = !!barber.authUserId
     if (!hasPw) {
+      if (hasGoogle) {
+        return NextResponse.json(
+          { error: "Sua conta usa Google. Toque em «Entrar com Google»." },
+          { status: 400 }
+        )
+      }
       const np = String(body.new_password ?? "").trim()
       if (np.length < 6) {
         return NextResponse.json(

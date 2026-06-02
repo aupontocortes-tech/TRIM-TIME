@@ -19,6 +19,7 @@ export async function findBarberByPortalToken(portalToken: string) {
       email: true,
       phone: true,
       passwordHash: true,
+      authUserId: true,
       commission: true,
       barbershop: { select: { name: true, slug: true, suspendedAt: true } },
     },

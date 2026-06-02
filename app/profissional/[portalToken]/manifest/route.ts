@@ -16,7 +16,7 @@ export async function GET(
     {
       name: "Trim Time — Meu trabalho",
       short_name: "Agenda",
-      description: "Mini app: sua agenda, lista de espera e comissão na barbearia.",
+      description: "Mini app: sua agenda e comissão na barbearia.",
       id: `trimtime-barber-app-${portalToken.slice(0, 8)}`,
       start_url: startUrl,
       scope: "/",

@@ -19,7 +19,7 @@ export async function GET(
     name: "Trim Time — Cadastro profissional",
     short_name: "Trim Profissional",
     description:
-      "Mini app: cadastro na equipe. Depois use o app Agenda para ver horários, lista de espera e comissão (login com senha + código por e-mail).",
+      "Mini app: cadastro na equipe. Depois use o app Agenda para ver horários e comissão (Google ou código por e-mail).",
     id: `trimtime-barber-invite-${token.slice(0, 12)}`,
     start_url: startUrl,
     scope: "/",

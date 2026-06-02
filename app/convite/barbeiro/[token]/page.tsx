@@ -11,12 +11,13 @@ import { compressImageToJpegDataUrl } from "@/lib/client-image-compress"
 import { MAX_PROFILE_PHOTO_DATA_URL_CHARS } from "@/lib/photo-data-url"
 import { formatCpfDisplay } from "@/lib/cpf"
 import { BarberPhotoAdjust } from "@/components/barber-photo-adjust"
+import { BarberOAuthButtons } from "@/components/auth/barber-oauth-buttons"
 import { Camera, CheckCircle2, Loader2, Scissors } from "lucide-react"
 
 type Meta =
   | { loading: true }
   | { loading: false; error: string }
-  | { loading: false; error: null; barbershop_name: string; slug: string; expires_at: string }
+  | { loading: false; error: null; barbershop_name: string; unit_name: string | null; display_name: string; slug: string; expires_at: string }
 
 export default function ConviteBarbeiroPage() {
   const routeParams = useParams()
@@ -35,6 +36,8 @@ export default function ConviteBarbeiroPage() {
   const [done, setDone] = useState(false)
   const [portalToken, setPortalToken] = useState<string | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
+  const [googleVerified, setGoogleVerified] = useState(false)
+  const [googleEmail, setGoogleEmail] = useState<string | null>(null)
 
   useEffect(() => {
     if (!token || token.length < 32) {
@@ -48,6 +51,8 @@ export default function ConviteBarbeiroPage() {
           error?: string
           ok?: boolean
           barbershop_name?: string
+          unit_name?: string | null
+          display_name?: string
           slug?: string
           expires_at?: string
         }
@@ -60,6 +65,8 @@ export default function ConviteBarbeiroPage() {
           loading: false,
           error: null,
           barbershop_name: j.barbershop_name ?? "Barbearia",
+          unit_name: typeof j.unit_name === "string" ? j.unit_name : null,
+          display_name: j.display_name ?? j.barbershop_name ?? "Barbearia",
           slug: j.slug ?? "",
           expires_at: j.expires_at ?? "",
         })
@@ -67,6 +74,25 @@ export default function ConviteBarbeiroPage() {
       .catch(() => {
         if (!cancelled) setMeta({ loading: false, error: "Erro de rede" })
       })
+    return () => {
+      cancelled = true
+    }
+  }, [token])
+
+  useEffect(() => {
+    if (!token || token.length < 32) return
+    let cancelled = false
+    fetch(`/api/public/barber-invite/${encodeURIComponent(token)}/google-session`, {
+      credentials: "include",
+    })
+      .then(async (r) => {
+        const j = (await r.json().catch(() => ({}))) as { verified?: boolean; email?: string }
+        if (cancelled || !j.verified || typeof j.email !== "string") return
+        setGoogleVerified(true)
+        setGoogleEmail(j.email)
+        setEmail(j.email)
+      })
+      .catch(() => {})
     return () => {
       cancelled = true
     }
@@ -113,12 +139,18 @@ export default function ConviteBarbeiroPage() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     setFormError(null)
-    if (senha.length < 6) {
-      setFormError("A senha do app deve ter pelo menos 6 caracteres.")
-      return
+    if (!googleVerified) {
+      if (senha.length < 6) {
+        setFormError("A senha do app deve ter pelo menos 6 caracteres (ou use «Continuar com Google»).")
+        return
+      }
+      if (senha !== confirmarSenha) {
+        setFormError("As senhas não coincidem.")
+        return
+      }
     }
-    if (senha !== confirmarSenha) {
-      setFormError("As senhas não coincidem.")
+    if (googleVerified && googleEmail && email.trim().toLowerCase() !== googleEmail) {
+      setFormError("Use o mesmo e-mail confirmado com Google.")
       return
     }
     setBusy(true)
@@ -134,7 +166,7 @@ export default function ConviteBarbeiroPage() {
           photo_url: photoDataUrl,
           photo_position: photoPosition,
           photo_scale: photoScale,
-          password: senha,
+          ...(googleVerified ? {} : { password: senha }),
         }),
       })
       const j = (await res.json().catch(() => ({}))) as { error?: string; portal_token?: string | null }
@@ -197,8 +229,8 @@ export default function ConviteBarbeiroPage() {
               <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-2">
                 <p className="text-sm font-medium text-foreground text-center">Seu app (agenda no celular)</p>
                 <p className="text-xs text-muted-foreground text-center">
-                  Guarde este link. Para entrar: mesmo e-mail e telefone do cadastro, a senha que você criou e o código
-                  de 6 dígitos enviado por e-mail (OTP).
+                  Guarde este link. Para entrar: use «Entrar com Google» ou e-mail + telefone + código OTP
+                  {googleVerified ? "." : " + senha do app."}
                 </p>
                 <div className="flex flex-col gap-2">
                   <Button
@@ -228,7 +260,11 @@ export default function ConviteBarbeiroPage() {
     )
   }
 
-  const lojaNome = meta.barbershop_name
+  const lojaNome = meta.display_name
+  const unidadeHint =
+    meta.unit_name && meta.unit_name !== meta.barbershop_name
+      ? meta.barbershop_name
+      : null
   const expira = new Date(meta.expires_at).toLocaleString("pt-BR")
 
   return (
@@ -239,13 +275,17 @@ export default function ConviteBarbeiroPage() {
           <CardTitle className="text-foreground text-xl">Cadastro no app do profissional</CardTitle>
           <CardDescription>
             Mini app da Trim Time · <span className="text-foreground font-medium">{lojaNome}</span>
+            {unidadeHint ? (
+              <span className="block text-xs text-muted-foreground mt-0.5">{unidadeHint}</span>
+            ) : null}
             {expira ? (
               <span className="block mt-1 text-xs">Link válido até {expira}</span>
             ) : null}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={submit} className="space-y-4">
+          <BarberOAuthButtons target={{ kind: "invite", inviteToken: token }} mode="register" disabled={busy} />
+          <form onSubmit={submit} className="space-y-4 mt-4">
             {formError ? (
               <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-md p-3">
                 {formError}
@@ -308,6 +348,11 @@ export default function ConviteBarbeiroPage() {
 
               <Field>
                 <FieldLabel htmlFor="email">E-mail</FieldLabel>
+                {googleVerified ? (
+                  <p className="text-xs text-green-600 dark:text-green-400 mb-1">
+                    Confirmado com Google · {googleEmail}
+                  </p>
+                ) : null}
                 <Input
                   id="email"
                   type="email"
@@ -316,6 +361,7 @@ export default function ConviteBarbeiroPage() {
                   onChange={(e) => setEmail(e.target.value)}
                   required
                   autoComplete="email"
+                  readOnly={googleVerified}
                 />
               </Field>
               <Field>
@@ -343,38 +389,45 @@ export default function ConviteBarbeiroPage() {
                 />
               </Field>
 
-              <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-3">
-                <p className="text-sm font-medium text-foreground">Senha do app (agenda e comissão)</p>
-                <p className="text-xs text-muted-foreground">
-                  Use esta senha junto com o código por e-mail sempre que abrir o app do profissional.
+              {!googleVerified ? (
+                <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-3">
+                  <p className="text-sm font-medium text-foreground">Senha do app (agenda e comissão)</p>
+                  <p className="text-xs text-muted-foreground">
+                    Use esta senha junto com o código por e-mail sempre que abrir o app do profissional. Ou cadastre-se
+                    com Google acima e pule a senha.
+                  </p>
+                  <Field>
+                    <FieldLabel htmlFor="senha-app">Senha</FieldLabel>
+                    <Input
+                      id="senha-app"
+                      type="password"
+                      className="bg-input border-border"
+                      value={senha}
+                      onChange={(e) => setSenha(e.target.value)}
+                      required
+                      minLength={6}
+                      autoComplete="new-password"
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="confirmar-senha">Confirmar senha</FieldLabel>
+                    <Input
+                      id="confirmar-senha"
+                      type="password"
+                      className="bg-input border-border"
+                      value={confirmarSenha}
+                      onChange={(e) => setConfirmarSenha(e.target.value)}
+                      required
+                      minLength={6}
+                      autoComplete="new-password"
+                    />
+                  </Field>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground rounded-lg border border-border bg-muted/20 p-3">
+                  Com Google confirmado, você entrará no app usando «Entrar com Google» — sem precisar de senha.
                 </p>
-                <Field>
-                  <FieldLabel htmlFor="senha-app">Senha</FieldLabel>
-                  <Input
-                    id="senha-app"
-                    type="password"
-                    className="bg-input border-border"
-                    value={senha}
-                    onChange={(e) => setSenha(e.target.value)}
-                    required
-                    minLength={6}
-                    autoComplete="new-password"
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="confirmar-senha">Confirmar senha</FieldLabel>
-                  <Input
-                    id="confirmar-senha"
-                    type="password"
-                    className="bg-input border-border"
-                    value={confirmarSenha}
-                    onChange={(e) => setConfirmarSenha(e.target.value)}
-                    required
-                    minLength={6}
-                    autoComplete="new-password"
-                  />
-                </Field>
-              </div>
+              )}
             </FieldGroup>
             <Button
               type="submit"

@@ -77,6 +77,15 @@ export async function prismaBarberUpdateWithPhotoPositionFallback(
   return prisma.barber.findUniqueOrThrow({ where: { id } })
 }
 
+export async function applyBarberPhotoAdjustments(
+  barberId: string,
+  photoPosition: number,
+  photoScale: number
+): Promise<void> {
+  await setBarberPhotoPositionRow(barberId, photoPosition)
+  await setBarberPhotoScaleRow(barberId, photoScale)
+}
+
 export async function prismaBarberCreateWithPhotoPositionFallback(input: BarberCreateWithPositionInput) {
   const { photoPosition, photoScale, portalToken, ...rest } = input
   const row = await prisma.barber.create({
@@ -85,7 +94,6 @@ export async function prismaBarberCreateWithPhotoPositionFallback(input: BarberC
       ...(portalToken ? { portalToken } : {}),
     },
   })
-  await setBarberPhotoPositionRow(row.id, photoPosition)
-  await setBarberPhotoScaleRow(row.id, photoScale)
+  await applyBarberPhotoAdjustments(row.id, photoPosition, photoScale)
   return prisma.barber.findUniqueOrThrow({ where: { id: row.id } })
 }

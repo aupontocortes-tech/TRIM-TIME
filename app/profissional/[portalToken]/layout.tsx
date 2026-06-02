@@ -3,7 +3,7 @@ import type { ReactNode } from "react"
 
 export const metadata: Metadata = {
   title: "Trim Time — App do profissional",
-  description: "Agenda e lista de espera",
+  description: "Agenda e comissão do profissional",
   robots: { index: false, follow: false },
 }
 

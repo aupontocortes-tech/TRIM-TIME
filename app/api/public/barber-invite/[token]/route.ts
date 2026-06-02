@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto"
-import { Prisma } from "@prisma/client"
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { hashPassword } from "@/lib/auth/password"
@@ -9,6 +8,8 @@ import { assertValidProfilePhotoDataUrl } from "@/lib/photo-data-url"
 import { cpfDigits } from "@/lib/cpf"
 import { clampPhotoPosition, clampPhotoScale } from "@/lib/barber-photo-style"
 import { withBarbersUnitSchema } from "@/lib/barber-unit-schema"
+import { applyBarberPhotoAdjustments } from "@/lib/barber-mutations"
+import { readBarberInviteGoogleFromRequest, clearBarberInviteGoogleOnResponse } from "@/lib/barber-invite-google-cookie"
 import type { Barber } from "@/lib/db/types"
 
 export async function GET(
@@ -28,6 +29,8 @@ export async function GET(
         id: true,
         expiresAt: true,
         usedAt: true,
+        unitId: true,
+        unit: { select: { name: true } },
         barbershop: { select: { name: true, slug: true, suspendedAt: true } },
       },
     })
@@ -45,6 +48,8 @@ export async function GET(
     return NextResponse.json({
       ok: true,
       barbershop_name: invite.barbershop.name,
+      unit_name: invite.unit?.name ?? null,
+      display_name: invite.unit?.name?.trim() || invite.barbershop.name,
       slug: invite.barbershop.slug,
       expires_at: invite.expiresAt.toISOString(),
     })
@@ -115,9 +120,15 @@ export async function POST(
     }
 
     const password = String(body.password ?? "").trim()
-    if (password.length < 6) {
+    const googleSession = await readBarberInviteGoogleFromRequest(request)
+    const googleVerified =
+      !!googleSession &&
+      googleSession.inviteToken === t &&
+      googleSession.email === email
+
+    if (!googleVerified && password.length < 6) {
       return NextResponse.json(
-        { error: "A senha do app deve ter pelo menos 6 caracteres" },
+        { error: "A senha do app deve ter pelo menos 6 caracteres (ou use «Continuar com Google»)." },
         { status: 400 }
       )
     }
@@ -184,16 +195,11 @@ export async function POST(
           active: true,
           role: "user",
           portalToken: randomUUID(),
-          passwordHash: hashPassword(password),
+          ...(googleVerified
+            ? { authUserId: googleSession!.authUserId, passwordHash: null }
+            : { passwordHash: hashPassword(password) }),
         },
       })
-
-      await tx.$executeRaw(
-        Prisma.sql`UPDATE barbers SET photo_position = ${photoPosition} WHERE id = ${barber.id}::uuid`
-      )
-      await tx.$executeRaw(
-        Prisma.sql`UPDATE barbers SET photo_scale = ${photoScale} WHERE id = ${barber.id}::uuid`
-      )
 
       await tx.barberInvite.update({
         where: { id: invite.id },
@@ -204,17 +210,19 @@ export async function POST(
       })
     )
 
-    if (!result.ok) {
-      const payload: { error: string; code?: string } = { error: result.error }
-      if (result.code) payload.code = result.code
-      return NextResponse.json(payload, { status: result.status })
-    }
-
-    const b = result.ok ? result.barber : undefined
-    if (!b) {
+    if (!result.ok || !result.barber) {
+      if (!result.ok) {
+        const payload: { error: string; code?: string } = { error: result.error }
+        if (result.code) payload.code = result.code
+        return NextResponse.json(payload, { status: result.status })
+      }
       return NextResponse.json({ error: "Erro ao concluir cadastro" }, { status: 500 })
     }
-    return NextResponse.json({
+
+    await applyBarberPhotoAdjustments(result.barber.id, photoPosition, photoScale)
+
+    const b = result.barber
+    const res = NextResponse.json({
       ok: true,
       portal_token: b.portalToken ?? null,
       barber: {
@@ -234,6 +242,8 @@ export async function POST(
         updated_at: b.updatedAt.toISOString(),
       } as Barber,
     })
+    if (googleVerified) clearBarberInviteGoogleOnResponse(res)
+    return res
   } catch (e) {
     console.error("[public/barber-invite POST]", e)
     return NextResponse.json(

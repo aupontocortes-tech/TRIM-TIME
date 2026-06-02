@@ -1,14 +1,15 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { useParams } from "next/navigation"
+import { useParams, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { InputOTP, InputOTPGroup, InputOTPSlot, REGEXP_ONLY_DIGITS } from "@/components/ui/input-otp"
-import { Calendar, Clock, Loader2, LogOut, Scissors, Users, Wallet } from "lucide-react"
-import type { Appointment, WaitingListItem } from "@/lib/db/types"
+import { BarberOAuthButtons } from "@/components/auth/barber-oauth-buttons"
+import { Calendar, Clock, Loader2, LogOut, Scissors, Wallet } from "lucide-react"
+import type { Appointment } from "@/lib/db/types"
 import { normalizePublicOtpCode } from "@/lib/public-otp-code"
 
 const OTP_LEN = 6
@@ -70,6 +71,7 @@ function formatDataPt(ymd: string) {
 
 export default function ProfissionalAppPage() {
   const params = useParams()
+  const searchParams = useSearchParams()
   const portalToken = String(params?.portalToken ?? "").trim()
 
   const [metaLoading, setMetaLoading] = useState(true)
@@ -96,10 +98,6 @@ export default function ProfissionalAppPage() {
   const [refDate, setRefDate] = useState(() => new Date())
   const [agenda, setAgenda] = useState<Appointment[]>([])
   const [agendaLoading, setAgendaLoading] = useState(false)
-  const [waitlist, setWaitlist] = useState<WaitingListItem[]>([])
-  const [waitlistEnabled, setWaitlistEnabled] = useState(false)
-  const [waitlistMsg, setWaitlistMsg] = useState<string | null>(null)
-  const [showWaitlist, setShowWaitlist] = useState(true)
 
   const base = `/api/public/barber-portal/${encodeURIComponent(portalToken)}`
 
@@ -171,6 +169,19 @@ export default function ProfissionalAppPage() {
     void checkSession()
   }, [checkSession])
 
+  useEffect(() => {
+    if (searchParams.get("google") === "1") {
+      void checkSession()
+    }
+    const oauthErr = searchParams.get("oauth_error_msg") || searchParams.get("barber_oauth_error")
+    if (oauthErr) {
+      setAuthErr(
+        searchParams.get("oauth_error_msg") ||
+          "Não foi possível entrar com Google. Tente de novo ou use o código por e-mail."
+      )
+    }
+  }, [searchParams, checkSession])
+
   const rangeParams = useMemo(() => {
     if (visao === "dia") return `date=${encodeURIComponent(toYMD(refDate))}`
     if (visao === "semana") {
@@ -195,31 +206,9 @@ export default function ProfissionalAppPage() {
     }
   }, [auth, portalToken, base, rangeParams])
 
-  const loadWaitlist = useCallback(async () => {
-    if (!auth || !portalToken) return
-    try {
-      const r = await fetch(`${base}/waitlist`, { credentials: "include" })
-      const j = (await r.json().catch(() => ({}))) as {
-        enabled?: boolean
-        items?: WaitingListItem[]
-        message?: string
-      }
-      setWaitlistEnabled(!!j.enabled)
-      setWaitlist(Array.isArray(j.items) ? j.items : [])
-      setWaitlistMsg(typeof j.message === "string" ? j.message : null)
-    } catch {
-      setWaitlist([])
-      setWaitlistEnabled(false)
-    }
-  }, [auth, portalToken, base])
-
   useEffect(() => {
     void loadAgenda()
   }, [loadAgenda])
-
-  useEffect(() => {
-    void loadWaitlist()
-  }, [loadWaitlist])
 
   const sendOtp = async () => {
     setAuthErr("")
@@ -362,11 +351,14 @@ export default function ProfissionalAppPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-xs text-muted-foreground">
-              Use o mesmo e-mail e telefone do cadastro. Enviaremos um código de {OTP_LEN} dígitos por e-mail (OTP).{" "}
-              {hasPassword
-                ? "Informe a senha que você criou no cadastro (ou definiu no primeiro acesso ao app)."
-                : "No primeiro acesso, após o código, você define a senha do app."}
+              Entre com Google ou use o mesmo e-mail e telefone do cadastro + código OTP por e-mail
+              {hasPassword ? " e a senha do app." : "."}
             </p>
+            <BarberOAuthButtons
+              target={{ kind: "portal", portalToken }}
+              mode="login"
+              disabled={authBusy}
+            />
             {authErr ? (
               <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-md p-3">
                 {authErr}
@@ -488,7 +480,7 @@ export default function ProfissionalAppPage() {
 
       <div className="px-4 pt-4 space-y-4 max-w-lg mx-auto">
         <p className="text-xs text-muted-foreground">
-          Você vê só os seus horários. Bloqueios de agenda são feitos pelo dono da barbearia no painel.
+          Sua agenda pessoal. Bloqueios, folgas e lista de espera são geridos pelo dono da barbearia no painel.
         </p>
 
         <Card className="border-border border-primary/20 bg-primary/5">
@@ -599,40 +591,6 @@ export default function ProfissionalAppPage() {
               </div>
             )}
           </CardContent>
-        </Card>
-
-        <Card className="border-border">
-          <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Users className="w-4 h-4" />
-              Lista de espera
-            </CardTitle>
-            <Button type="button" variant="ghost" size="sm" onClick={() => setShowWaitlist((s) => !s)}>
-              {showWaitlist ? "Ocultar" : "Mostrar"}
-            </Button>
-          </CardHeader>
-          {showWaitlist ? (
-            <CardContent>
-              {!waitlistEnabled ? (
-                <p className="text-sm text-muted-foreground">{waitlistMsg ?? "Indisponível no plano da loja."}</p>
-              ) : waitlist.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Ninguém na sua fila no momento.</p>
-              ) : (
-                <ul className="space-y-2">
-                  {waitlist.map((w) => (
-                    <li key={w.id} className="rounded-md border border-border p-2 text-sm">
-                      <p className="font-medium text-foreground">{w.client?.name ?? "Cliente"}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {w.service?.name ?? "Serviço"} · {w.desired_date ?? "—"}{" "}
-                        {w.desired_time ? `· ${w.desired_time.slice(0, 5)}` : ""}
-                      </p>
-                      <p className="text-xs capitalize mt-1">Status: {w.status}</p>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </CardContent>
-          ) : null}
         </Card>
       </div>
     </div>
