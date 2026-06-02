@@ -207,6 +207,7 @@ model BarbershopUnit {
   trimPlayScores TrimPlayScore[]
   barbers        Barber[]
   barberInvites  BarberInvite[]
+  clients        Client[]
 
   @@index([barbershopId])
   @@map("barbershop_units")
@@ -351,6 +352,9 @@ model Client {
   id            String   @id @default(uuid()) @db.Uuid
   barbershopId  String   @map("barbershop_id") @db.Uuid
   barbershop    Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  /// Unidade principal do cliente no painel (quando há várias lojas).
+  unitId        String?  @map("unit_id") @db.Uuid
+  unit          BarbershopUnit? @relation(fields: [unitId], references: [id], onDelete: SetNull)
   name          String
   phone         String?
   email         String?
@@ -372,6 +376,8 @@ model Client {
   @@index([barbershopId])
   @@index([barbershopId, phone])
   @@index([barbershopId, email])
+  @@index([barbershopId, unitId])
+  @@index([unitId])
 }
 
 // ========== SERVICES ==========

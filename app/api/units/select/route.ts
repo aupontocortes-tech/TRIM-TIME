@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { cookies } from "next/headers"
-import { createServiceRoleClient } from "@/lib/supabase/server"
+import { prisma } from "@/lib/prisma"
 import { BARBERSHOP_UNIT_COOKIE, requireBarbershopId } from "@/lib/tenant"
 
 export async function POST(request: Request) {
@@ -14,19 +14,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true, unit_id: null })
     }
 
-    const supabase = createServiceRoleClient()
-    const { data } = await supabase
-      .from("barbershop_units")
-      .select("id")
-      .eq("id", body.unit_id)
-      .eq("barbershop_id", barbershopId)
-      .maybeSingle()
+    const unitId = String(body.unit_id).trim()
+    const row = await prisma.barbershopUnit.findFirst({
+      where: { id: unitId, barbershopId },
+      select: { id: true },
+    })
 
-    if (!data?.id) {
+    if (!row?.id) {
       return NextResponse.json({ error: "Unidade inválida para esta conta" }, { status: 400 })
     }
 
-    cookieStore.set(BARBERSHOP_UNIT_COOKIE, data.id, {
+    cookieStore.set(BARBERSHOP_UNIT_COOKIE, row.id, {
       path: "/",
       maxAge: 60 * 60 * 24 * 30,
       httpOnly: true,
@@ -34,7 +32,7 @@ export async function POST(request: Request) {
       secure: process.env.NODE_ENV === "production",
     })
 
-    return NextResponse.json({ ok: true, unit_id: data.id })
+    return NextResponse.json({ ok: true, unit_id: row.id })
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Erro ao trocar unidade" },

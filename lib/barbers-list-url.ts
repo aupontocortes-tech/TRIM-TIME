@@ -1,8 +1,16 @@
-/** URL da listagem de equipe — envia a unidade ativa na query (não depende só do cookie). */
-export function barbersListUrl(selectedUnitId: string | null | undefined): string {
+/** URL da listagem de equipe — unidade na query + versão para evitar resposta em cache. */
+export function barbersListUrl(
+  selectedUnitId: string | null | undefined,
+  scopeVersion?: number
+): string {
   const base = "/api/barbers"
+  const params = new URLSearchParams()
   if (selectedUnitId?.trim()) {
-    return `${base}?unit_id=${encodeURIComponent(selectedUnitId.trim())}`
+    params.set("unit_id", selectedUnitId.trim())
   }
-  return base
+  if (scopeVersion != null && scopeVersion > 0) {
+    params.set("_v", String(scopeVersion))
+  }
+  const q = params.toString()
+  return q ? `${base}?${q}` : base
 }

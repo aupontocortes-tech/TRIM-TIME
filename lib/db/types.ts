@@ -147,6 +147,8 @@ export interface Barber {
 export interface Client {
   id: string
   barbershop_id: string
+  /** Unidade do cadastro no painel (quando a barbearia tem várias unidades). */
+  unit_id?: string | null
   name: string
   phone: string | null
   email: string | null

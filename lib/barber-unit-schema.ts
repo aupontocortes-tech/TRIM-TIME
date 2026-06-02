@@ -114,7 +114,7 @@ export async function ensureBarbersUnitSchemaReady(): Promise<void> {
       AND (
         SELECT COUNT(*)::int
         FROM barbershop_units u
-        WHERE u.barbershop_id = b.barbershop_id AND u.active = true
+        WHERE u.barbershop_id = b.barbershop_id
       ) = 1;
   `)
 }

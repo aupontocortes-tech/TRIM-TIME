@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { barbershopHasMultipleUnits } from "@/lib/unit-context"
 
 /**
  * Toda barbearia deve ter pelo menos uma linha em `barbershop_units` (unidade principal = nome da rede),
@@ -89,27 +90,69 @@ export async function repairMissingPrincipalWhenSingleMismatchedUnit(barbershopI
 }
 
 /**
- * Vincula barbeiros sem `unit_id` à primeira unidade ativa (a mais antiga — ex.: ADM).
- * Profissionais legados ficam na unidade 1; novos da filial são cadastrados com unidade selecionada no painel.
+ * Vincula barbeiros sem `unit_id` à única unidade ativa (barbearia com uma loja).
+ * Com 2+ unidades não preenche automaticamente — cada filial cadastra sua equipe.
  */
 export async function assignBarbersWithoutUnit(barbershopId: string): Promise<void> {
-  const orphans = await prisma.barber.findMany({
-    where: { barbershopId, unitId: null },
-    select: { id: true },
-  })
-  if (orphans.length === 0) return
-
   const activeUnits = await prisma.barbershopUnit.findMany({
     where: { barbershopId, active: true },
     orderBy: { createdAt: "asc" },
     select: { id: true },
   })
 
-  if (activeUnits.length === 0) return
+  if (activeUnits.length !== 1) return
 
   const principalUnitId = activeUnits[0].id
+  const orphans = await prisma.barber.count({
+    where: { barbershopId, unitId: null },
+  })
+  if (orphans === 0) return
 
   await prisma.barber.updateMany({
+    where: { barbershopId, unitId: null },
+    data: { unitId: principalUnitId },
+  })
+}
+
+/**
+ * Com 2+ unidades: profissionais legados sem `unit_id` ficam só na primeira loja (ADM / ADN1).
+ * Não preenche a unidade 2 — cada filial cadastra equipe nova.
+ */
+export async function assignOrphanBarbersToPrincipalUnit(barbershopId: string): Promise<void> {
+  if (!(await barbershopHasMultipleUnits(barbershopId))) return
+
+  const principal = await prisma.barbershopUnit.findFirst({
+    where: { barbershopId },
+    orderBy: { createdAt: "asc" },
+    select: { id: true },
+  })
+  if (!principal) return
+
+  await prisma.barber.updateMany({
+    where: { barbershopId, unitId: null },
+    data: { unitId: principal.id },
+  })
+}
+
+/**
+ * Vincula clientes sem `unit_id` à única unidade ativa (mesma regra da equipe).
+ */
+export async function assignClientsWithoutUnit(barbershopId: string): Promise<void> {
+  const activeUnits = await prisma.barbershopUnit.findMany({
+    where: { barbershopId, active: true },
+    orderBy: { createdAt: "asc" },
+    select: { id: true },
+  })
+
+  if (activeUnits.length !== 1) return
+
+  const principalUnitId = activeUnits[0].id
+  const orphans = await prisma.client.count({
+    where: { barbershopId, unitId: null },
+  })
+  if (orphans === 0) return
+
+  await prisma.client.updateMany({
     where: { barbershopId, unitId: null },
     data: { unitId: principalUnitId },
   })

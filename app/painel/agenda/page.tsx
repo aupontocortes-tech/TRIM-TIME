@@ -44,6 +44,7 @@ import { Separator } from "@/components/ui/separator"
 import type { Appointment, Barber, Client, RetailProduct, Service, WaitingListItem } from "@/lib/db/types"
 import { useUnits } from "@/hooks/use-units"
 import { barbersListUrl } from "@/lib/barbers-list-url"
+import { clientsListUrl } from "@/lib/clients-list-url"
 import { formatWaitlistDayLabel, shopTodayYmd } from "@/lib/waitlist-expiry"
 import { isSlotPastGraceFromYmd } from "@/lib/appointment-reminder-time"
 
@@ -204,7 +205,7 @@ function mapAgendaItem(appointment: Appointment): AgendaItem {
 }
 
 export default function AgendaPage() {
-  const { units, selectedUnitId, changeUnit, loading: unitsLoading } = useUnits()
+  const { units, selectedUnitId, unitScopeVersion, changeUnit, loading: unitsLoading } = useUnits()
   const needsUnitPick = units.length > 1 && !selectedUnitId
   const [secaoAgenda, setSecaoAgenda] = useState<"agenda" | "lista_espera">("agenda")
   const [waitlistRows, setWaitlistRows] = useState<WaitingListItem[]>([])
@@ -217,6 +218,10 @@ export default function AgendaPage() {
   const [filtroProf, setFiltroProf] = useState("Todos")
   const [agendamentos, setAgendamentos] = useState<AgendaItem[]>([])
   const [barbers, setBarbers] = useState<Barber[]>([])
+  const barbersForUnit = useMemo(() => {
+    if (units.length <= 1 || !selectedUnitId) return barbers
+    return barbers.filter((b) => b.unit_id === selectedUnitId)
+  }, [barbers, units.length, selectedUnitId])
   const [services, setServices] = useState<Service[]>([])
   const [retailProducts, setRetailProducts] = useState<RetailProduct[]>([])
   const [clients, setClients] = useState<Client[]>([])
@@ -248,8 +253,8 @@ export default function AgendaPage() {
   })
 
   const profissionais = useMemo(
-    () => ["Todos", ...barbers.filter((b) => b.active).map((b) => b.name)],
-    [barbers]
+    () => ["Todos", ...barbersForUnit.filter((b) => b.active).map((b) => b.name)],
+    [barbersForUnit]
   )
 
   const carregarListaEspera = useCallback(async (view: "active" | "history" = waitlistView) => {
@@ -278,25 +283,26 @@ export default function AgendaPage() {
   const carregarDependencias = async () => {
     if (needsUnitPick) {
       setBarbers([])
-      const [servicesRes, clientsRes, retailRes] = await Promise.all([
+      setClients([])
+      const [servicesRes, retailRes] = await Promise.all([
         fetch("/api/services", { credentials: "include", cache: "no-store" }),
-        fetch("/api/clients", { credentials: "include" }),
         fetch("/api/retail-products", { credentials: "include", cache: "no-store" }),
       ])
-      const [servicesData, clientsData, retailData] = await Promise.all([
+      const [servicesData, retailData] = await Promise.all([
         servicesRes.ok ? servicesRes.json() : [],
-        clientsRes.ok ? clientsRes.json() : [],
         retailRes.ok ? retailRes.json() : [],
       ])
       setServices(Array.isArray(servicesData) ? (servicesData as Service[]) : [])
-      setClients(Array.isArray(clientsData) ? (clientsData as Client[]) : [])
       setRetailProducts(Array.isArray(retailData) ? (retailData as RetailProduct[]) : [])
       return
     }
     const [barbersRes, servicesRes, clientsRes, retailRes] = await Promise.all([
-      fetch(barbersListUrl(selectedUnitId), { credentials: "include", cache: "no-store" }),
+      fetch(barbersListUrl(selectedUnitId, unitScopeVersion), {
+        credentials: "include",
+        cache: "no-store",
+      }),
       fetch("/api/services", { credentials: "include", cache: "no-store" }),
-      fetch("/api/clients", { credentials: "include" }),
+      fetch(clientsListUrl(selectedUnitId), { credentials: "include", cache: "no-store" }),
       fetch("/api/retail-products", { credentials: "include", cache: "no-store" }),
     ])
 
@@ -360,7 +366,7 @@ export default function AgendaPage() {
         params.set("from", from)
         params.set("to", to)
       }
-      const barber = barbers.find((b) => b.name === filtroProf)
+      const barber = barbersForUnit.find((b) => b.name === filtroProf)
       if (barber) params.set("barber_id", barber.id)
       const res = await fetch(`/api/appointments?${params.toString()}`, {
         credentials: "include",
@@ -398,11 +404,11 @@ export default function AgendaPage() {
 
   useEffect(() => {
     void carregarDependencias()
-  }, [selectedUnitId])
+  }, [selectedUnitId, unitScopeVersion])
 
   useEffect(() => {
     void carregarAgendamentos()
-  }, [dataSelecionada, filtroProf, barbers, visao, selectedUnitId, unitsLoading, needsUnitPick])
+  }, [dataSelecionada, filtroProf, barbersForUnit, visao, selectedUnitId, unitsLoading, needsUnitPick])
 
   const mudarDia = (dias: number) => {
     const novaData = new Date(dataSelecionada)
@@ -2037,7 +2043,7 @@ export default function AgendaPage() {
                 required
               >
                 <option value="">Selecione</option>
-                {barbers.filter((barber) => barber.active).map((barber) => (
+                {barbersForUnit.filter((barber) => barber.active).map((barber) => (
                   <option key={barber.id} value={barber.id}>
                     {barber.name}
                   </option>

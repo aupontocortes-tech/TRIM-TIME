@@ -6,10 +6,19 @@ import { prisma } from "@/lib/prisma"
 import { assertValidProfilePhotoDataUrl } from "@/lib/photo-data-url"
 import { cpfDigits } from "@/lib/cpf"
 import { findClientByPhoneDigits } from "@/lib/client-by-phone"
+import type { Prisma } from "@prisma/client"
+import { assignClientsWithoutUnit } from "@/lib/barbershop-units-seed"
+import {
+  barbershopHasMultipleUnits,
+  prismaClientUnitFilter,
+  requireSelectedUnitForClientCreate,
+  resolveClientListUnitId,
+} from "@/lib/unit-context"
 
 function mapClient(c: {
   id: string
   barbershopId: string
+  unitId?: string | null
   name: string
   phone: string | null
   email: string | null
@@ -23,6 +32,7 @@ function mapClient(c: {
   return {
     id: c.id,
     barbershop_id: c.barbershopId,
+    unit_id: c.unitId ?? null,
     name: c.name,
     phone: c.phone,
     email: c.email,
@@ -40,18 +50,28 @@ export async function GET(request: Request) {
     const barbershopId = await requireBarbershopId()
     const { searchParams } = new URL(request.url)
     const q = searchParams.get("q")?.trim() || ""
+    const queryUnit = searchParams.get("unit_id")
 
-    const where = {
+    await assignClientsWithoutUnit(barbershopId)
+
+    const multiUnit = await barbershopHasMultipleUnits(barbershopId)
+    const selectedUnitId = await resolveClientListUnitId(barbershopId, queryUnit)
+    const unitFilter = prismaClientUnitFilter(selectedUnitId, multiUnit)
+    const andParts: Prisma.ClientWhereInput[] = []
+    if (Object.keys(unitFilter).length > 0) andParts.push(unitFilter)
+    if (q) {
+      andParts.push({
+        OR: [
+          { name: { contains: q, mode: "insensitive" as const } },
+          { phone: { contains: q, mode: "insensitive" as const } },
+          { email: { contains: q, mode: "insensitive" as const } },
+        ],
+      })
+    }
+
+    const where: Prisma.ClientWhereInput = {
       barbershopId,
-      ...(q
-        ? {
-            OR: [
-              { name: { contains: q, mode: "insensitive" as const } },
-              { phone: { contains: q, mode: "insensitive" as const } },
-              { email: { contains: q, mode: "insensitive" as const } },
-            ],
-          }
-        : {}),
+      ...(andParts.length > 0 ? { AND: andParts } : {}),
     }
 
     const rows = await prisma.client.findMany({
@@ -115,9 +135,15 @@ export async function POST(request: Request) {
       }
     }
 
+    const { unitId, error: unitError } = await requireSelectedUnitForClientCreate(barbershopId)
+    if (unitError) {
+      return NextResponse.json({ error: unitError }, { status: 400 })
+    }
+
     const data = await prisma.client.create({
       data: {
         barbershopId,
+        unitId,
         name: body.name.trim(),
         phone: phoneTrim || null,
         email: body.email?.trim().toLowerCase() ?? null,

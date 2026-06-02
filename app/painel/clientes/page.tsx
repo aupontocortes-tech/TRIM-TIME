@@ -23,6 +23,8 @@ import {
 } from "@/components/ui/dialog"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import type { Appointment, Client } from "@/lib/db/types"
+import { useUnits } from "@/hooks/use-units"
+import { clientsListUrl } from "@/lib/clients-list-url"
 
 type ClienteEnriquecido = {
   id: string
@@ -46,6 +48,11 @@ function formatPhone(value: string) {
 }
 
 export default function ClientesPage() {
+  const { units, selectedUnitId, loading: unitsLoading } = useUnits()
+  const needsUnitPick = units.length > 1 && !selectedUnitId
+  const nomeUnidadeAtiva =
+    selectedUnitId && units.length ? units.find((u) => u.id === selectedUnitId)?.name ?? null : null
+
   const [clientes, setClientes] = useState<ClienteEnriquecido[]>([])
   const [appointments, setAppointments] = useState<Appointment[]>([])
   const [loading, setLoading] = useState(true)
@@ -58,11 +65,18 @@ export default function ClientesPage() {
   const [formNovoCliente, setFormNovoCliente] = useState({ nome: "", telefone: "", email: "" })
 
   const carregarDados = async () => {
+    if (needsUnitPick) {
+      setClientes([])
+      setAppointments([])
+      setLoading(false)
+      setErro("")
+      return
+    }
     setLoading(true)
     setErro("")
     try {
       const [clientsRes, appointmentsRes] = await Promise.all([
-        fetch("/api/clients", { credentials: "include", cache: "no-store" }),
+        fetch(clientsListUrl(selectedUnitId), { credentials: "include", cache: "no-store" }),
         fetch("/api/appointments", { credentials: "include", cache: "no-store" }),
       ])
       const [clientsData, appointmentsData] = await Promise.all([
@@ -118,8 +132,9 @@ export default function ClientesPage() {
   }
 
   useEffect(() => {
+    if (unitsLoading) return
     void carregarDados()
-  }, [])
+  }, [selectedUnitId, units.length, unitsLoading, needsUnitPick])
 
   const handleSalvarNovoCliente = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -181,13 +196,20 @@ export default function ClientesPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Clientes</h1>
-          <p className="text-muted-foreground">Gerencie seus clientes e histórico</p>
+          <p className="text-muted-foreground">
+            {needsUnitPick
+              ? 'Selecione uma unidade em "Unidade ativa" na barra lateral para ver os clientes desta loja.'
+              : nomeUnidadeAtiva
+                ? `Unidade: ${nomeUnidadeAtiva} — clientes e histórico desta loja`
+                : "Gerencie seus clientes e histórico de todas as unidades"}
+          </p>
         </div>
         <Dialog open={openNovoCliente} onOpenChange={setOpenNovoCliente}>
           <DialogTrigger asChild>
             <Button
               type="button"
               className="bg-primary text-primary-foreground hover:bg-primary/90 w-full sm:w-auto"
+              disabled={needsUnitPick}
               onClick={() => setOpenNovoCliente(true)}
             >
               + Novo Cliente
@@ -305,6 +327,12 @@ export default function ClientesPage() {
             {loading ? (
               <div className="text-center py-8">
                 <p className="text-muted-foreground">Carregando clientes...</p>
+              </div>
+            ) : needsUnitPick ? (
+              <div className="text-center py-8">
+                <p className="text-muted-foreground">
+                  Selecione uma unidade na barra lateral para ver e gerenciar os clientes desta loja.
+                </p>
               </div>
             ) : clientesFiltrados.length === 0 ? (
               <div className="text-center py-8">

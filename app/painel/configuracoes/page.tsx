@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import Link from "next/link"
 import { useBarbershop } from "@/hooks/use-barbershop"
 import { useUnits } from "@/hooks/use-units"
@@ -170,6 +170,7 @@ export default function ConfiguracoesPage() {
   const {
     units,
     selectedUnitId,
+    unitScopeVersion,
     loading: unitsLoading,
     changeUnit,
     refetch: refetchUnits,
@@ -411,10 +412,15 @@ export default function ConfiguracoesPage() {
       setBarbersLoading(false)
       return
     }
+    const unitForRequest = selectedUnitId
+    const scopeAtRequest = unitScopeVersion
     setBarbersLoading(true)
     setEquipeError(null)
     try {
-      const r = await fetch(barbersListUrl(selectedUnitId), { credentials: "include", cache: "no-store" })
+      const r = await fetch(barbersListUrl(unitForRequest, scopeAtRequest), {
+        credentials: "include",
+        cache: "no-store",
+      })
       if (!r.ok) {
         const j = await r.json().catch(() => ({}))
         setEquipeError(typeof j.error === "string" ? j.error : "Erro ao carregar equipe")
@@ -422,14 +428,26 @@ export default function ConfiguracoesPage() {
         return
       }
       const data = await r.json()
-      setBarbers(Array.isArray(data) ? data : [])
+      if (unitForRequest !== selectedUnitId || scopeAtRequest !== unitScopeVersion) return
+      const list = Array.isArray(data) ? data : []
+      if (units.length > 1 && unitForRequest) {
+        setBarbers(list.filter((b: Barber) => b.unit_id === unitForRequest))
+      } else {
+        setBarbers(list)
+      }
     } catch {
       setEquipeError("Erro de rede ao carregar equipe")
       setBarbers([])
     } finally {
       setBarbersLoading(false)
     }
-  }, [selectedUnitId, units.length])
+  }, [selectedUnitId, units.length, unitScopeVersion])
+
+  /** Garante lista correta mesmo se a API devolver dados legados (sem unit_id). */
+  const barbersForUnit = useMemo(() => {
+    if (units.length <= 1 || !selectedUnitId) return barbers
+    return barbers.filter((b) => b.unit_id === selectedUnitId)
+  }, [barbers, units.length, selectedUnitId])
 
   const loadServices = useCallback(async () => {
     setServicosLoading(true)
@@ -2702,15 +2720,17 @@ export default function ConfiguracoesPage() {
               )}
               {barbersLoading ? (
                 <p className="text-sm text-muted-foreground py-8 text-center">Carregando equipe…</p>
-              ) : barbers.length === 0 ? (
+              ) : barbersForUnit.length === 0 ? (
                 <p className="text-sm text-muted-foreground py-8 text-center">
                   {units.length > 1 && !selectedUnitId
                     ? "Selecione uma unidade na barra lateral para ver e gerenciar a equipe desta loja."
-                    : "Nenhum profissional cadastrado."}
+                    : units.length > 1 && selectedUnitId
+                      ? "Nenhum profissional nesta unidade. Adicione ou convide alguém para esta loja."
+                      : "Nenhum profissional cadastrado."}
                 </p>
               ) : (
                 <div className="space-y-3">
-                  {barbers.map((prof) => (
+                  {barbersForUnit.map((prof) => (
                     <div
                       key={prof.id}
                       className={`flex flex-wrap items-center gap-4 p-4 rounded-lg border transition-colors ${

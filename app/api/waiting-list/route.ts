@@ -11,6 +11,7 @@ import {
   waitlistHistoryOrderBy,
   waitlistWhereForView,
 } from "@/lib/waitlist-query"
+import { prismaWaitlistUnitFilter, resolveSelectedUnitId } from "@/lib/unit-context"
 import type { Prisma, WaitingListStatus } from "@prisma/client"
 
 const WAITLIST_STATUS_FILTERS = new Set<string>(["waiting", "notified", "accepted", "expired", "canceled"])
@@ -30,7 +31,11 @@ export async function GET(request: Request) {
     const viewParam = searchParams.get("view")?.trim() ?? "active"
     const view: WaitlistView = WAITLIST_VIEWS.has(viewParam) ? (viewParam as WaitlistView) : "active"
 
-    const where: Prisma.WaitingListItemWhereInput = waitlistWhereForView(barbershopId, view)
+    const selectedUnitId = await resolveSelectedUnitId(barbershopId)
+    const where: Prisma.WaitingListItemWhereInput = {
+      ...waitlistWhereForView(barbershopId, view),
+      ...prismaWaitlistUnitFilter(selectedUnitId),
+    }
     if (status && WAITLIST_STATUS_FILTERS.has(status)) {
       where.status = status as WaitingListStatus
     }
@@ -83,14 +88,29 @@ export async function POST(request: Request) {
       )
     }
 
+    const selectedUnitId = await resolveSelectedUnitId(barbershopId)
+
     const [barber, clientRow, serviceRow] = await Promise.all([
-      prisma.barber.findFirst({ where: { id: barberId, barbershopId, active: true }, select: { id: true } }),
+      prisma.barber.findFirst({
+        where: { id: barberId, barbershopId, active: true },
+        select: { id: true, unitId: true },
+      }),
       prisma.client.findFirst({ where: { id: clientId, barbershopId }, select: { id: true } }),
       prisma.service.findFirst({ where: { id: serviceId, barbershopId, active: true }, select: { id: true } }),
     ])
 
     if (!barber || !clientRow || !serviceRow) {
       return NextResponse.json({ error: "Cliente, barbeiro ou serviço inválido" }, { status: 400 })
+    }
+
+    const activeUnitCount = await prisma.barbershopUnit.count({
+      where: { barbershopId, active: true },
+    })
+    if (activeUnitCount > 1 && selectedUnitId && barber.unitId && barber.unitId !== selectedUnitId) {
+      return NextResponse.json(
+        { error: "Este profissional não atende na unidade selecionada." },
+        { status: 400 }
+      )
     }
 
     const extras = Array.isArray(body.extra_service_ids)

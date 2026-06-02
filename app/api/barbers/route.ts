@@ -9,8 +9,12 @@ import { fetchBarberPhotoPositionsByBarbershopId } from "@/lib/barber-queries"
 import type { Barber } from "@/lib/db/types"
 import { assertValidProfilePhotoDataUrl } from "@/lib/photo-data-url"
 import { withBarbersUnitSchema } from "@/lib/barber-unit-schema"
-import { assignBarbersWithoutUnit } from "@/lib/barbershop-units-seed"
 import {
+  assignBarbersWithoutUnit,
+  assignOrphanBarbersToPrincipalUnit,
+} from "@/lib/barbershop-units-seed"
+import {
+  barbershopHasMultipleUnits,
   prismaBarberUnitFilter,
   requireSelectedUnitForBarberCreate,
   resolveBarberListUnitId,
@@ -64,18 +68,22 @@ export async function GET(request: Request) {
 
     const payload = await withBarbersUnitSchema(async () => {
       await assignBarbersWithoutUnit(barbershopId)
+      await assignOrphanBarbersToPrincipalUnit(barbershopId)
 
-      const activeUnitCount = await prisma.barbershopUnit.count({
-        where: { barbershopId, active: true },
-      })
-      const multiUnit = activeUnitCount > 1
+      const multiUnit = await barbershopHasMultipleUnits(barbershopId)
 
       const selectedUnitId = await resolveBarberListUnitId(barbershopId, queryUnit)
-      const unitFilter = prismaBarberUnitFilter(selectedUnitId, multiUnit)
+      if (multiUnit && queryUnit?.trim() && !selectedUnitId) {
+        return []
+      }
+      const unitFilter = prismaBarberUnitFilter(selectedUnitId)
       let data = await prisma.barber.findMany({
         where: { barbershopId, ...unitFilter },
         orderBy: { name: "asc" },
       })
+      if (selectedUnitId) {
+        data = data.filter((b) => b.unitId === selectedUnitId)
+      }
       const missingPortal = data.filter((b) => !b.portalToken)
       if (missingPortal.length > 0) {
         await Promise.all(
@@ -87,6 +95,9 @@ export async function GET(request: Request) {
           where: { barbershopId, ...unitFilter },
           orderBy: { name: "asc" },
         })
+        if (selectedUnitId) {
+          data = data.filter((b) => b.unitId === selectedUnitId)
+        }
       }
       let positions = new Map<string, number>()
       try {
