@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto"
+import { Prisma } from "@prisma/client"
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { hashPassword } from "@/lib/auth/password"
@@ -6,6 +7,8 @@ import { canAddBarber, canUseBarberCommission, getBarberLimitMessage } from "@/l
 import { resolveEffectivePlanForBarbershop } from "@/lib/barbershop-effective-plan-server"
 import { assertValidProfilePhotoDataUrl } from "@/lib/photo-data-url"
 import { cpfDigits } from "@/lib/cpf"
+import { clampPhotoPosition, clampPhotoScale } from "@/lib/barber-photo-style"
+import { withBarbersUnitSchema } from "@/lib/barber-unit-schema"
 import type { Barber } from "@/lib/db/types"
 
 export async function GET(
@@ -70,8 +73,13 @@ export async function POST(
       phone?: string
       cpf?: string
       photo_url?: string | null
+      photo_position?: number
+      photo_scale?: number
       password?: string
     }
+
+    const photoPosition = clampPhotoPosition(Number(body.photo_position ?? 50))
+    const photoScale = clampPhotoScale(Number(body.photo_scale ?? 100))
 
     const name = String(body.name ?? "").trim()
     const email = String(body.email ?? "").trim().toLowerCase()
@@ -114,7 +122,8 @@ export async function POST(
       )
     }
 
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await withBarbersUnitSchema(() =>
+      prisma.$transaction(async (tx) => {
       const invite = await tx.barberInvite.findUnique({
         where: { token: t },
         select: {
@@ -179,13 +188,21 @@ export async function POST(
         },
       })
 
+      await tx.$executeRaw(
+        Prisma.sql`UPDATE barbers SET photo_position = ${photoPosition} WHERE id = ${barber.id}::uuid`
+      )
+      await tx.$executeRaw(
+        Prisma.sql`UPDATE barbers SET photo_scale = ${photoScale} WHERE id = ${barber.id}::uuid`
+      )
+
       await tx.barberInvite.update({
         where: { id: invite.id },
         data: { usedAt: new Date() },
       })
 
       return { ok: true as const, barber }
-    })
+      })
+    )
 
     if (!result.ok) {
       const payload: { error: string; code?: string } = { error: result.error }
@@ -208,6 +225,8 @@ export async function POST(
         email: b.email,
         cpf: b.cpf,
         photo_url: b.photoUrl,
+        photo_position: photoPosition,
+        photo_scale: photoScale,
         commission: Number(b.commission),
         active: b.active,
         role: b.role,

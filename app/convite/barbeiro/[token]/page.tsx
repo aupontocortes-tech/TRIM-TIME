@@ -10,6 +10,7 @@ import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { compressImageToJpegDataUrl } from "@/lib/client-image-compress"
 import { MAX_PROFILE_PHOTO_DATA_URL_CHARS } from "@/lib/photo-data-url"
 import { formatCpfDisplay } from "@/lib/cpf"
+import { BarberPhotoAdjust } from "@/components/barber-photo-adjust"
 import { Camera, CheckCircle2, Loader2, Scissors } from "lucide-react"
 
 type Meta =
@@ -26,6 +27,8 @@ export default function ConviteBarbeiroPage() {
   const [telefone, setTelefone] = useState("")
   const [cpf, setCpf] = useState("")
   const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null)
+  const [photoPosition, setPhotoPosition] = useState(50)
+  const [photoScale, setPhotoScale] = useState(100)
   const [senha, setSenha] = useState("")
   const [confirmarSenha, setConfirmarSenha] = useState("")
   const [busy, setBusy] = useState(false)
@@ -100,6 +103,8 @@ export default function ConviteBarbeiroPage() {
         return
       }
       setPhotoDataUrl(dataUrl)
+      setPhotoPosition(50)
+      setPhotoScale(100)
     } catch {
       setFormError("Não foi possível ler a imagem.")
     }
@@ -127,6 +132,8 @@ export default function ConviteBarbeiroPage() {
           phone: telefone,
           cpf,
           photo_url: photoDataUrl,
+          photo_position: photoPosition,
+          photo_scale: photoScale,
           password: senha,
         }),
       })
@@ -273,19 +280,25 @@ export default function ConviteBarbeiroPage() {
                   onChange={(e) => void onPickPhoto(e.target.files?.[0] ?? null)}
                 />
                 {photoDataUrl ? (
-                  <div className="flex flex-col items-center pt-1">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={photoDataUrl}
-                      alt=""
-                      className="w-32 h-32 rounded-full object-cover border-2 border-primary/40 shadow-md"
+                  <div className="flex flex-col items-center pt-1 gap-2 w-full">
+                    <BarberPhotoAdjust
+                      photoUrl={photoDataUrl}
+                      position={photoPosition}
+                      scale={photoScale}
+                      onPositionChange={setPhotoPosition}
+                      onScaleChange={setPhotoScale}
+                      previewSize="lg"
                     />
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
-                      className="mt-2 text-muted-foreground"
-                      onClick={() => setPhotoDataUrl(null)}
+                      className="text-muted-foreground"
+                      onClick={() => {
+                        setPhotoDataUrl(null)
+                        setPhotoPosition(50)
+                        setPhotoScale(100)
+                      }}
                     >
                       Trocar foto
                     </Button>

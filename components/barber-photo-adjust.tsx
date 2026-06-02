@@ -1,15 +1,11 @@
 "use client"
 
-import { Minus, Plus, ChevronUp, ChevronDown } from "lucide-react"
-import { Button } from "@/components/ui/button"
 import {
   barberPhotoImageStyle,
   clampPhotoPosition,
   clampPhotoScale,
-  PHOTO_POSITION_STEP,
   PHOTO_SCALE_MAX,
   PHOTO_SCALE_MIN,
-  PHOTO_SCALE_STEP,
 } from "@/lib/barber-photo-style"
 
 type BarberPhotoAdjustProps = {
@@ -18,7 +14,7 @@ type BarberPhotoAdjustProps = {
   scale: number
   onPositionChange: (value: number) => void
   onScaleChange: (value: number) => void
-  previewSize?: "sm" | "md"
+  previewSize?: "sm" | "md" | "lg"
 }
 
 export function BarberPhotoAdjust({
@@ -29,7 +25,8 @@ export function BarberPhotoAdjust({
   onScaleChange,
   previewSize = "md",
 }: BarberPhotoAdjustProps) {
-  const sizeClass = previewSize === "sm" ? "w-24 h-24" : "w-28 h-28"
+  const sizeClass =
+    previewSize === "lg" ? "w-32 h-32" : previewSize === "sm" ? "w-24 h-24" : "w-28 h-28"
 
   return (
     <div className="flex flex-col items-center gap-3 w-full">
@@ -45,56 +42,44 @@ export function BarberPhotoAdjust({
         />
       </div>
 
-      <div className="w-full space-y-2">
-        <p className="text-xs text-muted-foreground text-center font-medium">Ajustar foto</p>
-        <div className="flex items-center justify-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="gap-1 border-border"
-            disabled={scale <= PHOTO_SCALE_MIN}
-            onClick={() => onScaleChange(clampPhotoScale(scale - PHOTO_SCALE_STEP))}
-          >
-            <Minus className="w-3.5 h-3.5" />
-            Diminuir
-          </Button>
-          <span className="text-xs text-muted-foreground tabular-nums w-10 text-center">{scale}%</span>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="gap-1 border-border"
-            disabled={scale >= PHOTO_SCALE_MAX}
-            onClick={() => onScaleChange(clampPhotoScale(scale + PHOTO_SCALE_STEP))}
-          >
-            <Plus className="w-3.5 h-3.5" />
-            Aumentar
-          </Button>
+      <div className="w-full space-y-3">
+        <div className="space-y-1">
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span>Tamanho da foto</span>
+            <span className="tabular-nums">{scale}%</span>
+          </div>
+          <input
+            type="range"
+            min={PHOTO_SCALE_MIN}
+            max={PHOTO_SCALE_MAX}
+            step={5}
+            value={scale}
+            onChange={(e) => onScaleChange(clampPhotoScale(Number(e.target.value)))}
+            className="w-full accent-primary cursor-pointer"
+            aria-label="Tamanho da foto"
+          />
+          <div className="flex justify-between text-[11px] text-muted-foreground">
+            <span>Diminuir</span>
+            <span>Aumentar</span>
+          </div>
         </div>
-        <div className="flex items-center justify-center gap-2">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="gap-1 text-muted-foreground"
-            disabled={position <= 0}
-            onClick={() => onPositionChange(clampPhotoPosition(position - PHOTO_POSITION_STEP))}
-          >
-            <ChevronUp className="w-4 h-4" />
-            Subir
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="gap-1 text-muted-foreground"
-            disabled={position >= 100}
-            onClick={() => onPositionChange(clampPhotoPosition(position + PHOTO_POSITION_STEP))}
-          >
-            <ChevronDown className="w-4 h-4" />
-            Descer
-          </Button>
+
+        <div className="space-y-1">
+          <p className="text-xs text-muted-foreground">Posição (subir / descer)</p>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            step={5}
+            value={position}
+            onChange={(e) => onPositionChange(clampPhotoPosition(Number(e.target.value)))}
+            className="w-full accent-primary cursor-pointer"
+            aria-label="Posição vertical da foto"
+          />
+          <div className="flex justify-between text-[11px] text-muted-foreground">
+            <span>Topo</span>
+            <span>Base</span>
+          </div>
         </div>
       </div>
     </div>
