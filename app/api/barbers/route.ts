@@ -5,7 +5,8 @@ import { canAddBarber, canUseBarberCommission, getBarberLimitMessage, getUpgrade
 import { resolveEffectivePlanForActiveSession } from "@/lib/barbershop-effective-plan-server"
 import { prisma } from "@/lib/prisma"
 import { prismaBarberCreateWithPhotoPositionFallback } from "@/lib/barber-mutations"
-import { fetchBarberPhotoPositionsByBarbershopId } from "@/lib/barber-queries"
+import { fetchBarberPhotoPositionsByBarbershopId, fetchBarberPhotoScalesByBarbershopId } from "@/lib/barber-queries"
+import { clampPhotoPosition, clampPhotoScale } from "@/lib/barber-photo-style"
 import type { Barber } from "@/lib/db/types"
 import { assertValidProfilePhotoDataUrl } from "@/lib/photo-data-url"
 import { withBarbersUnitSchema } from "@/lib/barber-unit-schema"
@@ -37,8 +38,10 @@ function mapBarberRow(
     createdAt: Date
     updatedAt: Date
     photoPosition?: number
+    photoScale?: number
   },
-  positions: Map<string, number>
+  positions: Map<string, number>,
+  scales: Map<string, number>
 ): Barber {
   const pt = b.portalToken ?? null
   return {
@@ -51,6 +54,7 @@ function mapBarberRow(
     cpf: b.cpf,
     photo_url: b.photoUrl,
     photo_position: positions.get(b.id) ?? b.photoPosition ?? 50,
+    photo_scale: scales.get(b.id) ?? b.photoScale ?? 100,
     commission: Number(b.commission),
     active: b.active,
     role: b.role as Barber["role"],
@@ -100,12 +104,14 @@ export async function GET(request: Request) {
         }
       }
       let positions = new Map<string, number>()
+      let scales = new Map<string, number>()
       try {
         positions = await fetchBarberPhotoPositionsByBarbershopId(barbershopId)
+        scales = await fetchBarberPhotoScalesByBarbershopId(barbershopId)
       } catch {
         /* coluna/tabela inacessível via SQL: usa só o Prisma */
       }
-      return data.map((b) => mapBarberRow(b, positions))
+      return data.map((b) => mapBarberRow(b, positions, scales))
     })
 
     return NextResponse.json(payload)
@@ -144,6 +150,7 @@ export async function POST(request: Request) {
       cpf?: string
       photo_url?: string | null
       photo_position?: number
+      photo_scale?: number
       commission?: number
     }
     if (!body.name?.trim()) {
@@ -190,7 +197,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: unitError }, { status: 400 })
     }
 
-    const photoPosition = Math.min(100, Math.max(0, Math.round(Number(body.photo_position ?? 50))))
+    const photoPosition = clampPhotoPosition(Number(body.photo_position ?? 50))
+    const photoScale = clampPhotoScale(Number(body.photo_scale ?? 100))
     const created = await withBarbersUnitSchema(() =>
       prismaBarberCreateWithPhotoPositionFallback({
         barbershopId,
@@ -201,12 +209,13 @@ export async function POST(request: Request) {
         cpf: cpfNorm,
         photoUrl,
         photoPosition,
+        photoScale,
         commission,
         active: true,
         portalToken: randomUUID(),
       })
     )
-    return NextResponse.json(mapBarberRow(created, new Map([[created.id, created.photoPosition ?? 50]])))
+    return NextResponse.json(mapBarberRow(created, new Map([[created.id, created.photoPosition ?? 50]]), new Map([[created.id, photoScale]])))
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Erro ao criar barbeiro" },

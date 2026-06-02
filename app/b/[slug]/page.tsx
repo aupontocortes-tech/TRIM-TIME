@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { InputOTP, InputOTPGroup, InputOTPSlot, REGEXP_ONLY_DIGITS } from "@/components/ui/input-otp"
 import { Label } from "@/components/ui/label"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { barberPhotoImageStyle } from "@/lib/barber-photo-style"
 import {
   Scissors,
   Clock,
@@ -224,6 +225,7 @@ type PublicShopPayload = {
     phone: string | null
     photo_url?: string | null
     photo_position?: number
+    photo_scale?: number
   }[]
 }
 
@@ -1229,6 +1231,7 @@ export default function BarbeariaPage() {
               nome: barber.name,
               foto: barber.photo_url || "/placeholder.svg",
               fotoPosition: barber.photo_position ?? 50,
+              fotoScale: barber.photo_scale ?? 100,
               especialidade: barber.phone ? `Contato: ${barber.phone}` : "Profissional",
             }))
         : barbeariaData.profissionais.map((barber) => ({ ...barber, id: String(barber.id) })),
@@ -2709,8 +2712,15 @@ export default function BarbeariaPage() {
                   onClick={() => setProfissionalSelecionado(profissional.id)}
                 >
                   <CardContent className="p-4 flex items-center gap-4">
-                    <Avatar className="w-14 h-14 border-2 border-primary/20">
-                      <AvatarImage src={profissional.foto} style={{ objectPosition: `center ${'fotoPosition' in profissional ? profissional.fotoPosition : 50}%` }} />
+                    <Avatar className="w-14 h-14 border-2 border-primary/20 overflow-hidden">
+                      <AvatarImage
+                        src={profissional.foto}
+                        className="object-cover w-full h-full"
+                        style={barberPhotoImageStyle(
+                          "fotoPosition" in profissional ? Number(profissional.fotoPosition) : 50,
+                          "fotoScale" in profissional ? Number(profissional.fotoScale) : 100
+                        )}
+                      />
                       <AvatarFallback className="bg-primary/10 text-primary">
                         {profissional.nome.split(' ').map(n => n[0]).join('')}
                       </AvatarFallback>

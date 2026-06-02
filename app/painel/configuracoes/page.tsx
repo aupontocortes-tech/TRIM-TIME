@@ -27,6 +27,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { formatCpfDisplay } from "@/lib/cpf"
 import { publicBookingUrl } from "@/lib/booking-public-url"
+import { barberPhotoImageStyle } from "@/lib/barber-photo-style"
 import { normalizeGoogleMapsUrl } from "@/lib/google-maps-url"
 import { MapsLinkFieldLabel } from "@/components/maps-link-field-label"
 import { DeleteUnitDialog } from "@/components/painel/delete-unit-dialog"
@@ -79,6 +80,7 @@ import {
 } from "@/components/ui/dialog"
 import { renderNotificationTemplate } from "@/lib/notification-template"
 import { barbersListUrl } from "@/lib/barbers-list-url"
+import { BarberPhotoAdjust } from "@/components/barber-photo-adjust"
 import { WhatsAppConnectWizard } from "@/components/painel/whatsapp-connect-wizard"
 
 const diasSemana = [
@@ -235,6 +237,8 @@ export default function ConfiguracoesPage() {
   const [newName, setNewName] = useState("")
   const [newPhone, setNewPhone] = useState("")
   const [newPhotoDraft, setNewPhotoDraft] = useState<string | null>(null)
+  const [newPhotoPosition, setNewPhotoPosition] = useState(50)
+  const [newPhotoScale, setNewPhotoScale] = useState(100)
   const [newCommission, setNewCommission] = useState("50")
   const [editOpen, setEditOpen] = useState(false)
   const [editing, setEditing] = useState<Barber | null>(null)
@@ -244,6 +248,7 @@ export default function ConfiguracoesPage() {
   const [editCpf, setEditCpf] = useState("")
   const [editPhotoDraft, setEditPhotoDraft] = useState<string | null>(null)
   const [editPhotoPosition, setEditPhotoPosition] = useState(50)
+  const [editPhotoScale, setEditPhotoScale] = useState(100)
   const [editCommission, setEditCommission] = useState("50")
   const [editActive, setEditActive] = useState(true)
   const [editUnitId, setEditUnitId] = useState<string>("")
@@ -1243,6 +1248,7 @@ export default function ConfiguracoesPage() {
     setEditCpf(formatCpfDisplay(b.cpf ?? ""))
     setEditPhotoDraft(b.photo_url ?? null)
     setEditPhotoPosition(b.photo_position ?? 50)
+    setEditPhotoScale(b.photo_scale ?? 100)
     setEditCommission(String(Number(b.commission) || 0))
     setEditActive(b.active)
     setEditUnitId(b.unit_id ?? selectedUnitId ?? "")
@@ -1287,10 +1293,23 @@ export default function ConfiguracoesPage() {
     setEquipeBusy(true)
     setEquipeError(null)
     try {
-      const body: { name: string; phone: string; photo_url?: string | null; commission?: number } = {
+      const body: {
+        name: string
+        phone: string
+        photo_url?: string | null
+        photo_position?: number
+        photo_scale?: number
+        commission?: number
+      } = {
         name: newName.trim(),
         phone: newPhone.trim(),
-        ...(newPhotoDraft ? { photo_url: newPhotoDraft } : {}),
+        ...(newPhotoDraft
+          ? {
+              photo_url: newPhotoDraft,
+              photo_position: newPhotoPosition,
+              photo_scale: newPhotoScale,
+            }
+          : {}),
       }
       if (commissionFeature) {
         const c = Math.min(100, Math.max(0, Number(newCommission)))
@@ -1317,6 +1336,8 @@ export default function ConfiguracoesPage() {
       setNewName("")
       setNewPhone("")
       setNewPhotoDraft(null)
+      setNewPhotoPosition(50)
+      setNewPhotoScale(100)
       setNewCommission("50")
       await loadBarbers()
     } catch {
@@ -1335,7 +1356,7 @@ export default function ConfiguracoesPage() {
     setEquipeError(null)
     try {
       const patch: Partial<
-        Pick<Barber, "name" | "phone" | "email" | "cpf" | "photo_url" | "photo_position" | "active" | "commission">
+        Pick<Barber, "name" | "phone" | "email" | "cpf" | "photo_url" | "photo_position" | "photo_scale" | "active" | "commission">
       > = {
         name: editName.trim(),
         phone: editPhone.trim() || null,
@@ -1343,6 +1364,7 @@ export default function ConfiguracoesPage() {
         cpf: editCpf.trim() || null,
         photo_url: editPhotoDraft,
         photo_position: editPhotoPosition,
+        photo_scale: editPhotoScale,
         active: editActive,
       }
       if (commissionFeature) {
@@ -2530,6 +2552,8 @@ export default function ConfiguracoesPage() {
                   setAddOpen(open)
                   if (!open) {
                     setNewPhotoDraft(null)
+                    setNewPhotoPosition(50)
+                    setNewPhotoScale(100)
                     setNewName("")
                     setNewPhone("")
                     setNewCommission("50")
@@ -2577,6 +2601,8 @@ export default function ConfiguracoesPage() {
                               }
                               setEquipeError(null)
                               setNewPhotoDraft(url)
+                              setNewPhotoPosition(50)
+                              setNewPhotoScale(100)
                             })
                             .catch(() => setEquipeError("Não foi possível ler a imagem"))
                           e.target.value = ""
@@ -2592,23 +2618,28 @@ export default function ConfiguracoesPage() {
                         </label>
                       </Button>
                       {newPhotoDraft ? (
-                        <div className="flex flex-col items-center pt-1">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={newPhotoDraft}
-                            alt=""
-                            className="w-28 h-28 rounded-full object-cover border-2 border-primary/30"
-                          />
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="mt-2 text-muted-foreground"
-                            onClick={() => setNewPhotoDraft(null)}
-                          >
-                            Remover foto
-                          </Button>
-                        </div>
+                        <BarberPhotoAdjust
+                          photoUrl={newPhotoDraft}
+                          position={newPhotoPosition}
+                          scale={newPhotoScale}
+                          onPositionChange={setNewPhotoPosition}
+                          onScaleChange={setNewPhotoScale}
+                        />
+                      ) : null}
+                      {newPhotoDraft ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="text-muted-foreground"
+                          onClick={() => {
+                            setNewPhotoDraft(null)
+                            setNewPhotoPosition(50)
+                            setNewPhotoScale(100)
+                          }}
+                        >
+                          Remover foto
+                        </Button>
                       ) : null}
                     </div>
                     <Field>
@@ -2742,8 +2773,13 @@ export default function ConfiguracoesPage() {
                         disabled={equipeBusy}
                         onCheckedChange={() => void toggleBarberActive(prof)}
                       />
-                      <Avatar className="w-11 h-11 shrink-0 border border-border">
-                        <AvatarImage src={prof.photo_url ?? undefined} alt="" className="object-cover" style={{ objectPosition: `center ${prof.photo_position ?? 50}%` }} />
+                      <Avatar className="w-11 h-11 shrink-0 border border-border overflow-hidden">
+                        <AvatarImage
+                          src={prof.photo_url ?? undefined}
+                          alt=""
+                          className="object-cover w-full h-full"
+                          style={barberPhotoImageStyle(prof.photo_position ?? 50, prof.photo_scale ?? 100)}
+                        />
                         <AvatarFallback className="bg-primary/20 text-primary text-sm font-semibold">
                           {prof.name
                             .split(" ")
@@ -2887,6 +2923,8 @@ export default function ConfiguracoesPage() {
                             }
                             setEquipeError(null)
                             setEditPhotoDraft(url)
+                            setEditPhotoPosition(50)
+                            setEditPhotoScale(100)
                           })
                           .catch(() => setEquipeError("Não foi possível ler a imagem"))
                         e.target.value = ""
@@ -2894,35 +2932,19 @@ export default function ConfiguracoesPage() {
                     />
                     <div className="flex flex-col items-center gap-3 py-2">
                       {editPhotoDraft ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={editPhotoDraft}
-                          alt=""
-                          className="w-24 h-24 rounded-full object-cover border-2 border-primary/40 shadow"
-                          style={{ objectPosition: `center ${editPhotoPosition}%` }}
+                        <BarberPhotoAdjust
+                          photoUrl={editPhotoDraft}
+                          position={editPhotoPosition}
+                          scale={editPhotoScale}
+                          onPositionChange={setEditPhotoPosition}
+                          onScaleChange={setEditPhotoScale}
+                          previewSize="sm"
                         />
                       ) : (
                         <div className="w-24 h-24 rounded-full bg-secondary flex items-center justify-center border-2 border-dashed border-border">
                           <Camera className="w-8 h-8 text-muted-foreground" />
                         </div>
                       )}
-                      {editPhotoDraft ? (
-                        <div className="w-full space-y-1">
-                          <p className="text-xs text-muted-foreground text-center">Ajustar posição</p>
-                          <input
-                            type="range"
-                            min={0}
-                            max={100}
-                            value={editPhotoPosition}
-                            onChange={(e) => setEditPhotoPosition(Number(e.target.value))}
-                            className="w-full accent-primary cursor-pointer"
-                          />
-                          <div className="flex justify-between text-xs text-muted-foreground">
-                            <span>Topo</span>
-                            <span>Base</span>
-                          </div>
-                        </div>
-                      ) : null}
                       <label
                         htmlFor="config-equipe-edit-barber-photo"
                         className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
@@ -2933,7 +2955,11 @@ export default function ConfiguracoesPage() {
                       {editPhotoDraft ? (
                         <button
                           type="button"
-                          onClick={() => { setEditPhotoDraft(null); setEditPhotoPosition(50) }}
+                          onClick={() => {
+                            setEditPhotoDraft(null)
+                            setEditPhotoPosition(50)
+                            setEditPhotoScale(100)
+                          }}
                           className="text-xs text-muted-foreground hover:text-destructive transition-colors"
                         >
                           Remover foto

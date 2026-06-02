@@ -5,7 +5,8 @@ import type { Barber } from "@/lib/db/types"
 import { canUseBarberCommission, getUpgradeMessage } from "@/lib/plans"
 import { prisma } from "@/lib/prisma"
 import { prismaBarberUpdateWithPhotoPositionFallback } from "@/lib/barber-mutations"
-import { fetchBarberPhotoPositionById } from "@/lib/barber-queries"
+import { fetchBarberPhotoPositionById, fetchBarberPhotoScaleById } from "@/lib/barber-queries"
+import { clampPhotoPosition, clampPhotoScale } from "@/lib/barber-photo-style"
 import { resolveEffectivePlanForActiveSession } from "@/lib/barbershop-effective-plan-server"
 import { assertValidProfilePhotoDataUrl } from "@/lib/photo-data-url"
 import { withBarbersUnitSchema } from "@/lib/barber-unit-schema"
@@ -18,7 +19,7 @@ export async function PATCH(
     const barbershopId = await requireBarbershopId()
     const { id } = await params
     const body = await _request.json() as Partial<
-      Pick<Barber, "name" | "phone" | "email" | "cpf" | "photo_url" | "photo_position" | "commission" | "active">
+      Pick<Barber, "name" | "phone" | "email" | "cpf" | "photo_url" | "photo_position" | "photo_scale" | "commission" | "active">
     > & { unit_id?: string | null }
     const barbershop = await prisma.barbershop.findUnique({
       where: { id: barbershopId },
@@ -33,6 +34,7 @@ export async function PATCH(
       cpf?: string | null
       photoUrl?: string | null
       photoPosition?: number
+      photoScale?: number
       active?: boolean
       commission?: number
       unitId?: string | null
@@ -76,7 +78,10 @@ export async function PATCH(
     }
     if (body.active !== undefined) update.active = Boolean(body.active)
     if (body.photo_position !== undefined) {
-      update.photoPosition = Math.min(100, Math.max(0, Math.round(Number(body.photo_position ?? 50))))
+      update.photoPosition = clampPhotoPosition(Number(body.photo_position ?? 50))
+    }
+    if (body.photo_scale !== undefined) {
+      update.photoScale = clampPhotoScale(Number(body.photo_scale ?? 100))
     }
 
     if (body.unit_id !== undefined) {
@@ -128,16 +133,23 @@ export async function PATCH(
 
     const data = await withBarbersUnitSchema(() => prismaBarberUpdateWithPhotoPositionFallback(id, update))
     let photoPositionFromDb: number | null = null
+    let photoScaleFromDb: number | null = null
     try {
       photoPositionFromDb = await fetchBarberPhotoPositionById(id)
+      photoScaleFromDb = await fetchBarberPhotoScaleById(id)
     } catch {
       /* leitura SQL opcional; resposta usa body ou Prisma */
     }
     const photoPositionResponse =
       photoPositionFromDb ??
       (body.photo_position !== undefined
-        ? Math.min(100, Math.max(0, Math.round(Number(body.photo_position))))
+        ? clampPhotoPosition(Number(body.photo_position))
         : (data as { photoPosition?: number }).photoPosition ?? 50)
+    const photoScaleResponse =
+      photoScaleFromDb ??
+      (body.photo_scale !== undefined
+        ? clampPhotoScale(Number(body.photo_scale))
+        : (data as { photoScale?: number }).photoScale ?? 100)
     const refreshed = await prisma.barber.findFirst({
       where: { id, barbershopId },
       select: { portalToken: true },
@@ -153,6 +165,7 @@ export async function PATCH(
       cpf: data.cpf,
       photo_url: data.photoUrl,
       photo_position: photoPositionResponse,
+      photo_scale: photoScaleResponse,
       commission: Number(data.commission),
       active: data.active,
       role: data.role,

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { fetchServicesForBarbershopRaw, serviceDbRowToApi } from "@/lib/service-queries"
-import { fetchBarberPhotoPositionsByBarbershopId } from "@/lib/barber-queries"
+import { fetchBarberPhotoPositionsByBarbershopId, fetchBarberPhotoScalesByBarbershopId } from "@/lib/barber-queries"
 import type { BarbershopSettings } from "@/lib/db/types"
 import { resolveEffectivePlanForBarbershop } from "@/lib/barbershop-effective-plan-server"
 import { hasFeature } from "@/lib/plans"
@@ -81,8 +81,10 @@ export async function GET(
     })
 
     let photoPositions = new Map<string, number>()
+    let photoScales = new Map<string, number>()
     try {
       photoPositions = await fetchBarberPhotoPositionsByBarbershopId(b.id)
+      photoScales = await fetchBarberPhotoScalesByBarbershopId(b.id)
     } catch {
       /* fallback abaixo com photoPosition do Prisma */
     }
@@ -130,6 +132,7 @@ export async function GET(
         phone: barber.phone,
         photo_url: barber.photoUrl,
         photo_position: photoPositions.get(barber.id) ?? (barber as { photoPosition?: number }).photoPosition ?? 50,
+        photo_scale: photoScales.get(barber.id) ?? (barber as { photoScale?: number }).photoScale ?? 100,
       })),
     })
   } catch (e) {

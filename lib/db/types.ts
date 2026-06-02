@@ -134,6 +134,8 @@ export interface Barber {
   cpf?: string | null
   photo_url?: string | null
   photo_position?: number
+  /** Zoom da foto no círculo (75–125, padrão 100). */
+  photo_scale?: number
   commission: number
   active: boolean
   role?: BarberRole

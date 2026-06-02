@@ -327,6 +327,8 @@ model Barber {
   photoUrl      String?  @map("photo_url") @db.Text
   /// Posição vertical do recorte circular (0 = topo, 100 = base, padrão 50 = centro).
   photoPosition Int      @default(50) @map("photo_position")
+  /// Zoom do recorte (75–125, padrão 100).
+  photoScale    Int      @default(100) @map("photo_scale")
   commission    Decimal  @default(0) @db.Decimal(5, 2)
   active       Boolean  @default(true)
   role         String   @default("user") // admin_barbershop | user
