@@ -10,9 +10,26 @@ import {
 } from "@/lib/appointment-db-schema"
 import { prismaAppointmentUnitFilter } from "@/lib/unit-context"
 
+/** Campos de cliente usados na agenda (evita `client: true` quando `unit_id` ainda não existe). */
+export const appointmentClientSelect = {
+  id: true,
+  barbershopId: true,
+  unitId: true,
+  name: true,
+  phone: true,
+  email: true,
+  notes: true,
+  cpf: true,
+  photoUrl: true,
+  loyaltyPoints: true,
+  pushSubscription: true,
+  createdAt: true,
+  updatedAt: true,
+} as const
+
 /** Include seguro: barbeiro sem colunas opcionais que podem faltar no banco. */
 export const appointmentApiIncludeSafe = {
-  client: true,
+  client: { select: appointmentClientSelect },
   barber: {
     select: {
       id: true,
@@ -87,7 +104,22 @@ export async function fetchAppointmentsWithRelations(
       const rows = await prisma.appointment.findMany({
         where,
         include: {
-          client: true,
+          client: {
+            select: {
+              id: true,
+              barbershopId: true,
+              name: true,
+              phone: true,
+              email: true,
+              notes: true,
+              cpf: true,
+              photoUrl: true,
+              loyaltyPoints: true,
+              pushSubscription: true,
+              createdAt: true,
+              updatedAt: true,
+            },
+          },
           barber: {
             select: {
               id: true,

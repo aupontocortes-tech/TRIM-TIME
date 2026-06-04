@@ -22,7 +22,9 @@ function isAppointmentSchemaError(error: unknown): boolean {
         msg.includes("commission_amount") ||
         msg.includes("appointment_service_lines") ||
         msg.includes("photo_scale") ||
-        msg.includes("photo_position")))
+        msg.includes("photo_position") ||
+        msg.includes("clients") ||
+        msg.includes("Client")))
   )
 }
 
@@ -33,10 +35,100 @@ export function getPrismaModelTableName(model: string): string {
 }
 
 function quoteTable(name: string): string {
-  if (name === "Appointment" || name === "Barber" || name === "Client" || name === "Service") {
+  if (
+    name === "Appointment" ||
+    name === "Barber" ||
+    name === "Client" ||
+    name === "Service"
+  ) {
     return `"${name}"`
   }
   return name
+}
+
+let resolvedClientsTable: string | null = null
+
+/** Nome físico da tabela de clientes (Prisma `Client` ou migração SQL `clients`). */
+export async function getClientsTableName(): Promise<string> {
+  if (resolvedClientsTable) return resolvedClientsTable
+
+  const prismaTable = getPrismaModelTableName("Client")
+  if (await tableExists(prismaTable)) {
+    resolvedClientsTable = prismaTable
+    return resolvedClientsTable
+  }
+
+  const rows = await prisma.$queryRaw<{ table_name: string }[]>(Prisma.sql`
+    SELECT table_name
+    FROM information_schema.tables
+    WHERE table_schema = 'public'
+      AND table_name IN ('clients', 'Client')
+    ORDER BY CASE table_name WHEN 'clients' THEN 0 ELSE 1 END
+    LIMIT 1
+  `)
+
+  if (rows[0]?.table_name) {
+    resolvedClientsTable = rows[0].table_name
+    return resolvedClientsTable
+  }
+
+  resolvedClientsTable = prismaTable
+  return resolvedClientsTable
+}
+
+async function clientsTableHasColumn(table: string, columnName: string): Promise<boolean> {
+  return appointmentsTableHasColumn(table, columnName)
+}
+
+/** Coluna `unit_id` em clientes (migração 029 / painel multi-unidade). */
+export async function ensureClientsUnitSchemaReady(): Promise<void> {
+  const table = await getClientsTableName()
+  if (await clientsTableHasColumn(table, "unit_id")) return
+
+  const q = quoteTable(table)
+  await prisma.$executeRawUnsafe(`ALTER TABLE ${q} ADD COLUMN IF NOT EXISTS unit_id UUID;`)
+
+  const fkName = table === "Client" ? "Client_unit_id_fkey" : "clients_unit_id_fkey"
+  await prisma.$executeRawUnsafe(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = '${fkName}'
+      ) THEN
+        ALTER TABLE ${q}
+          ADD CONSTRAINT ${fkName}
+          FOREIGN KEY (unit_id) REFERENCES barbershop_units(id) ON DELETE SET NULL;
+      END IF;
+    END $$;
+  `)
+
+  const idxUnit = table === "Client" ? "Client_unit_id_idx" : "idx_clients_unit"
+  const idxShopUnit =
+    table === "Client" ? "Client_barbershop_id_unit_id_idx" : "idx_clients_barbershop_unit"
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS ${idxUnit} ON ${q}(unit_id);`)
+  await prisma.$executeRawUnsafe(
+    `CREATE INDEX IF NOT EXISTS ${idxShopUnit} ON ${q}(barbershop_id, unit_id);`
+  )
+
+  await prisma.$executeRawUnsafe(`
+    UPDATE ${q} c
+    SET unit_id = sub.unit_id
+    FROM (
+      SELECT DISTINCT ON (bu.barbershop_id)
+        bu.barbershop_id,
+        bu.id AS unit_id
+      FROM barbershop_units bu
+      WHERE bu.active = true
+      ORDER BY bu.barbershop_id, bu.created_at ASC
+    ) sub
+    WHERE c.barbershop_id = sub.barbershop_id
+      AND c.unit_id IS NULL
+      AND (
+        SELECT COUNT(*)::int
+        FROM barbershop_units u
+        WHERE u.barbershop_id = c.barbershop_id AND u.active = true
+      ) = 1;
+  `)
 }
 
 async function tableExists(tableName: string): Promise<boolean> {
@@ -119,6 +211,7 @@ export async function appointmentsUnitColumnReady(): Promise<boolean> {
 function invalidateAppointmentSchemaCache() {
   resolvedAppointmentsTable = null
   resolvedServicesTable = null
+  resolvedClientsTable = null
   unitColumnReadyCache = null
 }
 
@@ -195,6 +288,7 @@ export async function ensureAppointmentDbSchemaReady(): Promise<void> {
   await ensureAppointmentsUnitSchemaReady()
   await ensureAppointmentServiceLinesTableReady()
   await ensureBarbersUnitSchemaReadyOnce()
+  await ensureClientsUnitSchemaReady()
 }
 
 function ensureAppointmentDbSchemaReadyOnce(): Promise<void> {

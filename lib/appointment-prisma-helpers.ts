@@ -119,6 +119,7 @@ function mapClient(c: NonNullable<AppointmentWithRelations["client"]>): Client {
   return {
     id: c.id,
     barbershop_id: c.barbershopId,
+    unit_id: "unitId" in c ? (c.unitId ?? null) : null,
     name: c.name,
     phone: c.phone,
     email: c.email,
