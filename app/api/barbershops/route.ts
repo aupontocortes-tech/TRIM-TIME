@@ -289,6 +289,13 @@ function mergeBarbershopSettings(
   if (inc.waitlist_accept_deadline_minutes !== undefined) {
     base.waitlist_accept_deadline_minutes = inc.waitlist_accept_deadline_minutes
   }
+  if (inc.loyalty_program !== undefined) {
+    if (!inc.loyalty_program || !inc.loyalty_program.enabled) {
+      delete base.loyalty_program
+    } else {
+      base.loyalty_program = inc.loyalty_program
+    }
+  }
   return base as Prisma.InputJsonValue
 }
 
@@ -308,6 +315,28 @@ export async function PATCH(request: Request) {
     if (!current) {
       return NextResponse.json({ error: "Barbearia não encontrada" }, { status: 404 })
     }
+    if (body.settings?.loyalty_program !== undefined) {
+      const plan = await resolveEffectivePlanForActiveSession(barbershopId)
+      const { validateLoyaltyProgramInput, assertLoyaltyRewardRefs } = await import(
+        "@/lib/loyalty-program"
+      )
+      const loyaltyInput = body.settings.loyalty_program ?? {
+        enabled: false,
+        visits_required: 10,
+        reward_label: "",
+        reward_kind: "service" as const,
+      }
+      const validated = validateLoyaltyProgramInput(loyaltyInput, plan)
+      if (!validated.ok) {
+        return NextResponse.json({ error: validated.error }, { status: 400 })
+      }
+      if (validated.config.enabled) {
+        const refs = await assertLoyaltyRewardRefs(barbershopId, validated.config)
+        if (!refs.ok) return NextResponse.json({ error: refs.error }, { status: 400 })
+      }
+      body.settings.loyalty_program = validated.config
+    }
+
     const mergedSettings = mergeBarbershopSettings(current.settings, body.settings)
     const barbershop = await prisma.barbershop.update({
       where: { id: barbershopId },

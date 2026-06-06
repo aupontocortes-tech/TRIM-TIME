@@ -22,6 +22,8 @@ import {
   notifyNextWaitingForFreedSlot,
   primaryServiceIdFromAppointment,
 } from "@/lib/waitlist-service"
+import type { BarbershopSettings } from "@/lib/db/types"
+import { creditLoyaltyVisitForAppointment } from "@/lib/loyalty-program"
 
 function mergeServiceLineQuantities(rows: unknown): { order: string[]; qty: Map<string, number> } {
   const qty = new Map<string, number>()
@@ -383,6 +385,18 @@ export async function PATCH(
     }
     if (body.status === "completed" && beforeApi.status !== "completed") {
       void trySendWhatsAppAppointmentPostService(barbershopId, id)
+      const shopRow = await prisma.barbershop.findUnique({
+        where: { id: barbershopId },
+        select: { settings: true },
+      })
+      const plan = await resolveEffectivePlanForActiveSession(barbershopId)
+      void creditLoyaltyVisitForAppointment({
+        barbershopId,
+        clientId: enriched.client_id,
+        appointmentId: id,
+        settings: (shopRow?.settings as BarbershopSettings | null) ?? null,
+        plan,
+      })
     }
     return NextResponse.json(enriched as Appointment)
   } catch (e) {

@@ -31,6 +31,12 @@ import { barberPhotoImageStyle } from "@/lib/barber-photo-style"
 import { normalizeGoogleMapsUrl } from "@/lib/google-maps-url"
 import { MapsLinkFieldLabel } from "@/components/maps-link-field-label"
 import { DeleteUnitDialog } from "@/components/painel/delete-unit-dialog"
+import {
+  defaultLoyaltyProgramUi,
+  loyaltyProgramFromSettings,
+  loyaltyProgramToSettings,
+  type LoyaltyProgramUi,
+} from "@/lib/loyalty-settings-ui"
 import { compressImageToJpegDataUrl } from "@/lib/client-image-compress"
 import { MAX_PROFILE_PHOTO_DATA_URL_CHARS } from "@/lib/photo-data-url"
 import { Button } from "@/components/ui/button"
@@ -69,6 +75,8 @@ import {
   Camera,
   Trophy,
   Download,
+  Gift,
+  Lock,
 } from "lucide-react"
 import {
   Dialog,
@@ -183,6 +191,7 @@ export default function ConfiguracoesPage() {
   const multiUnitsFeature = plan != null && hasFeature(plan, "multi_units")
   const whatsappIntegrationFeature = plan != null && hasFeature(plan, "whatsapp_integration")
   const waitlistFeature = plan != null && hasFeature(plan, "waiting_list")
+  const loyaltyFeature = plan != null && hasFeature(plan, "loyalty_program")
 
   const [barbearia, setBarbearia] = useState<BarbeariaForm>(emptyBarbearia)
   const [horarios, setHorarios] = useState<
@@ -210,7 +219,15 @@ export default function ConfiguracoesPage() {
   const [editServPreco, setEditServPreco] = useState("")
   const [editServAtivo, setEditServAtivo] = useState(true)
 
-  const [catalogLojaTab, setCatalogLojaTab] = useState<"svc-catalog" | "prd-catalog">("svc-catalog")
+  const [catalogLojaTab, setCatalogLojaTab] = useState<
+    "svc-catalog" | "prd-catalog" | "loyalty-catalog"
+  >("svc-catalog")
+  const [loyaltyProgram, setLoyaltyProgram] = useState<LoyaltyProgramUi>(() =>
+    defaultLoyaltyProgramUi()
+  )
+  const [loyaltySaving, setLoyaltySaving] = useState(false)
+  const [loyaltyError, setLoyaltyError] = useState<string | null>(null)
+  const [loyaltyOk, setLoyaltyOk] = useState(false)
   const [listaProdutosRetail, setListaProdutosRetail] = useState<RetailProduct[]>([])
   const [produtosRetailLoading, setProdutosRetailLoading] = useState(true)
   const [produtosRetailError, setProdutosRetailError] = useState<string | null>(null)
@@ -353,6 +370,7 @@ export default function ConfiguracoesPage() {
     setWaitlistAcceptMinutes(
       Number.isFinite(wn) && wn > 0 ? Math.min(24 * 60, Math.round(wn)) : 15
     )
+    setLoyaltyProgram(loyaltyProgramFromSettings(barbershop.settings))
   }, [
     barbershop?.id,
     barbershop?.updated_at,
@@ -721,6 +739,89 @@ export default function ConfiguracoesPage() {
       setBarbeariaSaveError("Erro de rede ao salvar")
     } finally {
       setIsSavingBarbearia(false)
+    }
+  }
+
+  const handleSaveLoyalty = async () => {
+    if (!barbershop) return
+    if (!loyaltyFeature) {
+      setLoyaltyError("Programa de fidelidade disponível no plano Premium.")
+      return
+    }
+    setLoyaltySaving(true)
+    setLoyaltyError(null)
+    setLoyaltyOk(false)
+    try {
+      const payload = loyaltyProgramToSettings(loyaltyProgram)
+      if (payload.enabled) {
+        if (payload.reward_kind === "service" && !payload.reward_service_id) {
+          setLoyaltyError("Selecione o serviço da recompensa.")
+          return
+        }
+        if (payload.reward_kind === "product" && !payload.reward_product_id) {
+          setLoyaltyError("Selecione o produto da recompensa.")
+          return
+        }
+      }
+      const r = await fetch("/api/barbershops", {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          settings: { loyalty_program: payload },
+        }),
+      })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) {
+        setLoyaltyError(typeof j.error === "string" ? j.error : "Erro ao salvar fidelidade")
+        return
+      }
+      setLoyaltyOk(true)
+      setTimeout(() => setLoyaltyOk(false), 3000)
+      await refetch()
+    } catch {
+      setLoyaltyError("Erro de rede ao salvar fidelidade")
+    } finally {
+      setLoyaltySaving(false)
+    }
+  }
+
+  const handleDeleteLoyalty = async () => {
+    if (!barbershop) return
+    setLoyaltySaving(true)
+    setLoyaltyError(null)
+    setLoyaltyOk(false)
+    try {
+      const r = await fetch("/api/barbershops", {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          settings: {
+            loyalty_program: {
+              enabled: false,
+              visits_required: 10,
+              reward_label: "",
+              reward_kind: "service",
+              reward_service_id: null,
+              reward_product_id: null,
+            },
+          },
+        }),
+      })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) {
+        setLoyaltyError(typeof j.error === "string" ? j.error : "Erro ao remover campanha")
+        return
+      }
+      setLoyaltyProgram(defaultLoyaltyProgramUi())
+      setLoyaltyOk(true)
+      setTimeout(() => setLoyaltyOk(false), 3000)
+      await refetch()
+    } catch {
+      setLoyaltyError("Erro de rede ao remover campanha")
+    } finally {
+      setLoyaltySaving(false)
     }
   }
 
@@ -2051,10 +2152,12 @@ export default function ConfiguracoesPage() {
         <TabsContent value="servicos">
           <Tabs
             value={catalogLojaTab}
-            onValueChange={(v) => setCatalogLojaTab(v as "svc-catalog" | "prd-catalog")}
+            onValueChange={(v) =>
+              setCatalogLojaTab(v as "svc-catalog" | "prd-catalog" | "loyalty-catalog")
+            }
             className="space-y-4"
           >
-            <TabsList className="grid w-full max-w-md grid-cols-2 gap-1 p-1 h-auto rounded-xl bg-secondary/50 border border-border">
+            <TabsList className="grid w-full max-w-2xl grid-cols-3 gap-1 p-1 h-auto rounded-xl bg-secondary/50 border border-border">
               <TabsTrigger
                 value="svc-catalog"
                 className="rounded-lg px-3 py-2.5 text-sm font-semibold inline-flex items-center justify-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
@@ -2068,6 +2171,13 @@ export default function ConfiguracoesPage() {
               >
                 <ShoppingBag className="h-4 w-4 shrink-0" />
                 Produtos
+              </TabsTrigger>
+              <TabsTrigger
+                value="loyalty-catalog"
+                className="rounded-lg px-3 py-2.5 text-sm font-semibold inline-flex items-center justify-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+              >
+                <Gift className="h-4 w-4 shrink-0" />
+                Fidelidade
               </TabsTrigger>
             </TabsList>
 
@@ -2388,6 +2498,228 @@ export default function ConfiguracoesPage() {
                         </div>
                       ))}
                     </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="loyalty-catalog" className="mt-0 space-y-0">
+              <Card className="bg-card border-border">
+                <CardHeader>
+                  <CardTitle className="text-foreground flex items-center gap-2">
+                    <Gift className="h-5 w-5 text-primary" />
+                    Programa de fidelidade
+                  </CardTitle>
+                  <CardDescription className="text-muted-foreground">
+                    Configure visitas e recompensas. O cliente vê o progresso no app de agendamento.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                  {!loyaltyFeature ? (
+                    <div className="rounded-lg border border-primary/25 bg-primary/5 p-4 flex gap-3">
+                      <Lock className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+                      <div className="space-y-2 text-sm">
+                        <p className="text-foreground font-medium">
+                          Disponível no plano Premium
+                        </p>
+                        <p className="text-muted-foreground">
+                          Ative o Premium na aba Plano para configurar cartão de fidelidade,
+                          progresso de visitas e recompensas para seus clientes.
+                        </p>
+                        <Link
+                          href="/painel/configuracoes?tab=plano"
+                          className="text-primary underline underline-offset-2 font-medium"
+                        >
+                          Ver planos
+                        </Link>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-center justify-between gap-4 rounded-lg border border-border bg-secondary/20 p-4">
+                        <div>
+                          <p className="font-medium text-foreground">Programa ativo</p>
+                          <p className="text-sm text-muted-foreground">
+                            Desligue se não quiser usar fidelidade nesta barbearia.
+                          </p>
+                        </div>
+                        <Switch
+                          checked={loyaltyProgram.enabled}
+                          onCheckedChange={(on) =>
+                            setLoyaltyProgram((p) => ({ ...p, enabled: on }))
+                          }
+                        />
+                      </div>
+
+                      {loyaltyProgram.enabled ? (
+                        <div className="space-y-4 rounded-lg border border-border p-4">
+                          <Field>
+                            <FieldLabel>Visitas para ganhar a recompensa</FieldLabel>
+                            <Input
+                              type="number"
+                              min={1}
+                              max={100}
+                              className="bg-input border-border text-foreground max-w-[140px]"
+                              value={loyaltyProgram.visitsRequired}
+                              onChange={(e) =>
+                                setLoyaltyProgram((p) => ({
+                                  ...p,
+                                  visitsRequired: e.target.value,
+                                }))
+                              }
+                            />
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Ex.: 10 visitas concluídas liberam a recompensa.
+                            </p>
+                          </Field>
+
+                          <Field>
+                            <FieldLabel>Nome da recompensa (o cliente vê)</FieldLabel>
+                            <Input
+                              className="bg-input border-border text-foreground"
+                              value={loyaltyProgram.rewardLabel}
+                              onChange={(e) =>
+                                setLoyaltyProgram((p) => ({
+                                  ...p,
+                                  rewardLabel: e.target.value,
+                                }))
+                              }
+                              placeholder="Ex.: Corte grátis, Pomada de presente…"
+                              maxLength={120}
+                            />
+                          </Field>
+
+                          <Field>
+                            <FieldLabel>O que o cliente ganha</FieldLabel>
+                            <div className="flex flex-wrap gap-3 mt-2">
+                              <label className="inline-flex items-center gap-2 text-sm text-foreground cursor-pointer">
+                                <input
+                                  type="radio"
+                                  name="loyalty-reward-kind"
+                                  checked={loyaltyProgram.rewardKind === "service"}
+                                  onChange={() =>
+                                    setLoyaltyProgram((p) => ({
+                                      ...p,
+                                      rewardKind: "service",
+                                    }))
+                                  }
+                                  className="accent-primary"
+                                />
+                                Serviço
+                              </label>
+                              <label className="inline-flex items-center gap-2 text-sm text-foreground cursor-pointer">
+                                <input
+                                  type="radio"
+                                  name="loyalty-reward-kind"
+                                  checked={loyaltyProgram.rewardKind === "product"}
+                                  onChange={() =>
+                                    setLoyaltyProgram((p) => ({
+                                      ...p,
+                                      rewardKind: "product",
+                                    }))
+                                  }
+                                  className="accent-primary"
+                                />
+                                Produto
+                              </label>
+                            </div>
+                          </Field>
+
+                          {loyaltyProgram.rewardKind === "service" ? (
+                            <Field>
+                              <FieldLabel>Serviço da recompensa</FieldLabel>
+                              <select
+                                className="mt-1 w-full rounded-md border border-border bg-input px-3 py-2 text-sm text-foreground"
+                                value={loyaltyProgram.rewardServiceId}
+                                onChange={(e) =>
+                                  setLoyaltyProgram((p) => ({
+                                    ...p,
+                                    rewardServiceId: e.target.value,
+                                  }))
+                                }
+                              >
+                                <option value="">Selecione um serviço…</option>
+                                {listaServicos
+                                  .filter((s) => s.active)
+                                  .map((s) => (
+                                    <option key={s.id} value={s.id}>
+                                      {s.name} — R${Number(s.price).toFixed(2)}
+                                    </option>
+                                  ))}
+                              </select>
+                            </Field>
+                          ) : (
+                            <Field>
+                              <FieldLabel>Produto da recompensa</FieldLabel>
+                              <select
+                                className="mt-1 w-full rounded-md border border-border bg-input px-3 py-2 text-sm text-foreground"
+                                value={loyaltyProgram.rewardProductId}
+                                onChange={(e) =>
+                                  setLoyaltyProgram((p) => ({
+                                    ...p,
+                                    rewardProductId: e.target.value,
+                                  }))
+                                }
+                              >
+                                <option value="">Selecione um produto…</option>
+                                {listaProdutosRetail
+                                  .filter((p) => p.active)
+                                  .map((p) => (
+                                    <option key={p.id} value={p.id}>
+                                      {p.name} — R${Number(p.price).toFixed(2)}
+                                    </option>
+                                  ))}
+                              </select>
+                            </Field>
+                          )}
+
+                          <p className="text-xs text-muted-foreground">
+                            Cada atendimento <strong className="text-foreground">concluído</strong> na
+                            agenda soma 1 visita. O barbeiro pode marcar a recompensa como usada na ficha
+                            do cliente.
+                          </p>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground rounded-lg border border-dashed border-border p-4">
+                          Com o programa desligado, nada aparece para o cliente e as visitas não são
+                          contadas.
+                        </p>
+                      )}
+
+                      {loyaltyError ? (
+                        <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+                          {loyaltyError}
+                        </div>
+                      ) : null}
+                      {loyaltyOk ? (
+                        <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20 text-green-600 text-sm">
+                          Programa de fidelidade salvo.
+                        </div>
+                      ) : null}
+
+                      <div className="flex flex-wrap gap-3">
+                        <Button
+                          className="bg-primary text-primary-foreground hover:bg-primary/90"
+                          disabled={loyaltySaving}
+                          onClick={() => void handleSaveLoyalty()}
+                        >
+                          <Save className="w-4 h-4 mr-2" />
+                          {loyaltySaving ? "Salvando…" : "Salvar programa"}
+                        </Button>
+                        {barbershop?.settings?.loyalty_program?.enabled ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="border-destructive/40 text-destructive hover:bg-destructive/10"
+                            disabled={loyaltySaving}
+                            onClick={() => void handleDeleteLoyalty()}
+                          >
+                            <Trash2 className="w-4 h-4 mr-2" />
+                            Excluir campanha
+                          </Button>
+                        ) : null}
+                      </div>
+                    </>
                   )}
                 </CardContent>
               </Card>

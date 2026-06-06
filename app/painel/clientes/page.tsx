@@ -13,6 +13,7 @@ import {
   Calendar,
   Star,
   ChevronRight,
+  Gift,
 } from "lucide-react"
 import {
   Dialog,
@@ -22,9 +23,13 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import type { Appointment, Client } from "@/lib/db/types"
+import type { Appointment, Client, LoyaltyClientStatus } from "@/lib/db/types"
 import { useUnits } from "@/hooks/use-units"
+import { useBarbershop } from "@/hooks/use-barbershop"
 import { clientsListUrl } from "@/lib/clients-list-url"
+import { computeClientLoyaltyStatus, parseLoyaltyProgram } from "@/lib/loyalty-program"
+import { hasFeature } from "@/lib/plans"
+import { LoyaltyCard } from "@/components/loyalty/loyalty-card"
 
 type ClienteEnriquecido = {
   id: string
@@ -38,6 +43,8 @@ type ClienteEnriquecido = {
   servicoFavorito: string
   createdAt: string
   historico: { id: string; data: string; servico: string; profissional: string; valor: number }[]
+  loyaltyPoints: number
+  loyaltyStatus: LoyaltyClientStatus | null
 }
 
 function formatPhone(value: string) {
@@ -48,7 +55,12 @@ function formatPhone(value: string) {
 }
 
 export default function ClientesPage() {
+  const { barbershop, plan } = useBarbershop()
   const { units, selectedUnitId, loading: unitsLoading } = useUnits()
+  const loyaltyConfig =
+    plan && hasFeature(plan, "loyalty_program")
+      ? parseLoyaltyProgram(barbershop?.settings ?? null)
+      : null
   const needsUnitPick = units.length > 1 && !selectedUnitId
   const nomeUnidadeAtiva =
     selectedUnitId && units.length ? units.find((u) => u.id === selectedUnitId)?.name ?? null : null
@@ -63,6 +75,7 @@ export default function ClientesPage() {
   const [openNovoCliente, setOpenNovoCliente] = useState(false)
   const [savingNovo, setSavingNovo] = useState(false)
   const [formNovoCliente, setFormNovoCliente] = useState({ nome: "", telefone: "", email: "" })
+  const [redeemBusyId, setRedeemBusyId] = useState<string | null>(null)
 
   const carregarDados = async () => {
     if (needsUnitPick) {
@@ -106,6 +119,7 @@ export default function ClientesPage() {
         }
         const favorite = [...favoriteCounter.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "—"
 
+        const loyaltyPoints = client.loyalty_points ?? 0
         return {
           id: client.id,
           nome: client.name,
@@ -118,6 +132,10 @@ export default function ClientesPage() {
           servicoFavorito: favorite,
           createdAt: client.created_at,
           historico: history,
+          loyaltyPoints,
+          loyaltyStatus: loyaltyConfig
+            ? computeClientLoyaltyStatus(loyaltyPoints, loyaltyConfig)
+            : null,
         }
       })
 
@@ -134,7 +152,7 @@ export default function ClientesPage() {
   useEffect(() => {
     if (unitsLoading) return
     void carregarDados()
-  }, [selectedUnitId, units.length, unitsLoading, needsUnitPick])
+  }, [selectedUnitId, units.length, unitsLoading, needsUnitPick, loyaltyConfig?.visits_required])
 
   const handleSalvarNovoCliente = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -190,6 +208,40 @@ export default function ClientesPage() {
     appointments.length > 0
       ? appointments.reduce((sum, appointment) => sum + Number(appointment.total_price ?? appointment.service?.price ?? 0), 0) / appointments.length
       : 0
+
+  const handleRedeemLoyalty = async (clienteId: string) => {
+    setRedeemBusyId(clienteId)
+    setErro("")
+    setFeedback("")
+    try {
+      const res = await fetch(`/api/clients/${clienteId}/loyalty/redeem`, {
+        method: "POST",
+        credentials: "include",
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setErro(typeof data.error === "string" ? data.error : "Não foi possível registrar o resgate.")
+        return
+      }
+      setFeedback("Recompensa marcada como utilizada.")
+      await carregarDados()
+      if (clienteSelecionado?.id === clienteId && data.loyalty) {
+        setClienteSelecionado((prev) =>
+          prev
+            ? {
+                ...prev,
+                loyaltyPoints: data.loyalty.current_visits,
+                loyaltyStatus: data.loyalty,
+              }
+            : prev
+        )
+      }
+    } catch {
+      setErro("Erro ao registrar resgate.")
+    } finally {
+      setRedeemBusyId(null)
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -364,9 +416,27 @@ export default function ClientesPage() {
                   </div>
 
                   <div className="hidden sm:block text-center px-4">
-                    <p className="text-lg font-semibold text-foreground">{cliente.totalVisitas}</p>
-                    <p className="text-xs text-muted-foreground">visitas</p>
+                    {cliente.loyaltyStatus?.enabled ? (
+                      <>
+                        <p className="text-lg font-semibold text-foreground tabular-nums">
+                          {cliente.loyaltyStatus.current_visits}/{cliente.loyaltyStatus.visits_required}
+                        </p>
+                        <p className="text-xs text-muted-foreground">fidelidade</p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-lg font-semibold text-foreground">{cliente.totalVisitas}</p>
+                        <p className="text-xs text-muted-foreground">visitas</p>
+                      </>
+                    )}
                   </div>
+
+                  {cliente.loyaltyStatus?.reward_available ? (
+                    <span className="hidden md:inline-flex items-center gap-1 rounded-full bg-green-500/15 px-2 py-1 text-xs font-semibold text-green-600 shrink-0">
+                      <Gift className="h-3.5 w-3.5" />
+                      Recompensa
+                    </span>
+                  ) : null}
 
                   <div className="hidden md:block text-center px-4">
                     <p className="text-lg font-semibold text-primary">
@@ -414,10 +484,29 @@ export default function ClientesPage() {
                 </div>
               </div>
 
+              {clienteSelecionado.loyaltyStatus?.enabled ? (
+                <div className="space-y-3">
+                  <LoyaltyCard status={clienteSelecionado.loyaltyStatus} compact />
+                  {clienteSelecionado.loyaltyStatus.reward_available ? (
+                    <Button
+                      type="button"
+                      className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+                      disabled={redeemBusyId === clienteSelecionado.id}
+                      onClick={() => void handleRedeemLoyalty(clienteSelecionado.id)}
+                    >
+                      <Gift className="w-4 h-4 mr-2" />
+                      {redeemBusyId === clienteSelecionado.id
+                        ? "Registrando…"
+                        : "Marcar recompensa como utilizada"}
+                    </Button>
+                  ) : null}
+                </div>
+              ) : null}
+
               <div className="grid grid-cols-3 gap-4">
                 <div className="text-center p-3 bg-secondary/50 rounded-lg">
                   <p className="text-2xl font-bold text-foreground">{clienteSelecionado.totalVisitas}</p>
-                  <p className="text-xs text-muted-foreground">Visitas</p>
+                  <p className="text-xs text-muted-foreground">Visitas (histórico)</p>
                 </div>
                 <div className="text-center p-3 bg-secondary/50 rounded-lg">
                   <p className="text-2xl font-bold text-primary">

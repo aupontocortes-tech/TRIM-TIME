@@ -59,6 +59,8 @@ import { isSlotPastGraceFromYmd } from "@/lib/appointment-reminder-time"
 import { normalizePublicOtpCode } from "@/lib/public-otp-code"
 import { ClientOAuthButtons } from "@/components/auth/client-oauth-buttons"
 import { ClientUnitPicker } from "@/components/booking/client-unit-picker"
+import { LoyaltyCard } from "@/components/loyalty/loyalty-card"
+import type { LoyaltyClientStatus } from "@/lib/db/types"
 import { useWaitlist } from "@/hooks/use-waitlist"
 import { WaitlistCard } from "@/components/booking/waitlist-card"
 import {
@@ -216,6 +218,9 @@ type PublicShopPayload = {
   /** Plano Pro/Premium: lista de espera ativa. */
   waitlist_enabled?: boolean
   waitlist_accept_deadline_minutes?: number | null
+  loyalty_enabled?: boolean
+  loyalty_reward_label?: string | null
+  loyalty_visits_required?: number | null
   units: PublicUnit[]
   services: { id: string; name: string; description?: string; price: number; duration: number }[]
   barbers: {
@@ -317,6 +322,7 @@ export default function BarbeariaPage() {
   const [publicMeta, setPublicMeta] = useState<PublicShopPayload | null>(null)
   const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null)
   const [occupiedTimes, setOccupiedTimes] = useState<string[]>([])
+  const [loyaltyStatus, setLoyaltyStatus] = useState<LoyaltyClientStatus | null>(null)
 
   const waitlist = useWaitlist(
     slug,
@@ -373,6 +379,32 @@ export default function BarbeariaPage() {
       cancelled = true
     }
   }, [slug])
+
+  useEffect(() => {
+    if (authPhase !== "logado" || !publicMeta?.loyalty_enabled) {
+      setLoyaltyStatus(null)
+      return
+    }
+    let cancelled = false
+    fetch(`/api/public/barbershops/${encodeURIComponent(slug)}/loyalty`, {
+      credentials: "include",
+      cache: "no-store",
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { loyalty?: LoyaltyClientStatus; active?: boolean } | null) => {
+        if (!cancelled && data?.active && data.loyalty?.enabled) {
+          setLoyaltyStatus(data.loyalty)
+        } else if (!cancelled) {
+          setLoyaltyStatus(null)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setLoyaltyStatus(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [authPhase, slug, publicMeta?.loyalty_enabled, clienteLogado?.id])
 
   /* Polling da waitlist agora é gerenciado pelo hook useWaitlist */
 
@@ -2543,6 +2575,12 @@ export default function BarbeariaPage() {
           </div>
         </div>
       </div>
+
+      {authPhase === "logado" && loyaltyStatus ? (
+        <div className="max-w-2xl mx-auto px-4 mb-6">
+          <LoyaltyCard status={loyaltyStatus} />
+        </div>
+      ) : null}
 
       {authPhase === "logado" && bookingSummary && !agendamentoConfirmado && !isRemarcando ? (
         <div className="max-w-2xl mx-auto px-4 mb-6 space-y-3">

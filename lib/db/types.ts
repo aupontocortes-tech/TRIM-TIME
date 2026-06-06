@@ -53,6 +53,30 @@ export type BarbershopNotificationSettings = {
   whatsapp_meta_template_post_service?: string
 }
 
+/** Programa de fidelidade configurável pelo dono (plano Premium). */
+export type BarbershopLoyaltyProgram = {
+  enabled: boolean
+  /** Visitas concluídas necessárias para liberar a recompensa. */
+  visits_required: number
+  /** Texto exibido ao cliente (ex.: Corte grátis). */
+  reward_label: string
+  reward_kind: "service" | "product"
+  reward_service_id?: string | null
+  reward_product_id?: string | null
+}
+
+/** Status de fidelidade de um cliente (API / UI). */
+export type LoyaltyClientStatus = {
+  enabled: boolean
+  current_visits: number
+  visits_required: number
+  visits_remaining: number
+  progress_percent: number
+  reward_available: boolean
+  reward_label: string
+  reward_kind?: "service" | "product"
+}
+
 export type BarbershopSettings = {
   address?: string
   city?: string
@@ -65,6 +89,7 @@ export type BarbershopSettings = {
   notification_settings?: BarbershopNotificationSettings
   /** Minutos para aceitar vaga após notificação da lista de espera (padrão 15). */
   waitlist_accept_deadline_minutes?: number
+  loyalty_program?: BarbershopLoyaltyProgram | null
 }
 
 export interface Barbershop {

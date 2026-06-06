@@ -8,6 +8,7 @@ import { hasFeature } from "@/lib/plans"
 import { getWaitlistAcceptDeadlineMinutes } from "@/lib/waitlist-service"
 import { normalizeGoogleMapsUrl } from "@/lib/google-maps-url"
 import { loadUnitMapsUrlByBarbershopId } from "@/lib/barbershop-unit-maps"
+import { isLoyaltyProgramActive, parseLoyaltyProgram } from "@/lib/loyalty-program"
 
 /**
  * Dados públicos da barbearia (sem auth) — nome, contato/endereço da conta + unidades ativas.
@@ -74,6 +75,8 @@ export async function GET(
 
     const plan = await resolveEffectivePlanForBarbershop(b.id)
     const waitlist_enabled = !!(plan && hasFeature(plan, "waiting_list"))
+    const loyaltyConfig = parseLoyaltyProgram(settings)
+    const loyalty_enabled = isLoyaltyProgramActive(settings, plan)
 
     const serviceRows = await fetchServicesForBarbershopRaw(b.id, {
       activeOnly: true,
@@ -105,6 +108,9 @@ export async function GET(
       waitlist_accept_deadline_minutes: waitlist_enabled
         ? getWaitlistAcceptDeadlineMinutes(settings)
         : null,
+      loyalty_enabled,
+      loyalty_reward_label: loyalty_enabled ? loyaltyConfig?.reward_label ?? null : null,
+      loyalty_visits_required: loyalty_enabled ? loyaltyConfig?.visits_required ?? null : null,
       units: b.units.map((u) => ({
         id: u.id,
         name: u.name,
