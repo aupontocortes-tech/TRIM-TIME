@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo, useRef } from "react"
+import { useState, useEffect, useMemo, useRef, useCallback } from "react"
 import { useParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -383,31 +383,46 @@ export default function BarbeariaPage() {
     }
   }, [slug])
 
-  useEffect(() => {
+  const refreshLoyaltyStatus = useCallback(async () => {
     if (authPhase !== "logado" || !publicMeta?.loyalty_enabled) {
       setLoyaltyStatus(null)
       return
     }
-    let cancelled = false
-    fetch(`/api/public/barbershops/${encodeURIComponent(slug)}/loyalty`, {
-      credentials: "include",
-      cache: "no-store",
-    })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data: { loyalty?: LoyaltyClientStatus; active?: boolean } | null) => {
-        if (!cancelled && data?.active && data.loyalty?.enabled) {
-          setLoyaltyStatus(data.loyalty)
-        } else if (!cancelled) {
-          setLoyaltyStatus(null)
-        }
+    try {
+      const res = await fetch(`/api/public/barbershops/${encodeURIComponent(slug)}/loyalty`, {
+        credentials: "include",
+        cache: "no-store",
       })
-      .catch(() => {
-        if (!cancelled) setLoyaltyStatus(null)
-      })
-    return () => {
-      cancelled = true
+      const data = (res.ok ? await res.json() : null) as {
+        loyalty?: LoyaltyClientStatus
+        active?: boolean
+      } | null
+      if (data?.active && data.loyalty?.enabled) {
+        setLoyaltyStatus(data.loyalty)
+      } else {
+        setLoyaltyStatus(null)
+      }
+    } catch {
+      setLoyaltyStatus(null)
     }
-  }, [authPhase, slug, publicMeta?.loyalty_enabled, clienteLogado?.id])
+  }, [authPhase, slug, publicMeta?.loyalty_enabled])
+
+  useEffect(() => {
+    void refreshLoyaltyStatus()
+  }, [refreshLoyaltyStatus, clienteLogado?.id])
+
+  useEffect(() => {
+    if (authPhase !== "logado" || !publicMeta?.loyalty_enabled) return
+    const intervalId = window.setInterval(() => void refreshLoyaltyStatus(), 45_000)
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void refreshLoyaltyStatus()
+    }
+    document.addEventListener("visibilitychange", onVisible)
+    return () => {
+      window.clearInterval(intervalId)
+      document.removeEventListener("visibilitychange", onVisible)
+    }
+  }, [authPhase, publicMeta?.loyalty_enabled, refreshLoyaltyStatus])
 
   /* Polling da waitlist agora é gerenciado pelo hook useWaitlist */
 

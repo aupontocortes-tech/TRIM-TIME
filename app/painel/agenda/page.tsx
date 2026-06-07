@@ -1,6 +1,11 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
+import { useBarbershop } from "@/hooks/use-barbershop"
+import { computeClientLoyaltyStatus, parseLoyaltyProgram } from "@/lib/loyalty-program"
+import { hasFeature } from "@/lib/plans"
+import { LoyaltyAgendaBadge } from "@/components/loyalty/loyalty-agenda-badge"
+import type { LoyaltyClientStatus } from "@/lib/db/types"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -205,7 +210,12 @@ function mapAgendaItem(appointment: Appointment): AgendaItem {
 }
 
 export default function AgendaPage() {
+  const { barbershop, plan } = useBarbershop()
   const { units, selectedUnitId, unitScopeVersion, changeUnit, loading: unitsLoading } = useUnits()
+  const loyaltyConfig =
+    plan && hasFeature(plan, "loyalty_program")
+      ? parseLoyaltyProgram(barbershop?.settings ?? null)
+      : null
   const needsUnitPick = units.length > 1 && !selectedUnitId
   const [secaoAgenda, setSecaoAgenda] = useState<"agenda" | "lista_espera">("agenda")
   const [waitlistRows, setWaitlistRows] = useState<WaitingListItem[]>([])
@@ -255,6 +265,24 @@ export default function AgendaPage() {
   const profissionais = useMemo(
     () => ["Todos", ...barbersForUnit.filter((b) => b.active).map((b) => b.name)],
     [barbersForUnit]
+  )
+
+  const loyaltyByClientId = useMemo(() => {
+    const map = new Map<string, LoyaltyClientStatus>()
+    if (!loyaltyConfig) return map
+    for (const client of clients) {
+      map.set(client.id, computeClientLoyaltyStatus(client.loyalty_points ?? 0, loyaltyConfig))
+    }
+    return map
+  }, [clients, loyaltyConfig])
+
+  const loyaltyForAppointment = useCallback(
+    (clientId: string | null | undefined): LoyaltyClientStatus | null => {
+      if (!clientId) return null
+      const status = loyaltyByClientId.get(clientId)
+      return status?.enabled ? status : null
+    },
+    [loyaltyByClientId]
   )
 
   const carregarListaEspera = useCallback(async (view: "active" | "history" = waitlistView) => {
@@ -478,6 +506,18 @@ export default function AgendaPage() {
       else if (payload.status === "canceled") setFeedback("Agendamento cancelado.")
       else setFeedback("Agendamento atualizado com sucesso.")
       await carregarAgendamentos()
+      if (payload.status === "completed" && !needsUnitPick) {
+        try {
+          const clientsRes = await fetch(clientsListUrl(selectedUnitId), {
+            credentials: "include",
+            cache: "no-store",
+          })
+          const clientsData = clientsRes.ok ? await clientsRes.json() : []
+          setClients(Array.isArray(clientsData) ? (clientsData as Client[]) : [])
+        } catch {
+          /* saldo de fidelidade atualiza na próxima carga */
+        }
+      }
       if (agendamentoSelecionado?.id === appointmentId) {
         setAgendamentoSelecionado(mapAgendaItem(data as Appointment))
       }
@@ -1190,8 +1230,12 @@ export default function AgendaPage() {
                             <p className="text-xs text-muted-foreground">{agendamento.duracao}min</p>
                           </div>
                           <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1">
+                            <div className="flex items-center gap-2 mb-1 flex-wrap">
                               <p className="font-medium text-foreground truncate">{agendamento.cliente}</p>
+                              {(() => {
+                                const loyalty = loyaltyForAppointment(agendamento.raw.client_id)
+                                return loyalty ? <LoyaltyAgendaBadge status={loyalty} /> : null
+                              })()}
                               <span className="text-xs text-muted-foreground px-2 py-0.5 bg-secondary rounded">
                                 {agendamento.profissional}
                               </span>
@@ -1247,8 +1291,12 @@ export default function AgendaPage() {
                   </div>
 
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <p className="font-medium text-foreground truncate">{agendamento.cliente}</p>
+                      {(() => {
+                        const loyalty = loyaltyForAppointment(agendamento.raw.client_id)
+                        return loyalty ? <LoyaltyAgendaBadge status={loyalty} /> : null
+                      })()}
                       <span className="text-xs text-muted-foreground px-2 py-0.5 bg-secondary rounded">
                         {agendamento.profissional}
                       </span>
@@ -1355,8 +1403,14 @@ export default function AgendaPage() {
                         <User className="h-7 w-7" />
                       </AvatarFallback>
                     </Avatar>
-                    <div className="min-w-0">
-                      <p className="truncate font-semibold text-foreground">{agendamentoSelecionado.cliente}</p>
+                    <div className="min-w-0 space-y-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="truncate font-semibold text-foreground">{agendamentoSelecionado.cliente}</p>
+                        {(() => {
+                          const loyalty = loyaltyForAppointment(agendamentoSelecionado.raw.client_id)
+                          return loyalty ? <LoyaltyAgendaBadge status={loyalty} /> : null
+                        })()}
+                      </div>
                       {agendamentoSelecionado.telefone ? (
                         <a
                           href={`tel:${agendamentoSelecionado.telefone}`}
