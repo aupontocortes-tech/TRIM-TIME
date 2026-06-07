@@ -317,9 +317,8 @@ export async function PATCH(request: Request) {
     }
     if (body.settings?.loyalty_program !== undefined) {
       const plan = await resolveEffectivePlanForActiveSession(barbershopId)
-      const { validateLoyaltyProgramInput, assertLoyaltyRewardRefs } = await import(
-        "@/lib/loyalty-program"
-      )
+      const { validateLoyaltyProgramInput } = await import("@/lib/loyalty-program")
+      const { assertLoyaltyRewardRefs } = await import("@/lib/loyalty-program-server")
       const loyaltyInput = body.settings.loyalty_program ?? {
         enabled: false,
         visits_required: 10,

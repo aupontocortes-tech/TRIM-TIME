@@ -3,7 +3,7 @@ import { requireBarbershopId } from "@/lib/tenant"
 import { prisma } from "@/lib/prisma"
 import type { BarbershopSettings } from "@/lib/db/types"
 import { resolveEffectivePlanForActiveSession } from "@/lib/barbershop-effective-plan-server"
-import { redeemLoyaltyReward } from "@/lib/loyalty-program"
+import { redeemLoyaltyReward } from "@/lib/loyalty-program-server"
 
 export async function POST(
   _request: Request,

@@ -59,7 +59,10 @@ import { isSlotPastGraceFromYmd } from "@/lib/appointment-reminder-time"
 import { normalizePublicOtpCode } from "@/lib/public-otp-code"
 import { ClientOAuthButtons } from "@/components/auth/client-oauth-buttons"
 import { ClientUnitPicker } from "@/components/booking/client-unit-picker"
-import { LoyaltyCard } from "@/components/loyalty/loyalty-card"
+import {
+  LoyaltyGuestHint,
+  LoyaltyProgressStrip,
+} from "@/components/loyalty/loyalty-progress-strip"
 import type { LoyaltyClientStatus } from "@/lib/db/types"
 import { useWaitlist } from "@/hooks/use-waitlist"
 import { WaitlistCard } from "@/components/booking/waitlist-card"
@@ -1772,6 +1775,16 @@ export default function BarbeariaPage() {
                 {displayNome} — confirme o acesso com o botão <strong className="text-foreground">Google</strong>{" "}
                 abaixo ou com um <strong className="text-foreground">código de 6 dígitos</strong> no e-mail.
               </p>
+              {publicMeta?.loyalty_enabled &&
+              publicMeta.loyalty_reward_label &&
+              publicMeta.loyalty_visits_required ? (
+                <LoyaltyGuestHint
+                  rewardLabel={publicMeta.loyalty_reward_label}
+                  visitsRequired={publicMeta.loyalty_visits_required}
+                  showLoginLink
+                  onLoginClick={() => setAuthPhase("login")}
+                />
+              ) : null}
               {!oauthPendingComplete ? (
                 <ClientOAuthButtons
                   slug={slug}
@@ -2129,6 +2142,14 @@ export default function BarbeariaPage() {
                   ? "Informe o e-mail para receber um código de 6 dígitos (contas sem senha)."
                   : "Entre com Google, ou use o e-mail e a senha da sua conta."}
               </p>
+              {publicMeta?.loyalty_enabled &&
+              publicMeta.loyalty_reward_label &&
+              publicMeta.loyalty_visits_required ? (
+                <LoyaltyGuestHint
+                  rewardLabel={publicMeta.loyalty_reward_label}
+                  visitsRequired={publicMeta.loyalty_visits_required}
+                />
+              ) : null}
               <ClientOAuthButtons slug={slug} mode="login" disabled={authLoading} />
               {!loginWithEmailCode ? (
                 <p className="text-xs text-muted-foreground text-center mt-2 mb-4 leading-snug">
@@ -2558,7 +2579,7 @@ export default function BarbeariaPage() {
               <span>{displayCityLine}</span>
             </div>
           </div>
-          <div className="flex flex-wrap gap-4 text-sm text-muted-foreground mb-6">
+          <div className="flex flex-wrap gap-4 text-sm text-muted-foreground mb-4">
             {displayPhone ? (
               <a
                 href={`tel:${displayPhone.replace(/\D/g, "")}`}
@@ -2573,14 +2594,12 @@ export default function BarbeariaPage() {
               <span>{displayHorarioFuncionamento ?? "—"}</span>
             </div>
           </div>
+
+          {authPhase === "logado" && loyaltyStatus?.enabled ? (
+            <LoyaltyProgressStrip status={loyaltyStatus} />
+          ) : null}
         </div>
       </div>
-
-      {authPhase === "logado" && loyaltyStatus ? (
-        <div className="max-w-2xl mx-auto px-4 mb-6">
-          <LoyaltyCard status={loyaltyStatus} />
-        </div>
-      ) : null}
 
       {authPhase === "logado" && bookingSummary && !agendamentoConfirmado && !isRemarcando ? (
         <div className="max-w-2xl mx-auto px-4 mb-6 space-y-3">

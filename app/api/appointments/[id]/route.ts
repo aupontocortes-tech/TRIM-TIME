@@ -23,7 +23,7 @@ import {
   primaryServiceIdFromAppointment,
 } from "@/lib/waitlist-service"
 import type { BarbershopSettings } from "@/lib/db/types"
-import { creditLoyaltyVisitForAppointment } from "@/lib/loyalty-program"
+import { creditLoyaltyVisitForAppointment } from "@/lib/loyalty-program-server"
 
 function mergeServiceLineQuantities(rows: unknown): { order: string[]; qty: Map<string, number> } {
   const qty = new Map<string, number>()
