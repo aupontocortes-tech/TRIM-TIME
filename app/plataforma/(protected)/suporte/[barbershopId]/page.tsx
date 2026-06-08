@@ -5,7 +5,8 @@ import { useParams, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
-import { ArrowLeft } from "lucide-react"
+import Link from "next/link"
+import { ArrowLeft, Wallet } from "lucide-react"
 
 type Msg = {
   id: string
@@ -78,7 +79,21 @@ export default function PlataformaSuporteChatPage() {
           Voltar
         </Button>
       </div>
-      <h1 className="text-xl font-bold text-white">Conversa</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-xl font-bold text-white">Conversa</h1>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="border-[#D4AF37]/40 text-[#D4AF37] hover:bg-[#D4AF37]/10"
+          asChild
+        >
+          <Link href={`/plataforma/financeiro?barbershop_id=${encodeURIComponent(barbershopId)}`}>
+            <Wallet className="w-4 h-4 mr-1" />
+            Cobranças / estorno
+          </Link>
+        </Button>
+      </div>
       {error ? <div className="rounded-lg border border-red-500/30 bg-red-950/40 p-3 text-sm text-red-200">{error}</div> : null}
 
       <Card className="bg-zinc-950 border-[#D4AF37]/35 min-h-[320px] flex flex-col">

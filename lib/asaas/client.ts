@@ -183,6 +183,26 @@ export async function getAsaasPayment(paymentId: string): Promise<AsaasPayment> 
   return asaasFetch<AsaasPayment>(`/payments/${paymentId}`)
 }
 
+export type AsaasRefundResult = {
+  id: string
+  status: string
+  value: number
+  description?: string
+}
+
+export async function refundAsaasPayment(
+  paymentId: string,
+  input?: { value?: number; description?: string }
+): Promise<AsaasRefundResult> {
+  return asaasFetch<AsaasRefundResult>(`/payments/${paymentId}/refund`, {
+    method: "POST",
+    body: JSON.stringify({
+      ...(input?.value != null ? { value: input.value } : {}),
+      ...(input?.description ? { description: input.description } : {}),
+    }),
+  })
+}
+
 export type CreditCardTokenizeResult = {
   creditCardToken: string
   creditCardNumber?: string

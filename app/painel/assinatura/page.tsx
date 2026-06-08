@@ -11,6 +11,7 @@ import type { SubscriptionPlan, SubscriptionStatus } from "@/lib/db/types"
 import type { PlanCatalog } from "@/lib/plan-catalog"
 import { TrialBillingTrust } from "@/components/onboarding/trial-billing-trust"
 import { SignupBillingFlow } from "@/components/billing/signup-billing-flow"
+import { PixPaymentPanel } from "@/components/billing/pix-payment-panel"
 import { TRIAL_DAYS } from "@/lib/plans"
 
 type BillingSubscription = {
@@ -55,6 +56,11 @@ function AssinaturaContent() {
   const [checkoutLoading, setCheckoutLoading] = useState(false)
   const [cancelLoading, setCancelLoading] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
+  const [pixPending, setPixPending] = useState<{
+    amount: number
+    pixCopyPaste: string | null
+    pixQrCode: string | null
+  } | null>(null)
 
   const trialLengthDays = catalog?.trialDays ?? TRIAL_DAYS
 
@@ -160,10 +166,6 @@ function AssinaturaContent() {
         setErr(j.error || "Erro ao processar")
         return
       }
-      if (action === "accept" && j.paymentUrl) {
-        window.location.href = j.paymentUrl
-        return
-      }
       if (action === "decline") {
         setMsg("Você optou por não continuar. Nenhuma cobrança foi feita.")
       } else {
@@ -182,9 +184,14 @@ function AssinaturaContent() {
       setErr("Pagamento online não está ativo. Ative a API de pagamento no Super ADM e configure ASAAS_API_KEY.")
       return
     }
+    if (billingType === "CREDIT_CARD" && !cardComplete) {
+      setErr("Cadastre o cartão no formulário acima antes de contratar com cartão.")
+      return
+    }
     setCheckoutLoading(true)
     setErr(null)
     setMsg(null)
+    setPixPending(null)
     try {
       const r = await fetch("/api/billing/checkout", {
         method: "POST",
@@ -197,17 +204,19 @@ function AssinaturaContent() {
         setErr(j.error || "Erro ao iniciar pagamento")
         return
       }
-      if (j.paymentUrl) {
-        window.location.href = j.paymentUrl
+      if (billingType === "PIX" && (j.pixCopyPaste || j.pixQrCode)) {
+        const amount = catalog?.plans[selectedPlan]?.price ?? 0
+        setPixPending({
+          amount,
+          pixCopyPaste: j.pixCopyPaste ?? null,
+          pixQrCode: j.pixQrCode ?? null,
+        })
+        setMsg("Pague o PIX abaixo. O plano ativa automaticamente após a confirmação.")
+        void load()
         return
       }
-      if (j.pixCopyPaste) {
-        try {
-          await navigator.clipboard.writeText(j.pixCopyPaste)
-          setMsg("Código PIX copiado. Cole no app do seu banco.")
-        } catch {
-          setMsg(`PIX: ${j.pixCopyPaste}`)
-        }
+      if (billingType === "CREDIT_CARD") {
+        setMsg("Cobrança enviada ao cartão cadastrado. Aguarde a confirmação do pagamento.")
       } else {
         setMsg("Assinatura criada. Aguarde a confirmação do pagamento.")
       }
@@ -234,11 +243,7 @@ function AssinaturaContent() {
         setErr(j.error || "Erro ao alterar plano")
         return
       }
-      if (j.paymentUrl) {
-        window.location.href = j.paymentUrl
-        return
-      }
-      setMsg("Plano atualizado.")
+      setMsg("Plano atualizado. Cobrança processada no cartão ou PIX cadastrado.")
       void load()
     } catch {
       setErr("Erro de rede")
@@ -467,6 +472,15 @@ function AssinaturaContent() {
         </div>
       ) : null}
 
+      {pixPending ? (
+        <PixPaymentPanel
+          amount={pixPending.amount}
+          pixCopyPaste={pixPending.pixCopyPaste}
+          pixQrCode={pixPending.pixQrCode}
+          onClose={() => setPixPending(null)}
+        />
+      ) : null}
+
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Resumo</CardTitle>
@@ -577,7 +591,7 @@ function AssinaturaContent() {
               Contratar plano
             </Button>
             <p className="text-xs text-muted-foreground text-center">
-              Pagamento processado com segurança pelo Asaas. Não armazenamos dados do cartão.
+              Cartão: cadastro e cobrança no Trim Time (Asaas em segundo plano). PIX: QR e código aqui no app.
             </p>
           </CardContent>
         </Card>
