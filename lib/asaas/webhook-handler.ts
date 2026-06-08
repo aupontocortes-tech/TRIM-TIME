@@ -13,6 +13,19 @@ type WebhookPayload = {
     value?: number
     externalReference?: string
   }
+  authorization?: {
+    id?: string
+    status?: string
+    customerId?: string
+    subscriptionId?: string
+    value?: number
+  }
+  paymentInstruction?: {
+    id?: string
+    status?: string
+    payment?: string
+    authorization?: { id?: string }
+  }
 }
 
 const ACTIVE_PAYMENT = new Set([
@@ -33,6 +46,12 @@ const CARD_SETUP_EVENTS = new Set([
   "PAYMENT_CONFIRMED",
   "PAYMENT_RECEIVED",
   "SUBSCRIPTION_CREATED",
+])
+
+const PIX_AUTH_CANCELLED = new Set([
+  "PIX_AUTOMATIC_RECURRING_AUTHORIZATION_CANCELLED",
+  "PIX_AUTOMATIC_RECURRING_AUTHORIZATION_EXPIRED",
+  "PIX_AUTOMATIC_RECURRING_AUTHORIZATION_REFUSED",
 ])
 
 function planFromExternalRef(ref: string | undefined): SubscriptionPlan | null {
@@ -66,9 +85,66 @@ async function findSubscriptionByAsaas(
   return null
 }
 
+async function findSubscriptionByPixAuth(
+  authId: string | undefined,
+  customerId: string | undefined
+) {
+  if (authId) {
+    const byAuth = await prisma.subscription.findFirst({
+      where: { asaasPixAutomaticAuthId: authId },
+    })
+    if (byAuth) return byAuth
+  }
+  if (customerId) {
+    return prisma.subscription.findFirst({ where: { asaasCustomerId: customerId } })
+  }
+  return null
+}
+
+async function handlePixAutomaticWebhook(payload: WebhookPayload): Promise<void> {
+  const event = payload.event ?? ""
+  const auth = payload.authorization
+  const authId = auth?.id ?? payload.paymentInstruction?.authorization?.id
+
+  if (event === "PIX_AUTOMATIC_RECURRING_AUTHORIZATION_ACTIVATED" && auth) {
+    const sub = await findSubscriptionByPixAuth(auth.id, auth.customerId)
+    if (sub) {
+      await prisma.subscription.update({
+        where: { id: sub.id },
+        data: {
+          asaasPixAutomaticAuthId: auth.id ?? sub.asaasPixAutomaticAuthId,
+          asaasSubscriptionId: auth.subscriptionId ?? sub.asaasSubscriptionId,
+          asaasCustomerId: auth.customerId ?? sub.asaasCustomerId,
+          billingType: "PIX",
+        },
+      })
+    }
+    return
+  }
+
+  if (PIX_AUTH_CANCELLED.has(event)) {
+    const sub = await findSubscriptionByPixAuth(authId, auth?.customerId)
+    if (sub) {
+      await prisma.subscription.update({
+        where: { id: sub.id },
+        data: {
+          status: "canceled" satisfies SubscriptionStatus,
+          nextPayment: null,
+          asaasPixAutomaticAuthId: null,
+        },
+      })
+    }
+  }
+}
+
 export async function handleAsaasWebhook(payload: WebhookPayload): Promise<void> {
   const event = payload.event ?? ""
   const payment = payload.payment
+
+  if (event.startsWith("PIX_AUTOMATIC_")) {
+    await handlePixAutomaticWebhook(payload)
+    if (!payment?.id) return
+  }
 
   if (CARD_SETUP_EVENTS.has(event) && payment?.subscription) {
     const subRow = await findSubscriptionByAsaas(

@@ -190,6 +190,53 @@ export type AsaasRefundResult = {
   description?: string
 }
 
+export type PixAutomaticAuthorization = {
+  id: string
+  status: string
+  customerId: string
+  subscriptionId?: string | null
+  value?: number
+  payload?: string | null
+  encodedImage?: string | null
+  immediateQrCode?: {
+    conciliationIdentifier?: string
+    expirationDate?: string
+  } | null
+}
+
+export async function createPixAutomaticAuthorization(input: {
+  customerId: string
+  frequency: "MONTHLY"
+  contractId: string
+  startDate: string
+  value: number
+  description: string
+  paymentCreationMode?: "SUBSCRIPTION" | "MANUAL"
+  immediateQrCode: {
+    expirationSeconds: number
+    originalValue: number
+    description: string
+  }
+}): Promise<PixAutomaticAuthorization> {
+  return asaasFetch<PixAutomaticAuthorization>("/pix/automatic/authorizations", {
+    method: "POST",
+    body: JSON.stringify({
+      customerId: input.customerId,
+      frequency: input.frequency,
+      contractId: input.contractId,
+      startDate: input.startDate,
+      value: input.value,
+      description: input.description,
+      paymentCreationMode: input.paymentCreationMode ?? "SUBSCRIPTION",
+      immediateQrCode: input.immediateQrCode,
+    }),
+  })
+}
+
+export async function cancelPixAutomaticAuthorization(authorizationId: string): Promise<void> {
+  await asaasFetch(`/pix/automatic/authorizations/${authorizationId}`, { method: "DELETE" })
+}
+
 export async function refundAsaasPayment(
   paymentId: string,
   input?: { value?: number; description?: string }

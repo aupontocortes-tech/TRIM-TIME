@@ -295,6 +295,8 @@ model Subscription {
   nextPayment         DateTime?          @map("next_payment") @db.Timestamptz
   asaasCustomerId     String?            @map("asaas_customer_id")
   asaasSubscriptionId String?            @map("asaas_subscription_id")
+  /// Autorização Pix Automático (cobrança recorrente debitada no banco do pagador).
+  asaasPixAutomaticAuthId String?        @map("asaas_pix_automatic_auth_id")
   billingType         String?            @map("billing_type")
   /// Cartão cadastrado no Asaas (obrigatório durante o trial com billing ativo).
   cardSetupAt         DateTime?          @map("card_setup_at") @db.Timestamptz
