@@ -11,6 +11,7 @@ import type { SubscriptionPlan, SubscriptionStatus } from "@/lib/db/types"
 import type { PlanCatalog } from "@/lib/plan-catalog"
 import { TrialBillingTrust } from "@/components/onboarding/trial-billing-trust"
 import { SignupBillingFlow } from "@/components/billing/signup-billing-flow"
+import { TrialCardForm } from "@/components/billing/trial-card-form"
 import { PixPaymentPanel } from "@/components/billing/pix-payment-panel"
 import { TRIAL_DAYS } from "@/lib/plans"
 
@@ -169,7 +170,7 @@ function AssinaturaContent() {
       if (action === "decline") {
         setMsg("Você optou por não continuar. Nenhuma cobrança foi feita.")
       } else {
-        setMsg("Plano ativado. Bem-vindo!")
+        setMsg("Cobrança agendada no cartão cadastrado. O plano ativa após a confirmação do pagamento.")
       }
       void load()
     } catch {
@@ -566,7 +567,10 @@ function AssinaturaContent() {
                 type="button"
                 variant={billingType === "CREDIT_CARD" ? "default" : "outline"}
                 size="sm"
-                onClick={() => setBillingType("CREDIT_CARD")}
+                onClick={() => {
+                  setBillingType("CREDIT_CARD")
+                  setPixPending(null)
+                }}
               >
                 <CreditCard className="w-4 h-4 mr-1" />
                 Cartão
@@ -582,16 +586,44 @@ function AssinaturaContent() {
               </Button>
             </div>
 
+            {billingType === "CREDIT_CARD" && !cardComplete && billingEnabled ? (
+              <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-3">
+                <p className="text-sm font-medium">Cadastre o cartão para contratar</p>
+                <p className="text-xs text-muted-foreground">
+                  Preencha os dados abaixo. Depois clique em &quot;Contratar plano&quot; para processar a cobrança.
+                </p>
+                <TrialCardForm
+                  mode="immediate"
+                  plan={selectedPlan}
+                  catalog={catalog}
+                  onSuccess={handleCardFormSuccess}
+                  onError={setErr}
+                />
+              </div>
+            ) : null}
+
+            {billingType === "PIX" ? (
+              <p className="text-xs text-muted-foreground rounded-md border border-dashed p-3">
+                Clique em <strong>Contratar plano</strong> para gerar o QR Code e o código PIX nesta página.
+              </p>
+            ) : null}
+
             <Button
               className="w-full"
               onClick={() => void handleCheckout()}
-              disabled={checkoutLoading}
+              disabled={
+                checkoutLoading ||
+                (billingType === "CREDIT_CARD" && !cardComplete) ||
+                !billingEnabled
+              }
             >
               {checkoutLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
               Contratar plano
             </Button>
             <p className="text-xs text-muted-foreground text-center">
-              Cartão: cadastro e cobrança no Trim Time (Asaas em segundo plano). PIX: QR e código aqui no app.
+              {billingEnabled
+                ? "Cartão: cadastre acima e confirme a cobrança. PIX: o QR aparece após clicar em Contratar plano."
+                : "Cobrança online inativa — configure ASAAS_API_KEY e PAYMENT_API_ENABLED."}
             </p>
           </CardContent>
         </Card>

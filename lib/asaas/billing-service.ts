@@ -194,17 +194,9 @@ export async function changeSubscriptionPlan(
     }
   }
 
-  const nextPayment = addMonths(new Date(), 1)
-  await prisma.subscription.update({
-    where: { barbershopId },
-    data: {
-      plan: newPlan,
-      status: "active",
-      trialEnd: null,
-      nextPayment,
-    },
-  })
-  return { ok: true, plan: newPlan }
+  throw new Error(
+    "Pagamento online não está ativo. Ative a cobrança em Configurações da plataforma antes de alterar o plano."
+  )
 }
 
 export async function cancelBarbershopSubscription(barbershopId: string): Promise<void> {
@@ -545,7 +537,7 @@ async function subscribeAfterTrialDecision(
       where: { barbershopId },
       data: {
         plan,
-        status: chargeImmediately ? "past_due" : "active",
+        status: "past_due",
         postTrialChoice: "accepted",
         trialEnd: null,
         nextPayment: chargeImmediately ? null : nextPayment,
@@ -559,17 +551,9 @@ async function subscribeAfterTrialDecision(
     }
   }
 
-  await prisma.subscription.update({
-    where: { barbershopId },
-    data: {
-      plan,
-      status: "active",
-      postTrialChoice: "accepted",
-      trialEnd: null,
-      nextPayment,
-    },
-  })
-  return { ok: true }
+  throw new Error(
+    "Pagamento online não está ativo. Ative a cobrança em Configurações da plataforma antes de contratar."
+  )
 }
 
 /** Cancela teste grátis antes da cobrança automática (sem débito). */

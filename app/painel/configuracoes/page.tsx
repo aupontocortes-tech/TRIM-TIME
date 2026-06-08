@@ -3454,17 +3454,28 @@ export default function ConfiguracoesPage() {
                           ))}
                         </ul>
                         <p className="mt-2 text-[11px] text-primary/90 font-medium">Ver plano completo →</p>
-                        <Button
-                          type="button"
-                          className="w-full mt-3 bg-primary text-primary-foreground hover:bg-primary/90"
-                          disabled={subscriptionBusy || isCurrent}
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            void handleChoosePlan(planOption)
-                          }}
-                        >
-                          {actionLabel}
-                        </Button>
+                        {managedByBilling && !isCurrent ? (
+                          <Button
+                            type="button"
+                            className="w-full mt-3 bg-primary text-primary-foreground hover:bg-primary/90"
+                            asChild
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <Link href="/painel/assinatura">Contratar plano</Link>
+                          </Button>
+                        ) : (
+                          <Button
+                            type="button"
+                            className="w-full mt-3 bg-primary text-primary-foreground hover:bg-primary/90"
+                            disabled={subscriptionBusy || isCurrent}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              void handleChoosePlan(planOption)
+                            }}
+                          >
+                            {actionLabel}
+                          </Button>
+                        )}
                       </div>
                     )
                   })}
@@ -3508,7 +3519,17 @@ export default function ConfiguracoesPage() {
                             : managedByBilling
                               ? "Contratar este plano"
                               : "Selecionar para teste"
-                          return (
+                          return managedByBilling && !isCurrentModal ? (
+                            <Button
+                              type="button"
+                              className="w-full mt-6 bg-primary text-primary-foreground hover:bg-primary/90"
+                              asChild
+                            >
+                              <Link href="/painel/assinatura" onClick={() => setPlanDetailOpen(null)}>
+                                Contratar este plano
+                              </Link>
+                            </Button>
+                          ) : (
                             <Button
                               type="button"
                               className="w-full mt-6 bg-primary text-primary-foreground hover:bg-primary/90"
