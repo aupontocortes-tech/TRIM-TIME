@@ -3,7 +3,6 @@ import {
   getTrialCardSetupPrefill,
   isBillingEnabled,
   registerCardInApp,
-  startTrialCardSetup,
 } from "@/lib/asaas/billing-service"
 import { parseSignupBillingMode } from "@/lib/billing/signup-mode"
 import type { SubscriptionPlan } from "@/lib/db/types"
@@ -91,14 +90,11 @@ export async function POST(req: Request) {
       body = await req.json().catch(() => null)
     }
 
-    /** Cliente antigo (botão sem formulário) ainda em cache — redireciona para fatura Asaas. */
     if (!body) {
-      const result = await startTrialCardSetup(barbershopId)
-      return NextResponse.json({
-        ok: true,
-        legacy_redirect: true,
-        paymentUrl: result.paymentUrl,
-      })
+      return NextResponse.json(
+        { error: "Use o formulário de cartão no app para cadastrar o pagamento." },
+        { status: 400 }
+      )
     }
 
     const parsed = parseCardBody(body)

@@ -87,6 +87,11 @@ export default function PlataformaConsoleLayout({
               )}
               {link("/plataforma/ranking", "Ranking", pathname.startsWith("/plataforma/ranking"))}
               {link("/plataforma/suporte", "Suporte", pathname.startsWith("/plataforma/suporte"))}
+              {link(
+                "/plataforma/financeiro",
+                "Financeiro",
+                pathname.startsWith("/plataforma/financeiro")
+              )}
               {link("/plataforma/trim-player", "Trim Player", pathname.startsWith("/plataforma/trim-player"))}
               {link(
                 "/plataforma/configuracoes",
@@ -118,6 +123,7 @@ export default function PlataformaConsoleLayout({
           {link("/plataforma/barbershops", "Lojas", pathname.startsWith("/plataforma/barbershops"))}
           {link("/plataforma/ranking", "Ranking", pathname.startsWith("/plataforma/ranking"))}
           {link("/plataforma/suporte", "Chat", pathname.startsWith("/plataforma/suporte"))}
+          {link("/plataforma/financeiro", "Financeiro", pathname.startsWith("/plataforma/financeiro"))}
           {link("/plataforma/trim-player", "Trim Player", pathname.startsWith("/plataforma/trim-player"))}
           {link("/plataforma/configuracoes", "Config", pathname.startsWith("/plataforma/configuracoes"))}
         </div>

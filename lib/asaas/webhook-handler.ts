@@ -21,7 +21,8 @@ const ACTIVE_PAYMENT = new Set([
   "PAYMENT_RECEIVED_IN_CASH",
 ])
 
-const OVERDUE_PAYMENT = new Set(["PAYMENT_OVERDUE", "PAYMENT_DELETED", "PAYMENT_REFUNDED"])
+const OVERDUE_PAYMENT = new Set(["PAYMENT_OVERDUE", "PAYMENT_DELETED"])
+const REFUND_PAYMENT = new Set(["PAYMENT_REFUNDED"])
 
 const CANCEL_SUB = new Set([
   "SUBSCRIPTION_DELETED",
@@ -161,6 +162,40 @@ export async function handleAsaasWebhook(payload: WebhookPayload): Promise<void>
           metadata: { event },
         },
       })
+    }
+    return
+  }
+
+  if (REFUND_PAYMENT.has(event) && fullPayment.id) {
+    const existingPay = await prisma.payment.findFirst({
+      where: { provider: "asaas", externalId: fullPayment.id },
+    })
+    if (existingPay) {
+      const prevMeta =
+        existingPay.metadata &&
+        typeof existingPay.metadata === "object" &&
+        !Array.isArray(existingPay.metadata)
+          ? (existingPay.metadata as Record<string, unknown>)
+          : {}
+      await prisma.payment.update({
+        where: { id: existingPay.id },
+        data: {
+          status: "REFUNDED",
+          metadata: { ...prevMeta, event, refunded_at: new Date().toISOString() },
+        },
+      })
+    } else {
+      await prisma.payment.create({
+        data: {
+          barbershopId: sub.barbershopId,
+          provider: "asaas",
+          externalId: fullPayment.id,
+          amount: fullPayment.value ?? 0,
+          status: "REFUNDED",
+          plan: sub.plan,
+          metadata: { event },
+        },
+      }).catch(() => {})
     }
     return
   }
