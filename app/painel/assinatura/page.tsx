@@ -11,6 +11,7 @@ import type { SubscriptionPlan, SubscriptionStatus } from "@/lib/db/types"
 import type { PlanCatalog } from "@/lib/plan-catalog"
 import { TrialBillingTrust } from "@/components/onboarding/trial-billing-trust"
 import { SignupBillingFlow } from "@/components/billing/signup-billing-flow"
+import { TrialCardForm } from "@/components/billing/trial-card-form"
 import { TRIAL_DAYS } from "@/lib/plans"
 
 type BillingSubscription = {
@@ -265,6 +266,9 @@ function AssinaturaContent() {
   const isOnboardingCheckout =
     !billingExempt && (setupCard || needsCard) && !cardComplete
 
+  const showPlanChoice =
+    (needsPlan || status === "past_due" || status === "canceled") && !billingExempt
+
   return (
     <div className="max-w-3xl mx-auto space-y-6">
       <div className="flex items-center gap-3">
@@ -489,7 +493,7 @@ function AssinaturaContent() {
         </CardContent>
       </Card>
 
-      {(needsPlan || status === "past_due" || status === "canceled") && catalog && !billingExempt ? (
+      {showPlanChoice && catalog ? (
         <Card className="border-primary/40">
           <CardHeader>
             <CardTitle>Escolha seu plano</CardTitle>
@@ -527,21 +531,46 @@ function AssinaturaContent() {
               ))}
             </div>
 
-            <Button
-              className="w-full"
-              onClick={() => void handleCheckout()}
-              disabled={checkoutLoading || !cardComplete}
-            >
-              {checkoutLoading ? (
-                <Loader2 className="w-4 h-4 animate-spin mr-2" />
-              ) : (
-                <CreditCard className="w-4 h-4 mr-2" />
-              )}
-              Contratar com cartão
-            </Button>
-            <p className="text-xs text-muted-foreground text-center">
-              Cobrança mensal automática no cartão cadastrado (processada com segurança via Asaas).
-            </p>
+            {!billingEnabled ? (
+              <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 px-4 py-3 text-sm text-muted-foreground">
+                Cobrança online não está ativa nesta instância. Configure{" "}
+                <code className="text-xs">ASAAS_API_KEY</code> no Super ADM para contratar.
+              </div>
+            ) : !cardComplete ? (
+              <div className="space-y-4 border-t pt-4">
+                <p className="text-sm text-muted-foreground">
+                  Cadastre o cartão abaixo para ativar o plano{" "}
+                  <strong className="text-foreground">{catalog.plans[selectedPlan].name}</strong> (R${" "}
+                  {catalog.plans[selectedPlan].price}/mês).
+                </p>
+                <TrialCardForm
+                  mode="immediate"
+                  plan={selectedPlan}
+                  catalog={catalog}
+                  trialDays={trialLengthDays}
+                  onSuccess={handleCardFormSuccess}
+                  onError={setErr}
+                />
+              </div>
+            ) : (
+              <>
+                <Button
+                  className="w-full"
+                  onClick={() => void handleCheckout()}
+                  disabled={checkoutLoading}
+                >
+                  {checkoutLoading ? (
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  ) : (
+                    <CreditCard className="w-4 h-4 mr-2" />
+                  )}
+                  Contratar com cartão
+                </Button>
+                <p className="text-xs text-muted-foreground text-center">
+                  Cobrança mensal automática no cartão cadastrado (processada com segurança via Asaas).
+                </p>
+              </>
+            )}
           </CardContent>
         </Card>
       ) : null}
