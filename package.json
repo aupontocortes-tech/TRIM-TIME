@@ -18,6 +18,7 @@
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
     "db:set-trimtime-accounts": "node scripts/set-trimtime-accounts.mjs",
+    "db:apply-subscription-billing": "node scripts/apply-subscription-billing-columns.mjs",
     "fix-logo": "node scripts/fix-logo-white-to-bg.mjs",
     "icons:generate": "node scripts/generate-app-icons.mjs"
   },

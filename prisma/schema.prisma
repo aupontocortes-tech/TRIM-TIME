@@ -303,6 +303,7 @@ model Subscription {
   @@index([barbershopId])
   @@index([status])
   @@index([asaasSubscriptionId])
+  @@map("Subscription")
 }
 
 // ========== BARBERS ==========

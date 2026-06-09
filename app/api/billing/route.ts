@@ -15,7 +15,7 @@ import {
 } from "@/lib/subscription"
 import { getPlanCatalog } from "@/lib/plan-catalog"
 import { getBarbershopIdFromRequest } from "@/lib/tenant"
-import { prisma } from "@/lib/prisma"
+import { loadBarbershopBillingInfo, loadSubscriptionByBarbershopId } from "@/lib/db/load-subscription"
 import type { Subscription } from "@/lib/db/types"
 
 function toSubscriptionApi(sub: {
@@ -64,11 +64,8 @@ export async function GET() {
     }
 
     const [sub, bs, catalog, billingEnabled] = await Promise.all([
-      prisma.subscription.findUnique({ where: { barbershopId } }),
-      prisma.barbershop.findUnique({
-        where: { id: barbershopId },
-        select: { role: true, isTest: true, name: true, email: true },
-      }),
+      loadSubscriptionByBarbershopId(barbershopId),
+      loadBarbershopBillingInfo(barbershopId),
       getPlanCatalog(),
       isBillingEnabled(),
     ])
@@ -115,9 +112,11 @@ export async function GET() {
       },
     })
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Erro ao carregar billing" },
-      { status: 500 }
-    )
+    const msg = e instanceof Error ? e.message : "Erro ao carregar billing"
+    const schemaHint =
+      /column.*does not exist|not available/i.test(msg)
+        ? " Atualize o banco: execute supabase/migrations/020–024 ou 027 no SQL Editor do Supabase."
+        : ""
+    return NextResponse.json({ error: msg + schemaHint }, { status: 500 })
   }
 }
