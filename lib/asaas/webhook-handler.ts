@@ -1,4 +1,5 @@
 import type { SubscriptionPlan, SubscriptionStatus } from "@/lib/db/types"
+import { sendPaymentProblemEmail } from "@/lib/billing/payment-failure-email"
 import { markCardSetupComplete } from "@/lib/asaas/billing-service"
 import { getAsaasPayment } from "@/lib/asaas/client"
 import { prisma } from "@/lib/prisma"
@@ -21,7 +22,11 @@ const ACTIVE_PAYMENT = new Set([
   "PAYMENT_RECEIVED_IN_CASH",
 ])
 
-const OVERDUE_PAYMENT = new Set(["PAYMENT_OVERDUE", "PAYMENT_DELETED"])
+const OVERDUE_PAYMENT = new Set([
+  "PAYMENT_OVERDUE",
+  "PAYMENT_DELETED",
+  "PAYMENT_CREDIT_CARD_CAPTURE_REFUSED",
+])
 const REFUND_PAYMENT = new Set(["PAYMENT_REFUNDED"])
 
 const CANCEL_SUB = new Set([
@@ -217,6 +222,22 @@ export async function handleAsaasWebhook(payload: WebhookPayload): Promise<void>
           metadata: { event },
         },
       }).catch(() => {})
+    }
+
+    const shop = await prisma.barbershop.findUnique({
+      where: { id: sub.barbershopId },
+      select: { name: true, email: true },
+    })
+    if (shop?.email) {
+      const detail =
+        event === "PAYMENT_CREDIT_CARD_CAPTURE_REFUSED"
+          ? "Não conseguimos debitar a mensalidade no cartão cadastrado. Verifique limite, validade ou troque o cartão."
+          : "Sua mensalidade está em atraso ou pendente. Regularize o pagamento para manter o acesso ao painel."
+      void sendPaymentProblemEmail({
+        to: shop.email,
+        barbershopName: shop.name,
+        detail,
+      }).catch((e) => console.error("[asaas webhook] payment email", e))
     }
   }
 }

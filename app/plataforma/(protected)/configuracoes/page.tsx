@@ -430,7 +430,7 @@ export default function PlataformaConfiguracoesPage() {
               <div>
                 <p className="text-sm font-medium text-white">API de pagamento</p>
                 <p className="text-xs text-zinc-500 mt-1">
-                  Ative quando ASAAS_API_KEY estiver no servidor. Cobrança recorrente via Asaas (cartão ou PIX).
+                  Ative quando ASAAS_API_KEY estiver no servidor. Cobrança recorrente no cartão via Asaas.
                 </p>
                 {paymentApiActive ? (
                   <p className="text-xs text-emerald-500/90 mt-2">Status: ativa (config ou ambiente)</p>

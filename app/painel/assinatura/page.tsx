@@ -6,12 +6,11 @@ import { useSearchParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Loader2, CreditCard, QrCode, ArrowLeft, CheckCircle2 } from "lucide-react"
+import { Loader2, CreditCard, ArrowLeft, CheckCircle2 } from "lucide-react"
 import type { SubscriptionPlan, SubscriptionStatus } from "@/lib/db/types"
 import type { PlanCatalog } from "@/lib/plan-catalog"
 import { TrialBillingTrust } from "@/components/onboarding/trial-billing-trust"
 import { SignupBillingFlow } from "@/components/billing/signup-billing-flow"
-import { PixPaymentPanel } from "@/components/billing/pix-payment-panel"
 import { TRIAL_DAYS } from "@/lib/plans"
 
 type BillingSubscription = {
@@ -52,15 +51,9 @@ function AssinaturaContent() {
   const [billingExempt, setBillingExempt] = useState(false)
   const [trialActive, setTrialActive] = useState(false)
   const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan>("pro")
-  const [billingType, setBillingType] = useState<"CREDIT_CARD" | "PIX">("CREDIT_CARD")
   const [checkoutLoading, setCheckoutLoading] = useState(false)
   const [cancelLoading, setCancelLoading] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
-  const [pixPending, setPixPending] = useState<{
-    amount: number
-    pixCopyPaste: string | null
-    pixQrCode: string | null
-  } | null>(null)
 
   const trialLengthDays = catalog?.trialDays ?? TRIAL_DAYS
 
@@ -184,42 +177,26 @@ function AssinaturaContent() {
       setErr("Pagamento online não está ativo. Ative a API de pagamento no Super ADM e configure ASAAS_API_KEY.")
       return
     }
-    if (billingType === "CREDIT_CARD" && !cardComplete) {
-      setErr("Cadastre o cartão no formulário acima antes de contratar com cartão.")
+    if (!cardComplete) {
+      setErr("Cadastre o cartão no formulário acima antes de contratar.")
       return
     }
     setCheckoutLoading(true)
     setErr(null)
     setMsg(null)
-    setPixPending(null)
     try {
       const r = await fetch("/api/billing/checkout", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan: selectedPlan, billing_type: billingType }),
+        body: JSON.stringify({ plan: selectedPlan }),
       })
       const j = await r.json()
       if (!r.ok) {
         setErr(j.error || "Erro ao iniciar pagamento")
         return
       }
-      if (billingType === "PIX" && (j.pixCopyPaste || j.pixQrCode)) {
-        const amount = catalog?.plans[selectedPlan]?.price ?? 0
-        setPixPending({
-          amount,
-          pixCopyPaste: j.pixCopyPaste ?? null,
-          pixQrCode: j.pixQrCode ?? null,
-        })
-        setMsg("Pague o PIX abaixo. O plano ativa automaticamente após a confirmação.")
-        void load()
-        return
-      }
-      if (billingType === "CREDIT_CARD") {
-        setMsg("Cobrança enviada ao cartão cadastrado. Aguarde a confirmação do pagamento.")
-      } else {
-        setMsg("Assinatura criada. Aguarde a confirmação do pagamento.")
-      }
+      setMsg("Cobrança enviada ao cartão cadastrado. Aguarde a confirmação do pagamento.")
       void load()
     } catch {
       setErr("Erro de rede")
@@ -243,7 +220,7 @@ function AssinaturaContent() {
         setErr(j.error || "Erro ao alterar plano")
         return
       }
-      setMsg("Plano atualizado. Cobrança processada no cartão ou PIX cadastrado.")
+      setMsg("Plano atualizado. Cobrança processada no cartão cadastrado.")
       void load()
     } catch {
       setErr("Erro de rede")
@@ -303,7 +280,7 @@ function AssinaturaContent() {
           <p className="text-sm text-muted-foreground">
             {isOnboardingCheckout
               ? "Teste grátis no Pro ou contrate agora — cadastre o cartão para liberar o painel."
-              : "Plano, cobrança mensal e pagamento via Asaas (cartão ou PIX)."}
+              : "Plano mensal — pagamento por cartão de crédito (débito automático)."}
           </p>
         </div>
       </div>
@@ -472,15 +449,6 @@ function AssinaturaContent() {
         </div>
       ) : null}
 
-      {pixPending ? (
-        <PixPaymentPanel
-          amount={pixPending.amount}
-          pixCopyPaste={pixPending.pixCopyPaste}
-          pixQrCode={pixPending.pixQrCode}
-          onClose={() => setPixPending(null)}
-        />
-      ) : null}
-
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Resumo</CardTitle>
@@ -514,9 +482,7 @@ function AssinaturaContent() {
             {subscription?.billing_type ? (
               <div>
                 <dt className="text-muted-foreground">Forma de pagamento</dt>
-                <dd className="font-semibold">
-                  {subscription.billing_type === "PIX" ? "PIX" : "Cartão de crédito"}
-                </dd>
+                <dd className="font-semibold">Cartão de crédito</dd>
               </div>
             ) : null}
           </dl>
@@ -561,37 +527,20 @@ function AssinaturaContent() {
               ))}
             </div>
 
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                variant={billingType === "CREDIT_CARD" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setBillingType("CREDIT_CARD")}
-              >
-                <CreditCard className="w-4 h-4 mr-1" />
-                Cartão
-              </Button>
-              <Button
-                type="button"
-                variant={billingType === "PIX" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setBillingType("PIX")}
-              >
-                <QrCode className="w-4 h-4 mr-1" />
-                PIX
-              </Button>
-            </div>
-
             <Button
               className="w-full"
               onClick={() => void handleCheckout()}
-              disabled={checkoutLoading}
+              disabled={checkoutLoading || !cardComplete}
             >
-              {checkoutLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-              Contratar plano
+              {checkoutLoading ? (
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+              ) : (
+                <CreditCard className="w-4 h-4 mr-2" />
+              )}
+              Contratar com cartão
             </Button>
             <p className="text-xs text-muted-foreground text-center">
-              Cartão: cadastro e cobrança no Trim Time (Asaas em segundo plano). PIX: QR e código aqui no app.
+              Cobrança mensal automática no cartão cadastrado (processada com segurança via Asaas).
             </p>
           </CardContent>
         </Card>

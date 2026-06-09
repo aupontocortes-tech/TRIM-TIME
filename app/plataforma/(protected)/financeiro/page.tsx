@@ -95,7 +95,7 @@ function FinanceiroContent() {
     if (!refundTarget) return
     if (
       !confirm(
-        `Estornar ${formatBrl(refundTarget.amount)} para ${refundTarget.barbershop_name}? O valor volta pelo Asaas (cartão ou PIX).`
+        `Estornar ${formatBrl(refundTarget.amount)} para ${refundTarget.barbershop_name}? O valor volta pelo Asaas no cartão.`
       )
     ) {
       return
