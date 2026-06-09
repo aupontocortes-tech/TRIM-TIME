@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { isBillingEnabled } from "@/lib/asaas/billing-service"
-import { getAsaasEnvironment, isAsaasConfigured } from "@/lib/asaas/config"
+import { getAsaasEnvironment, isAsaasConfigured, isPixBillingEnabled } from "@/lib/asaas/config"
 import {
   daysLeftInTrial,
   getEffectivePlanForBarbershop,
@@ -112,6 +112,7 @@ export async function GET() {
         enabled: billingEnabled,
         asaas_configured: isAsaasConfigured(),
         environment: getAsaasEnvironment(),
+        pix_enabled: isPixBillingEnabled(),
       },
     })
   } catch (e) {

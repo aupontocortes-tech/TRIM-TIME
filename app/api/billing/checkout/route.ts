@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { startSubscriptionCheckout } from "@/lib/asaas/billing-service"
+import { isPixBillingEnabled } from "@/lib/asaas/config"
 import type { AsaasBillingType } from "@/lib/asaas/client"
 import type { SubscriptionPlan } from "@/lib/db/types"
 import { getBarbershopIdFromRequest } from "@/lib/tenant"
@@ -19,10 +20,16 @@ export async function POST(request: Request) {
     if (!plan || !["basic", "pro", "premium"].includes(plan)) {
       return NextResponse.json({ error: "Plano inválido" }, { status: 400 })
     }
-    const billingType = body.billing_type
+    let billingType = body.billing_type
     if (!billingType || !["CREDIT_CARD", "PIX"].includes(billingType)) {
       return NextResponse.json(
         { error: "Informe billing_type: CREDIT_CARD ou PIX" },
+        { status: 400 }
+      )
+    }
+    if (billingType === "PIX" && !isPixBillingEnabled()) {
+      return NextResponse.json(
+        { error: "Pagamento por PIX não está disponível no momento. Use cartão de crédito." },
         { status: 400 }
       )
     }

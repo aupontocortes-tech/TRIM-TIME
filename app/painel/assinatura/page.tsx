@@ -12,7 +12,6 @@ import type { PlanCatalog } from "@/lib/plan-catalog"
 import { TrialBillingTrust } from "@/components/onboarding/trial-billing-trust"
 import { SignupBillingFlow } from "@/components/billing/signup-billing-flow"
 import { TrialCardForm } from "@/components/billing/trial-card-form"
-import { CardBillingInfo, PixAutomaticInfo } from "@/components/billing/pix-automatic-info"
 import { PixPaymentPanel } from "@/components/billing/pix-payment-panel"
 import { TRIAL_DAYS } from "@/lib/plans"
 
@@ -51,6 +50,7 @@ function AssinaturaContent() {
   const [needsDecision, setNeedsDecision] = useState(false)
   const [cardComplete, setCardComplete] = useState(false)
   const [billingEnabled, setBillingEnabled] = useState(false)
+  const [pixEnabled, setPixEnabled] = useState(false)
   const [billingExempt, setBillingExempt] = useState(false)
   const [trialActive, setTrialActive] = useState(false)
   const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan>("pro")
@@ -62,7 +62,6 @@ function AssinaturaContent() {
     amount: number
     pixCopyPaste: string | null
     pixQrCode: string | null
-    automatic: boolean
   } | null>(null)
 
   const trialLengthDays = catalog?.trialDays ?? TRIAL_DAYS
@@ -86,6 +85,7 @@ function AssinaturaContent() {
       setNeedsDecision(!!j.needs_trial_decision)
       setCardComplete(!!j.card_setup_complete)
       setBillingEnabled(!!j.billing?.enabled)
+      setPixEnabled(!!j.billing?.pix_enabled)
       setBillingExempt(!!j.billing_exempt)
       setTrialActive(!!j.trial_active)
       if (j.subscription?.plan) setSelectedPlan(j.subscription.plan)
@@ -200,7 +200,10 @@ function AssinaturaContent() {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan: selectedPlan, billing_type: billingType }),
+        body: JSON.stringify({
+          plan: selectedPlan,
+          billing_type: pixEnabled ? billingType : "CREDIT_CARD",
+        }),
       })
       const j = await r.json()
       if (!r.ok) {
@@ -213,13 +216,8 @@ function AssinaturaContent() {
           amount,
           pixCopyPaste: j.pixCopyPaste ?? null,
           pixQrCode: j.pixQrCode ?? null,
-          automatic: !!j.pixAutomatic,
         })
-        setMsg(
-          j.pixAutomatic
-            ? "Autorize o Pix Automático abaixo. O plano ativa após o 1º pagamento; os meses seguintes são debitados no seu banco."
-            : "Pague o PIX abaixo. O plano ativa automaticamente após a confirmação."
-        )
+        setMsg("Pague o PIX abaixo. O plano ativa após a confirmação. Todo mês você receberá um novo PIX para a mensalidade.")
         void load()
         return
       }
@@ -251,7 +249,7 @@ function AssinaturaContent() {
         setErr(j.error || "Erro ao alterar plano")
         return
       }
-      setMsg("Plano atualizado. Cobrança processada no cartão ou PIX cadastrado.")
+      setMsg("Plano atualizado. Cobrança processada no cartão cadastrado.")
       void load()
     } catch {
       setErr("Erro de rede")
@@ -311,7 +309,9 @@ function AssinaturaContent() {
           <p className="text-sm text-muted-foreground">
             {isOnboardingCheckout
               ? "Teste grátis no Pro ou contrate agora — cadastre o cartão para liberar o painel."
-              : "Plano mensal — cartão (débito automático) ou Pix Automático (autorize uma vez no banco)."}
+              : pixEnabled
+                ? "Plano mensal — cartão (débito automático) ou PIX."
+                : "Plano mensal — pagamento por cartão de crédito (débito automático)."}
           </p>
         </div>
       </div>
@@ -485,7 +485,6 @@ function AssinaturaContent() {
           amount={pixPending.amount}
           pixCopyPaste={pixPending.pixCopyPaste}
           pixQrCode={pixPending.pixQrCode}
-          automatic={pixPending.automatic}
           onClose={() => setPixPending(null)}
         />
       ) : null}
@@ -524,13 +523,15 @@ function AssinaturaContent() {
               <div>
                 <dt className="text-muted-foreground">Forma de pagamento</dt>
                 <dd className="font-semibold">
-                  {subscription.billing_type === "PIX" ? "Pix Automático" : "Cartão de crédito"}
+                  {subscription.billing_type === "PIX" ? "PIX" : "Cartão de crédito"}
                 </dd>
               </div>
             ) : null}
           </dl>
           {subscription?.billing_type === "PIX" && status === "active" ? (
-            <PixAutomaticInfo variant="compact" />
+            <p className="text-xs text-muted-foreground rounded-md border border-dashed p-3">
+              Mensalidade via PIX: todo mês o Asaas envia um novo código para pagamento (pode avisar por e-mail).
+            </p>
           ) : null}
         </CardContent>
       </Card>
@@ -573,31 +574,43 @@ function AssinaturaContent() {
               ))}
             </div>
 
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                variant={billingType === "CREDIT_CARD" ? "default" : "outline"}
-                size="sm"
-                onClick={() => {
-                  setBillingType("CREDIT_CARD")
-                  setPixPending(null)
-                }}
-              >
-                <CreditCard className="w-4 h-4 mr-1" />
-                Cartão
-              </Button>
-              <Button
-                type="button"
-                variant={billingType === "PIX" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setBillingType("PIX")}
-              >
-                <QrCode className="w-4 h-4 mr-1" />
-                Pix Automático
-              </Button>
-            </div>
+            {pixEnabled ? (
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant={billingType === "CREDIT_CARD" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => {
+                    setBillingType("CREDIT_CARD")
+                    setPixPending(null)
+                  }}
+                >
+                  <CreditCard className="w-4 h-4 mr-1" />
+                  Cartão
+                </Button>
+                <Button
+                  type="button"
+                  variant={billingType === "PIX" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setBillingType("PIX")}
+                >
+                  <QrCode className="w-4 h-4 mr-1" />
+                  PIX
+                </Button>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground rounded-md border border-dashed p-3">
+                <strong className="text-foreground">Cartão de crédito</strong> — a mensalidade é cobrada
+                automaticamente todo mês no cartão cadastrado.
+              </p>
+            )}
 
-            {billingType === "CREDIT_CARD" ? <CardBillingInfo /> : null}
+            {pixEnabled && billingType === "CREDIT_CARD" ? (
+              <p className="text-xs text-muted-foreground rounded-md border border-dashed p-3">
+                <strong className="text-foreground">Cartão:</strong> a mensalidade é cobrada automaticamente todo mês no
+                cartão cadastrado.
+              </p>
+            ) : null}
 
             {billingType === "CREDIT_CARD" && !cardComplete && billingEnabled ? (
               <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-3">
@@ -615,13 +628,12 @@ function AssinaturaContent() {
               </div>
             ) : null}
 
-            {billingType === "PIX" ? (
-              <div className="space-y-3">
-                <PixAutomaticInfo variant="compact" />
-                <p className="text-xs text-muted-foreground">
-                  Clique em <strong>Contratar plano</strong> para gerar o QR Code nesta página.
-                </p>
-              </div>
+            {pixEnabled && billingType === "PIX" ? (
+              <p className="text-xs text-muted-foreground rounded-md border border-dashed p-3">
+                <strong className="text-foreground">PIX:</strong> clique em <strong>Contratar plano</strong> para gerar
+                o QR Code. Você paga este mês e, nos próximos, recebe um novo PIX por e-mail ou no painel (cobrança
+                manual todo mês).
+              </p>
             ) : null}
 
             <Button
@@ -638,7 +650,9 @@ function AssinaturaContent() {
             </Button>
             <p className="text-xs text-muted-foreground text-center">
               {billingEnabled
-                ? "Pagamento processado com segurança pelo Asaas. Você não precisa enviar comprovante manualmente."
+                ? pixEnabled
+                  ? "Cartão: débito automático. PIX: pagamento manual todo mês."
+                  : "Pagamento seguro pelo Asaas. Débito automático mensal no cartão."
                 : "Cobrança online inativa — configure ASAAS_API_KEY e PAYMENT_API_ENABLED."}
             </p>
           </CardContent>

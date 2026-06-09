@@ -20,6 +20,12 @@ export function isAsaasConfigured(): boolean {
   return !!getAsaasApiKey()
 }
 
+/** PIX na assinatura (manual ou automático). Desligado por padrão — ative com BILLING_PIX_ENABLED=true quando tiver conta PJ. */
+export function isPixBillingEnabled(): boolean {
+  const v = process.env.BILLING_PIX_ENABLED?.trim().toLowerCase()
+  return v === "1" || v === "true" || v === "yes"
+}
+
 export function getAsaasWebhookToken(): string | null {
   return process.env.ASAAS_WEBHOOK_TOKEN?.trim() || null
 }

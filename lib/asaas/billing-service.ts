@@ -12,7 +12,6 @@ import {
   cancelPixAutomaticAuthorization,
   createAsaasCustomer,
   createAsaasSubscription,
-  createPixAutomaticAuthorization,
   findAsaasCustomerByReference,
   listSubscriptionPayments,
   tokenizeAsaasCreditCard,
@@ -90,61 +89,6 @@ export type CheckoutResult = {
   paymentUrl: string | null
   pixQrCode?: string | null
   pixCopyPaste?: string | null
-  pixAutomatic?: boolean
-}
-
-function pixAutomaticContractId(barbershopId: string, plan: SubscriptionPlan): string {
-  const compact = barbershopId.replace(/-/g, "").slice(0, 24)
-  return `${compact}-${plan}`.slice(0, 35)
-}
-
-async function startPixAutomaticCheckout(
-  barbershopId: string,
-  plan: SubscriptionPlan,
-  customerId: string,
-  price: number,
-  description: string
-): Promise<CheckoutResult | null> {
-  try {
-    const auth = await createPixAutomaticAuthorization({
-      customerId,
-      frequency: "MONTHLY",
-      contractId: pixAutomaticContractId(barbershopId, plan),
-      startDate: formatDateYmd(new Date()),
-      value: price,
-      description: description.slice(0, 35),
-      paymentCreationMode: "SUBSCRIPTION",
-      immediateQrCode: {
-        expirationSeconds: 86400,
-        originalValue: price,
-        description: description.slice(0, 35),
-      },
-    })
-
-    await prisma.subscription.update({
-      where: { barbershopId },
-      data: {
-        plan,
-        billingType: "PIX",
-        status: "past_due",
-        trialEnd: null,
-        asaasCustomerId: customerId,
-        asaasPixAutomaticAuthId: auth.id,
-        asaasSubscriptionId: auth.subscriptionId ?? undefined,
-      },
-    })
-
-    return {
-      asaasSubscriptionId: auth.subscriptionId ?? auth.id,
-      paymentUrl: null,
-      pixQrCode: auth.encodedImage ?? null,
-      pixCopyPaste: auth.payload ?? null,
-      pixAutomatic: true,
-    }
-  } catch (e) {
-    console.warn("[billing] Pix Automático indisponível, usando PIX tradicional:", e)
-    return null
-  }
 }
 
 export async function startSubscriptionCheckout(
@@ -161,17 +105,6 @@ export async function startSubscriptionCheckout(
   const customerId = await ensureAsaasCustomer(barbershopId)
   const nextDue = formatDateYmd(addMonths(new Date(), 1))
   const description = `Trim Time — ${catalog.plans[plan].name}`
-
-  if (billingType === "PIX") {
-    const pixAuto = await startPixAutomaticCheckout(
-      barbershopId,
-      plan,
-      customerId,
-      price,
-      description
-    )
-    if (pixAuto) return pixAuto
-  }
 
   const current = await prisma.subscription.findUnique({ where: { barbershopId } })
   let asaasSubId = current?.asaasSubscriptionId
