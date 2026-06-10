@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireSuperAdmin } from "@/lib/admin-auth"
 import type { SubscriptionPlan } from "@/lib/db/types"
+import { onBarbershopPlanChanged } from "@/lib/barbershop-units-plan"
 
 export const dynamic = "force-dynamic"
 
@@ -61,6 +62,7 @@ export async function PATCH(
           trialEnd: null,
         },
       })
+      await onBarbershopPlanChanged(id, body.plan)
     }
 
     const updated = await prisma.barbershop.findUnique({

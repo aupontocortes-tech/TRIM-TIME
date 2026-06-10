@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { getBarbershopIdFromRequest } from "@/lib/tenant"
 import { prisma } from "@/lib/prisma"
 import type { Subscription } from "@/lib/db/types"
+import { onBarbershopPlanChanged } from "@/lib/barbershop-units-plan"
 
 function toSubscriptionApi(sub: {
   id: string
@@ -95,6 +96,7 @@ export async function POST(request: Request) {
         nextPayment,
       },
     })
+    await onBarbershopPlanChanged(barbershopId, plan)
     return NextResponse.json(toSubscriptionApi(data))
   } catch (e) {
     return NextResponse.json(
@@ -169,6 +171,7 @@ export async function PATCH(request: Request) {
         nextPayment: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       },
     })
+    await onBarbershopPlanChanged(barbershopId, reactivationPlan)
     return NextResponse.json(toSubscriptionApi(data))
   } catch (e) {
     return NextResponse.json(

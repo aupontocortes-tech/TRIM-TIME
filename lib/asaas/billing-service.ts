@@ -21,6 +21,7 @@ import {
 } from "@/lib/asaas/client"
 import { getAppBaseUrl, isAsaasConfigured } from "@/lib/asaas/config"
 import { getPlanCatalog, getPlanPrice } from "@/lib/plan-catalog"
+import { onBarbershopPlanChanged } from "@/lib/barbershop-units-plan"
 import { isPaymentApiActive } from "@/lib/platform-settings"
 import { prisma } from "@/lib/prisma"
 import { createGraceAccessUntilDate } from "@/lib/subscription"
@@ -119,6 +120,7 @@ export async function startSubscriptionCheckout(
       where: { barbershopId },
       data: { plan, billingType, status: "past_due" },
     })
+    await onBarbershopPlanChanged(barbershopId, plan)
   } else {
     const asaasSub = await createAsaasSubscription({
       customerId,
@@ -139,6 +141,7 @@ export async function startSubscriptionCheckout(
         trialEnd: null,
       },
     })
+    await onBarbershopPlanChanged(barbershopId, plan)
   }
 
   const payments = await listSubscriptionPayments(asaasSubId, "PENDING")
@@ -185,6 +188,7 @@ export async function changeSubscriptionPlan(
       where: { barbershopId },
       data: { plan: newPlan },
     })
+    await onBarbershopPlanChanged(barbershopId, newPlan)
     const payments = await listSubscriptionPayments(sub.asaasSubscriptionId, "PENDING")
     const payment = payments[0]
     return {
@@ -305,6 +309,7 @@ async function ensureAsaasSubscriptionForSignup(
       where: { barbershopId },
       data: { plan: opts.plan, billingType: "CREDIT_CARD" },
     })
+    await onBarbershopPlanChanged(barbershopId, opts.plan)
     return sub.asaasSubscriptionId
   }
 
@@ -324,6 +329,7 @@ async function ensureAsaasSubscriptionForSignup(
       plan: opts.plan,
     },
   })
+  await onBarbershopPlanChanged(barbershopId, opts.plan)
   return asaasSub.id
 }
 
@@ -448,6 +454,7 @@ export async function registerCardInApp(
         : {}),
     },
   })
+  await onBarbershopPlanChanged(barbershopId, plan)
 
   return {
     asaasSubscriptionId: asaasSubId,
@@ -554,6 +561,7 @@ async function subscribeAfterTrialDecision(
         nextPayment: chargeImmediately ? null : nextPayment,
       },
     })
+    await onBarbershopPlanChanged(barbershopId, plan)
     return {
       asaasSubscriptionId: sub.asaasSubscriptionId,
       paymentUrl: payment?.invoiceUrl || null,

@@ -30,7 +30,6 @@ import { publicBookingUrl } from "@/lib/booking-public-url"
 import { barberPhotoImageStyle } from "@/lib/barber-photo-style"
 import { normalizeGoogleMapsUrl } from "@/lib/google-maps-url"
 import { MapsLinkFieldLabel } from "@/components/maps-link-field-label"
-import { DeleteUnitDialog } from "@/components/painel/delete-unit-dialog"
 import {
   defaultLoyaltyProgramUi,
   loyaltyProgramFromSettings,
@@ -326,8 +325,6 @@ export default function ConfiguracoesPage() {
   const [editUnitState, setEditUnitState] = useState("")
   const [editUnitCep, setEditUnitCep] = useState("")
   const [editUnitMapsUrl, setEditUnitMapsUrl] = useState("")
-  const [unitDeleteOpen, setUnitDeleteOpen] = useState(false)
-  const [unitToDelete, setUnitToDelete] = useState<BarbershopUnit | null>(null)
   const [subscriptionBusy, setSubscriptionBusy] = useState(false)
   const [subscriptionError, setSubscriptionError] = useState<string | null>(null)
   const [subscriptionOk, setSubscriptionOk] = useState<string | null>(null)
@@ -1304,38 +1301,6 @@ export default function ConfiguracoesPage() {
       await refetchUnits()
     } catch {
       setUnitError("Erro de rede ao atualizar unidade")
-    } finally {
-      setUnitBusy(false)
-    }
-  }
-
-  const openDeleteUnit = (unit: BarbershopUnit) => {
-    setUnitToDelete(unit)
-    setUnitDeleteOpen(true)
-  }
-
-  const handleDeleteUnit = async () => {
-    if (!unitToDelete) return
-    setUnitBusy(true)
-    setUnitError(null)
-    try {
-      const r = await fetch(`/api/units/${unitToDelete.id}`, {
-        method: "DELETE",
-        credentials: "include",
-      })
-      const j = await r.json().catch(() => ({}))
-      if (!r.ok) {
-        setUnitError(typeof j.error === "string" ? j.error : "Erro ao excluir unidade")
-        return
-      }
-      setUnitDeleteOpen(false)
-      setUnitToDelete(null)
-      if (selectedUnitId === unitToDelete.id) {
-        await changeUnit(null)
-      }
-      await refetchUnits()
-    } catch {
-      setUnitError("Erro de rede ao excluir unidade")
     } finally {
       setUnitBusy(false)
     }
@@ -3677,8 +3642,13 @@ export default function ConfiguracoesPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               {!multiUnitsFeature && (
-                <div className="p-3 rounded-lg border border-amber-500/30 bg-amber-500/10 text-sm text-amber-700 dark:text-amber-400">
-                  Multiunidade está disponível no plano Premium.
+                <div className="p-3 rounded-lg border border-amber-500/30 bg-amber-500/10 text-sm text-amber-700 dark:text-amber-400 space-y-1">
+                  <p>Multiunidade ativa só no plano Premium.</p>
+                  <p>
+                    Filiais extras ficam <strong>arquivadas</strong> ao mudar para Básico ou Pro — o nome,
+                    barbeiros e clientes continuam salvos. Ao voltar ao Premium, use <strong>Reativar</strong> em
+                    cada unidade.
+                  </p>
                 </div>
               )}
               {unitError && (
@@ -3803,7 +3773,9 @@ export default function ConfiguracoesPage() {
                         <p className="text-xs text-muted-foreground">
                           {unit.id === selectedUnitId ? "Unidade ativa no painel" : "Unidade disponível"}
                           {" • "}
-                          {unit.active ? "Ativa" : "Inativa"}
+                          {unit.active
+                            ? "Ativa no app do cliente"
+                            : "Arquivada — oculta no app; dados preservados"}
                         </p>
                         {(unit.phone || unit.address || unit.city) && (
                           <p className="text-xs text-muted-foreground mt-1 max-w-md">
@@ -3836,17 +3808,7 @@ export default function ConfiguracoesPage() {
                           onClick={() => void handleToggleUnit(unit)}
                           disabled={unitBusy || !multiUnitsFeature}
                         >
-                          {unit.active ? "Desativar" : "Ativar"}
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="border-destructive/40 text-destructive hover:bg-destructive/10"
-                          onClick={() => openDeleteUnit(unit)}
-                          disabled={unitBusy || !multiUnitsFeature || units.length <= 1}
-                        >
-                          <Trash2 className="w-4 h-4 mr-1" aria-hidden />
-                          Excluir
+                          {unit.active ? "Arquivar" : "Reativar"}
                         </Button>
                       </div>
                     </div>
@@ -3855,17 +3817,6 @@ export default function ConfiguracoesPage() {
               )}
             </CardContent>
           </Card>
-
-          <DeleteUnitDialog
-            unit={unitToDelete}
-            open={unitDeleteOpen}
-            busy={unitBusy}
-            onOpenChange={(open) => {
-              setUnitDeleteOpen(open)
-              if (!open) setUnitToDelete(null)
-            }}
-            onConfirm={handleDeleteUnit}
-          />
 
           <Dialog
             open={unitEditOpen}

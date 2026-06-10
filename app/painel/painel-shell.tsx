@@ -147,6 +147,7 @@ function PainelLayoutInner({ children }: { children: React.ReactNode }) {
                 {units.map((u) => (
                   <option key={u.id} value={u.id}>
                     {u.name}
+                    {!u.active ? " (arquivada)" : ""}
                   </option>
                 ))}
               </select>

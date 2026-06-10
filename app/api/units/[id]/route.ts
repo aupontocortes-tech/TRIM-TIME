@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { BARBERSHOP_UNIT_COOKIE, requireBarbershopId } from "@/lib/tenant"
 import { resolveEffectivePlanForActiveSession } from "@/lib/barbershop-effective-plan-server"
 import { hasFeature } from "@/lib/plans"
+import { getPrincipalUnitId } from "@/lib/barbershop-units-plan"
 import { normalizeGoogleMapsUrl } from "@/lib/google-maps-url"
 import { barbershopUnitToApi } from "@/lib/barbershop-unit-api"
 
@@ -36,6 +37,16 @@ export async function PATCH(
       state?: string | null
       cep?: string | null
       maps_url?: string | null
+    }
+
+    if (body.active === false) {
+      const principalId = await getPrincipalUnitId(barbershopId)
+      if (principalId === id) {
+        return NextResponse.json(
+          { error: "A unidade principal não pode ser arquivada." },
+          { status: 400 }
+        )
+      }
     }
 
     const updates: {
@@ -84,49 +95,17 @@ export async function PATCH(
   }
 }
 
+/** Unidades não são apagadas do banco — use PATCH { active: false } para arquivar. */
 export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  try {
-    const barbershopId = await requireBarbershopId()
-    const effectivePlan = await resolveEffectivePlanForActiveSession(barbershopId)
-    if (!effectivePlan || !hasFeature(effectivePlan, "multi_units")) {
-      return NextResponse.json(
-        { error: "Multiunidade disponível apenas no plano Premium." },
-        { status: 403 }
-      )
-    }
-
-    const { id } = await params
-    const unit = await prisma.barbershopUnit.findFirst({
-      where: { id, barbershopId },
-    })
-    if (!unit) {
-      return NextResponse.json({ error: "Unidade não encontrada" }, { status: 404 })
-    }
-
-    const totalUnits = await prisma.barbershopUnit.count({ where: { barbershopId } })
-    if (totalUnits <= 1) {
-      return NextResponse.json(
-        { error: "Não é possível excluir a única unidade da barbearia." },
-        { status: 400 }
-      )
-    }
-
-    await prisma.barbershopUnit.delete({ where: { id } })
-
-    const cookieStore = await cookies()
-    if (cookieStore.get(BARBERSHOP_UNIT_COOKIE)?.value === id) {
-      cookieStore.delete(BARBERSHOP_UNIT_COOKIE)
-    }
-
-    return NextResponse.json({ ok: true })
-  } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Erro ao excluir unidade" },
-      { status: e instanceof Error && e.message.includes("não identificada") ? 401 : 500 }
-    )
-  }
+  await params
+  return NextResponse.json(
+    {
+      error:
+        "Unidades não podem ser excluídas permanentemente. Use Arquivar para ocultar do app do cliente; nome, barbeiros e clientes permanecem salvos.",
+    },
+    { status: 403 }
+  )
 }
-

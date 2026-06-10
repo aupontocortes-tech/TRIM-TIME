@@ -47,7 +47,14 @@ export default function MinhaRedePage() {
                   className="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-border bg-card/50 p-4"
                 >
                   <div>
-                    <p className="font-medium text-foreground">{u.name}</p>
+                    <p className="font-medium text-foreground">
+                      {u.name}
+                      {!u.active ? (
+                        <span className="ml-2 text-xs font-normal text-amber-600 dark:text-amber-400">
+                          (arquivada)
+                        </span>
+                      ) : null}
+                    </p>
                     {(u.city || u.address) && (
                       <p className="text-sm text-muted-foreground flex items-center gap-1 mt-1">
                         <MapPin className="w-3.5 h-3.5 shrink-0" />
