@@ -21,12 +21,7 @@ export async function PATCH(
   try {
     const barbershopId = await requireBarbershopId()
     const effectivePlan = await resolveEffectivePlanForActiveSession(barbershopId)
-    if (!effectivePlan || !hasFeature(effectivePlan, "multi_units")) {
-      return NextResponse.json(
-        { error: "Multiunidade disponível apenas no plano Premium." },
-        { status: 403 }
-      )
-    }
+    const canManageMulti = !!(effectivePlan && hasFeature(effectivePlan, "multi_units"))
     const { id } = await params
     const body = (await request.json()) as {
       name?: string
@@ -39,7 +34,20 @@ export async function PATCH(
       maps_url?: string | null
     }
 
+    if (body.active === true && !canManageMulti) {
+      return NextResponse.json(
+        { error: "Reativar unidades disponível apenas no plano Premium." },
+        { status: 403 }
+      )
+    }
+
     if (body.active === false) {
+      if (!canManageMulti) {
+        return NextResponse.json(
+          { error: "Arquivar filiais disponível apenas no plano Premium." },
+          { status: 403 }
+        )
+      }
       const principalId = await getPrincipalUnitId(barbershopId)
       if (principalId === id) {
         return NextResponse.json(

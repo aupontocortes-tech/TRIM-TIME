@@ -89,6 +89,11 @@ import { renderNotificationTemplate } from "@/lib/notification-template"
 import { barbersListUrl } from "@/lib/barbers-list-url"
 import { BarberPhotoAdjust } from "@/components/barber-photo-adjust"
 import { WhatsAppConnectWizard } from "@/components/painel/whatsapp-connect-wizard"
+import {
+  barbeariaContactFormFromScope,
+  isPrincipalBarbershopUnit,
+  resolveBarbeariaContactEditScope,
+} from "@/lib/barbearia-unit-form"
 
 const diasSemana = [
   { key: "segunda" as const, label: "Segunda-feira" },
@@ -348,18 +353,14 @@ export default function ConfiguracoesPage() {
     setOrigin(typeof window !== "undefined" ? window.location.origin : "")
   }, [])
 
+  const barbeariaEditScope = useMemo(() => {
+    if (!barbershop) return { mode: "account" as const, unitId: null, unit: null }
+    return resolveBarbeariaContactEditScope(barbershop, units, selectedUnitId)
+  }, [barbershop, units, selectedUnitId])
+
   useEffect(() => {
     if (!barbershop) return
-    setBarbearia({
-      nome: barbershop.name,
-      email: barbershop.email,
-      telefone: barbershop.phone ?? "",
-      endereco: barbershop.settings?.address ?? "",
-      cidade: barbershop.settings?.city ?? "",
-      estado: barbershop.settings?.state ?? "",
-      cep: barbershop.settings?.cep ?? "",
-      linkGoogleMaps: barbershop.settings?.maps_url ?? "",
-    })
+    setBarbearia(barbeariaContactFormFromScope(barbershop, units, selectedUnitId))
     setHorarios(openingHoursFromSettings(barbershop.settings?.opening_hours))
     setBookingRules(bookingRulesFromSettings(barbershop.settings?.booking_rules))
     const w = barbershop.settings?.waitlist_accept_deadline_minutes
@@ -375,6 +376,8 @@ export default function ConfiguracoesPage() {
     barbershop?.email,
     barbershop?.phone,
     JSON.stringify(barbershop?.settings ?? null),
+    selectedUnitId,
+    units,
   ])
 
   useEffect(() => {
@@ -713,25 +716,89 @@ export default function ConfiguracoesPage() {
     setBarbeariaSaveError(null)
     setBarbeariaSaveOk(false)
     try {
-      const r = await fetch("/api/barbershops", {
-        method: "PATCH",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: barbearia.nome.trim(),
-          email: barbearia.email.trim(),
-          phone: barbearia.telefone.trim() || null,
-          settings: barbeariaSettingsPayload(),
-        }),
-      })
-      const j = await r.json().catch(() => ({}))
-      if (!r.ok) {
-        setBarbeariaSaveError(typeof j.error === "string" ? j.error : "Erro ao salvar")
-        return
+      const scope = resolveBarbeariaContactEditScope(barbershop, units, selectedUnitId)
+      const settingsPayload = barbeariaSettingsPayload()
+
+      if (scope.mode === "unit" && scope.unitId && scope.unit) {
+        const unitRes = await fetch(`/api/units/${scope.unitId}`, {
+          method: "PATCH",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: barbearia.nome.trim(),
+            phone: barbearia.telefone.trim() || null,
+            address: barbearia.endereco.trim() || null,
+            city: barbearia.cidade.trim() || null,
+            state: barbearia.estado.trim() || null,
+            cep: barbearia.cep.trim() || null,
+            maps_url: barbearia.linkGoogleMaps.trim() || null,
+          }),
+        })
+        const unitJson = await unitRes.json().catch(() => ({}))
+        if (!unitRes.ok) {
+          setBarbeariaSaveError(
+            typeof unitJson.error === "string" ? unitJson.error : "Erro ao salvar unidade"
+          )
+          return
+        }
+
+        const syncAccount =
+          isPrincipalBarbershopUnit(scope.unit, barbershop.name, units) || units.length <= 1
+        if (syncAccount) {
+          const r = await fetch("/api/barbershops", {
+            method: "PATCH",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: barbearia.nome.trim(),
+              email: barbearia.email.trim(),
+              phone: barbearia.telefone.trim() || null,
+              settings: settingsPayload,
+            }),
+          })
+          const j = await r.json().catch(() => ({}))
+          if (!r.ok) {
+            setBarbeariaSaveError(typeof j.error === "string" ? j.error : "Erro ao salvar conta")
+            return
+          }
+        } else if (barbearia.email.trim() !== barbershop.email.trim()) {
+          const r = await fetch("/api/barbershops", {
+            method: "PATCH",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email: barbearia.email.trim() }),
+          })
+          const j = await r.json().catch(() => ({}))
+          if (!r.ok) {
+            setBarbeariaSaveError(typeof j.error === "string" ? j.error : "Erro ao salvar e-mail")
+            return
+          }
+        }
+
+        await refetchUnits()
+        await refetch()
+      } else {
+        const r = await fetch("/api/barbershops", {
+          method: "PATCH",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: barbearia.nome.trim(),
+            email: barbearia.email.trim(),
+            phone: barbearia.telefone.trim() || null,
+            settings: settingsPayload,
+          }),
+        })
+        const j = await r.json().catch(() => ({}))
+        if (!r.ok) {
+          setBarbeariaSaveError(typeof j.error === "string" ? j.error : "Erro ao salvar")
+          return
+        }
+        await refetch()
       }
+
       setBarbeariaSaveOk(true)
       setTimeout(() => setBarbeariaSaveOk(false), 3000)
-      await refetch()
     } catch {
       setBarbeariaSaveError("Erro de rede ao salvar")
     } finally {
@@ -1807,15 +1874,34 @@ export default function ConfiguracoesPage() {
         <TabsContent value="barbearia">
           <Card className="bg-card border-border">
             <CardHeader>
-              <CardTitle className="text-foreground">Informações da Barbearia</CardTitle>
+              <CardTitle className="text-foreground">
+                {barbeariaEditScope.mode === "unit" && barbeariaEditScope.unit
+                  ? `Informações da unidade — ${barbeariaEditScope.unit.name}`
+                  : "Informações da Barbearia"}
+              </CardTitle>
               <CardDescription className="text-muted-foreground">
-                Dados salvos no sistema (nome, e-mail de login, telefone e endereço)
+                {barbeariaEditScope.mode === "unit" ? (
+                  <>
+                    Telefone e endereço desta loja (unidade{" "}
+                    <strong className="text-foreground">{barbeariaEditScope.unit?.name}</strong>). O e-mail
+                    e o slug público são da conta da rede.
+                  </>
+                ) : units.length > 1 ? (
+                  <>
+                    Dados da conta da rede (matriz). Para editar telefone e endereço de cada filial, selecione a
+                    unidade em &quot;Unidade ativa&quot; na barra lateral.
+                  </>
+                ) : (
+                  "Dados salvos no sistema (nome, e-mail de login, telefone e endereço)"
+                )}
               </CardDescription>
             </CardHeader>
             <CardContent>
               <FieldGroup className="max-w-xl">
                 <Field>
-                  <FieldLabel htmlFor="nome">Nome da Barbearia</FieldLabel>
+                  <FieldLabel htmlFor="nome">
+                    {barbeariaEditScope.mode === "unit" ? "Nome da unidade" : "Nome da Barbearia"}
+                  </FieldLabel>
                   <Input
                     id="nome"
                     value={barbearia.nome}
