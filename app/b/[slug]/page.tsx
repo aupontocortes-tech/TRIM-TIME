@@ -474,8 +474,16 @@ export default function BarbeariaPage() {
     const stillValid = publicMeta.barbers.some(
       (b) => b.id === profissionalSelecionado && (!selectedUnitId || b.unit_id === selectedUnitId)
     )
-    if (!stillValid) setProfissionalSelecionado(null)
-  }, [selectedUnitId, publicMeta?.barbers, profissionalSelecionado])
+    if (!stillValid) {
+      setProfissionalSelecionado(null)
+      if (isRemarcando && etapa > 2) {
+        setEtapa(2)
+        setDataSelecionada(null)
+        setHorarioSelecionado(null)
+        setErroAgendamento("Escolha um profissional da unidade selecionada para continuar a remarcação.")
+      }
+    }
+  }, [selectedUnitId, publicMeta?.barbers, profissionalSelecionado, isRemarcando, etapa])
 
   useEffect(() => {
     if (authPhase !== "codigo") return
@@ -1520,7 +1528,12 @@ export default function BarbeariaPage() {
         return servicosSelecionadosData.length > 0
       }
       case 2: return profissionalSelecionado !== null
-      case 3: return dataSelecionada !== null && horarioSelecionado !== null
+      case 3:
+        return (
+          profissionalSelecionado !== null &&
+          dataSelecionada !== null &&
+          horarioSelecionado !== null
+        )
       case 4:
         return (
           publicMeta !== null &&
@@ -1621,7 +1634,15 @@ export default function BarbeariaPage() {
       return
     }
     const prof = barbearia.profissionais.find((p) => p.id === profissionalSelecionado)
-    if (!prof) return
+    if (!prof) {
+      setErroAgendamento(
+        hasMultipleUnits
+          ? "Escolha um profissional da unidade selecionada antes de confirmar."
+          : "Escolha um profissional antes de confirmar."
+      )
+      setEtapa(2)
+      return
+    }
     const serviceIdsToBook = servicosSelecionadosData.map((s) => s.id)
     if (!serviceIdsToBook.length) {
       setErroAgendamento("Selecione pelo menos um serviço antes de confirmar.")
@@ -1739,19 +1760,32 @@ export default function BarbeariaPage() {
     }
     setErroAgendamento("")
     const base = bookingSummary ?? loadConfirmedBooking(slug)
+    const unitForRemarca = selectedUnitId ?? base?.unitId ?? null
     if (base) {
-      if (base.profissionalId) setProfissionalSelecionado(base.profissionalId)
       if (base.servicos?.length && publicMeta?.services?.length) {
         const valid = new Set(publicMeta.services.map((s) => s.id))
         const ids = base.servicos.map((s) => s.id).filter((id) => valid.has(id))
         if (ids.length) setServicosSelecionados(ids)
       }
-      if (base.unitId) setSelectedUnitId(base.unitId)
+      if (!selectedUnitId && base.unitId) {
+        setSelectedUnitId(base.unitId)
+        if (typeof window !== "undefined") {
+          sessionStorage.setItem(`trimtime_unit_${slug}`, base.unitId)
+        }
+      }
+      if (base.profissionalId) {
+        const barberFitsUnit = publicMeta?.barbers?.some(
+          (b) =>
+            b.id === base.profissionalId &&
+            (!unitForRemarca || b.unit_id === unitForRemarca)
+        )
+        setProfissionalSelecionado(barberFitsUnit ? base.profissionalId : null)
+      }
     }
     setIsRemarcando(true)
     setAgendamentoConfirmado(false)
     setTrimPlayStage("intro")
-    setEtapa(3)
+    setEtapa(hasMultipleUnits ? 2 : 3)
     setDataSelecionada(null)
     setHorarioSelecionado(null)
   }
@@ -2819,6 +2853,12 @@ export default function BarbeariaPage() {
         {etapa === 2 && (
           <div>
             <h2 className="text-lg font-semibold text-foreground mb-4">Escolha o profissional</h2>
+            {isRemarcando && hasMultipleUnits && selectedUnit ? (
+              <p className="text-sm text-muted-foreground mb-4">
+                Remarcando para a unidade <strong className="text-foreground">{selectedUnit.name}</strong>.
+                Escolha um profissional desta loja.
+              </p>
+            ) : null}
             <div className="grid gap-3">
               {barbearia.profissionais.map((profissional) => (
                 <Card 
