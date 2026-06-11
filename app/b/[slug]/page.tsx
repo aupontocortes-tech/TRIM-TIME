@@ -323,6 +323,8 @@ export default function BarbeariaPage() {
 
   /** Dados públicos da barbearia (API) — nome, contato, unidades */
   const [publicMeta, setPublicMeta] = useState<PublicShopPayload | null>(null)
+  const [publicMetaLoading, setPublicMetaLoading] = useState(true)
+  const [publicMetaError, setPublicMetaError] = useState<string | null>(null)
   const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null)
   const [occupiedTimes, setOccupiedTimes] = useState<string[]>([])
   const [loyaltyStatus, setLoyaltyStatus] = useState<LoyaltyClientStatus | null>(null)
@@ -372,16 +374,43 @@ export default function BarbeariaPage() {
 
   useEffect(() => {
     let cancelled = false
+    setPublicMetaLoading(true)
+    setPublicMetaError(null)
     fetch(`/api/public/barbershops/${encodeURIComponent(slug)}`, { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data: PublicShopPayload | null) => {
-        if (!cancelled && data?.name) setPublicMeta(data)
+      .then(async (r) => {
+        if (!r.ok) {
+          throw new Error(r.status === 404 ? "Barbearia não encontrada." : "Erro ao carregar barbearia.")
+        }
+        return r.json() as Promise<PublicShopPayload>
       })
-      .catch(() => {})
+      .then((data) => {
+        if (cancelled) return
+        if (data?.name) {
+          setPublicMeta(data)
+        } else {
+          setPublicMetaError("Barbearia não encontrada.")
+        }
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) {
+          setPublicMetaError(e instanceof Error ? e.message : "Não foi possível carregar a barbearia.")
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setPublicMetaLoading(false)
+      })
     return () => {
       cancelled = true
     }
   }, [slug])
+
+  useEffect(() => {
+    if (!publicMeta) return
+    const serviceIds = new Set((publicMeta.services ?? []).map((s) => s.id))
+    setServicosSelecionados((prev) => prev.filter((id) => serviceIds.has(id)))
+    const barberIds = new Set((publicMeta.barbers ?? []).map((b) => b.id))
+    setProfissionalSelecionado((prev) => (prev && barberIds.has(prev) ? prev : null))
+  }, [publicMeta])
 
   const refreshLoyaltyStatus = useCallback(async () => {
     if (authPhase !== "logado" || !publicMeta?.loyalty_enabled) {
@@ -1258,33 +1287,23 @@ export default function BarbeariaPage() {
     ...barbeariaData,
     nome: publicMeta?.name ?? barbeariaData.nome,
     telefone: publicMeta?.phone ?? barbeariaData.telefone,
-    servicos:
-      publicMeta?.services?.length
-        ? publicMeta.services.map((service) => ({
-            id: service.id,
-            nome: service.name,
-            descricao: (service.description ?? "").trim(),
-            preco: service.price,
-            duracao: service.duration,
-          }))
-        : barbeariaData.servicos.map((service) => ({
-            ...service,
-            id: String(service.id),
-            descricao: service.descricao ?? "",
-          })),
-    profissionais:
-      publicMeta?.barbers?.length
-        ? publicMeta.barbers
-            .filter((barber) => !selectedUnitId || barber.unit_id === selectedUnitId)
-            .map((barber) => ({
-              id: barber.id,
-              nome: barber.name,
-              foto: barber.photo_url || "/placeholder.svg",
-              fotoPosition: barber.photo_position ?? 50,
-              fotoScale: barber.photo_scale ?? 100,
-              especialidade: barber.phone ? `Contato: ${barber.phone}` : "Profissional",
-            }))
-        : barbeariaData.profissionais.map((barber) => ({ ...barber, id: String(barber.id) })),
+    servicos: (publicMeta?.services ?? []).map((service) => ({
+      id: service.id,
+      nome: service.name,
+      descricao: (service.description ?? "").trim(),
+      preco: service.price,
+      duracao: service.duration,
+    })),
+    profissionais: (publicMeta?.barbers ?? [])
+      .filter((barber) => !selectedUnitId || barber.unit_id === selectedUnitId)
+      .map((barber) => ({
+        id: barber.id,
+        nome: barber.name,
+        foto: barber.photo_url || "/placeholder.svg",
+        fotoPosition: barber.photo_position ?? 50,
+        fotoScale: barber.photo_scale ?? 100,
+        especialidade: barber.phone ? `Contato: ${barber.phone}` : "Profissional",
+      })),
   }
   const dias = gerarDias()
   const openingHours = useMemo(
@@ -1498,7 +1517,7 @@ export default function BarbeariaPage() {
     switch (etapa) {
       case 1: {
         if (hasMultipleUnits && !selectedUnitId) return false
-        return servicosSelecionados.length > 0
+        return servicosSelecionadosData.length > 0
       }
       case 2: return profissionalSelecionado !== null
       case 3: return dataSelecionada !== null && horarioSelecionado !== null
@@ -1516,9 +1535,11 @@ export default function BarbeariaPage() {
   const entrarNaListaEspera = async () => {
     if (!dataSelecionada || !horarioSelecionado || profissionalSelecionado === null || !publicMeta?.waitlist_enabled)
       return
+    const serviceIdsToBook = servicosSelecionadosData.map((s) => s.id)
+    if (!serviceIdsToBook.length) return
     const ok = await waitlist.join({
       barber_id: profissionalSelecionado,
-      service_ids: servicosSelecionados,
+      service_ids: serviceIdsToBook,
       date: toYMDLocal(dataSelecionada),
       time: horarioSelecionado,
     })
@@ -1601,6 +1622,12 @@ export default function BarbeariaPage() {
     }
     const prof = barbearia.profissionais.find((p) => p.id === profissionalSelecionado)
     if (!prof) return
+    const serviceIdsToBook = servicosSelecionadosData.map((s) => s.id)
+    if (!serviceIdsToBook.length) {
+      setErroAgendamento("Selecione pelo menos um serviço antes de confirmar.")
+      setEtapa(1)
+      return
+    }
     const remarcaBase = isRemarcando ? bookingSummary ?? loadConfirmedBooking(slug) : null
     const remarcaAppointmentIds =
       remarcaBase?.appointmentIds?.map((id) => String(id).trim()).filter(Boolean) ?? []
@@ -1614,7 +1641,7 @@ export default function BarbeariaPage() {
         credentials: "include",
         body: JSON.stringify({
           barber_id: profissionalSelecionado,
-          service_ids: servicosSelecionados,
+          service_ids: serviceIdsToBook,
           date: toYMDLocal(dataSelecionada),
           time: horarioSelecionado,
           unit_id: selectedUnitId,
@@ -1714,7 +1741,11 @@ export default function BarbeariaPage() {
     const base = bookingSummary ?? loadConfirmedBooking(slug)
     if (base) {
       if (base.profissionalId) setProfissionalSelecionado(base.profissionalId)
-      if (base.servicos?.length) setServicosSelecionados(base.servicos.map((s) => s.id))
+      if (base.servicos?.length && publicMeta?.services?.length) {
+        const valid = new Set(publicMeta.services.map((s) => s.id))
+        const ids = base.servicos.map((s) => s.id).filter((id) => valid.has(id))
+        if (ids.length) setServicosSelecionados(ids)
+      }
       if (base.unitId) setSelectedUnitId(base.unitId)
     }
     setIsRemarcando(true)
@@ -2680,6 +2711,16 @@ export default function BarbeariaPage() {
 
       {showAgendamentoWizard ? (
       <>
+      {publicMetaLoading ? (
+        <div className="max-w-2xl mx-auto px-4 py-16 text-center text-muted-foreground">
+          Carregando serviços da barbearia…
+        </div>
+      ) : publicMetaError || !publicMeta ? (
+        <div className="max-w-2xl mx-auto px-4 py-16 text-center">
+          <p className="text-destructive">{publicMetaError ?? "Barbearia não encontrada."}</p>
+        </div>
+      ) : (
+      <>
       {showUnitPicker ? (
         <div className="max-w-2xl mx-auto px-4 mb-4">
           <ClientUnitPicker
@@ -2727,6 +2768,11 @@ export default function BarbeariaPage() {
         {etapa === 1 && (
           <div>
             <h2 className="text-lg font-semibold text-foreground mb-4">Escolha os serviços</h2>
+            {barbearia.servicos.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Nenhum serviço disponível no momento. Peça à barbearia cadastrar serviços no painel.
+              </p>
+            ) : (
             <div className="grid gap-3">
               {barbearia.servicos.map((servico) => (
                 <Card 
@@ -2765,6 +2811,7 @@ export default function BarbeariaPage() {
                 </Card>
               ))}
             </div>
+            )}
           </div>
         )}
 
@@ -3110,10 +3157,10 @@ export default function BarbeariaPage() {
       {/* Footer Fixo com Resumo e Botão */}
       <div className="fixed bottom-0 left-0 right-0 bg-card border-t border-border p-4">
         <div className="max-w-2xl mx-auto">
-          {servicosSelecionados.length > 0 && (
+          {servicosSelecionadosData.length > 0 && (
             <div className="flex items-center justify-between mb-3 text-sm">
               <div className="flex items-center gap-2">
-                <span className="text-muted-foreground">{servicosSelecionados.length} serviço(s)</span>
+                <span className="text-muted-foreground">{servicosSelecionadosData.length} serviço(s)</span>
                 <span className="text-muted-foreground">•</span>
                 <span className="text-muted-foreground">{totalDuracao} min</span>
               </div>
@@ -3165,6 +3212,8 @@ export default function BarbeariaPage() {
           </div>
         </div>
       </div>
+      </>
+      )}
       </>
       ) : null}
 

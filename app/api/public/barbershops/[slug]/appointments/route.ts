@@ -19,6 +19,7 @@ import { resolveEffectivePlanForBarbershop } from "@/lib/barbershop-effective-pl
 import { hasFeature } from "@/lib/plans"
 import { validateBarberForUnit } from "@/lib/unit-context"
 import { withAppointmentDbSchema } from "@/lib/appointment-db-schema"
+import { isValidUuid } from "@/lib/is-uuid"
 
 function localYmd(d: Date): string {
   const y = d.getFullYear()
@@ -165,12 +166,6 @@ export async function POST(
     const time = normalizeTime(String(body.time ?? ""))
     const unitId = body.unit_id ? String(body.unit_id).trim() : null
     const clientPayload = body.client ?? {}
-
-    // Prisma espera UUID; se o frontend estiver enviando IDs inválidos (ex.: fallback mock),
-    // paramos aqui com uma mensagem clara em vez de estourar erro 500.
-    const UUID_RE =
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-    const isValidUuid = (v: string) => UUID_RE.test(v)
 
     if (!isValidUuid(barberId)) {
       return NextResponse.json({ error: "Profissional inválido (id não é UUID)" }, { status: 400 })
