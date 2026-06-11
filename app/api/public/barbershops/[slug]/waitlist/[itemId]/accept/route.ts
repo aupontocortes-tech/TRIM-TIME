@@ -168,7 +168,7 @@ export async function POST(
               unitId: effectiveUnitId,
               date: apptDate,
               time: normalizeAppointmentTime(item.time),
-              status: "pending",
+              status: "confirmed",
               totalPrice: item.service.price,
             },
             select: { id: true },

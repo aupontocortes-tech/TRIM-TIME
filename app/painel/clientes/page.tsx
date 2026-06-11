@@ -61,7 +61,8 @@ export default function ClientesPage() {
     plan && hasFeature(plan, "loyalty_program")
       ? parseLoyaltyProgram(barbershop?.settings ?? null)
       : null
-  const needsUnitPick = units.length > 1 && !selectedUnitId
+  /** Cadastro manual exige unidade; listagem funciona em "Todas as unidades". */
+  const needsUnitForCreate = units.length > 1 && !selectedUnitId
   const nomeUnidadeAtiva =
     selectedUnitId && units.length ? units.find((u) => u.id === selectedUnitId)?.name ?? null : null
 
@@ -78,13 +79,6 @@ export default function ClientesPage() {
   const [redeemBusyId, setRedeemBusyId] = useState<string | null>(null)
 
   const carregarDados = async () => {
-    if (needsUnitPick) {
-      setClientes([])
-      setAppointments([])
-      setLoading(false)
-      setErro("")
-      return
-    }
     setLoading(true)
     setErro("")
     try {
@@ -152,7 +146,7 @@ export default function ClientesPage() {
   useEffect(() => {
     if (unitsLoading) return
     void carregarDados()
-  }, [selectedUnitId, units.length, unitsLoading, needsUnitPick, loyaltyConfig?.visits_required])
+  }, [selectedUnitId, units.length, unitsLoading, loyaltyConfig?.visits_required])
 
   const handleSalvarNovoCliente = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -249,11 +243,11 @@ export default function ClientesPage() {
         <div>
           <h1 className="text-2xl font-bold text-foreground">Clientes</h1>
           <p className="text-muted-foreground">
-            {needsUnitPick
-              ? 'Selecione uma unidade em "Unidade ativa" na barra lateral para ver os clientes desta loja.'
-              : nomeUnidadeAtiva
-                ? `Unidade: ${nomeUnidadeAtiva} — clientes e histórico desta loja`
-                : "Gerencie seus clientes e histórico de todas as unidades"}
+            {nomeUnidadeAtiva
+              ? `Unidade: ${nomeUnidadeAtiva} — clientes e histórico desta loja`
+              : units.length > 1
+                ? "Todas as unidades — clientes de toda a rede"
+                : "Gerencie seus clientes e histórico de atendimentos"}
           </p>
         </div>
         <Dialog open={openNovoCliente} onOpenChange={setOpenNovoCliente}>
@@ -261,7 +255,7 @@ export default function ClientesPage() {
             <Button
               type="button"
               className="bg-primary text-primary-foreground hover:bg-primary/90 w-full sm:w-auto"
-              disabled={needsUnitPick}
+              disabled={needsUnitForCreate}
               onClick={() => setOpenNovoCliente(true)}
             >
               + Novo Cliente
@@ -379,12 +373,6 @@ export default function ClientesPage() {
             {loading ? (
               <div className="text-center py-8">
                 <p className="text-muted-foreground">Carregando clientes...</p>
-              </div>
-            ) : needsUnitPick ? (
-              <div className="text-center py-8">
-                <p className="text-muted-foreground">
-                  Selecione uma unidade na barra lateral para ver e gerenciar os clientes desta loja.
-                </p>
               </div>
             ) : clientesFiltrados.length === 0 ? (
               <div className="text-center py-8">

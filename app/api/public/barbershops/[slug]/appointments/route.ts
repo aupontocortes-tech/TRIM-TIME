@@ -440,7 +440,7 @@ export async function POST(
               unitId: effectiveUnitId ?? barber.unitId,
               date: apptDate,
               time: item.time,
-              status: "pending",
+              status: "confirmed",
               totalPrice: item.service.price,
             },
             select: { id: true, time: true },
