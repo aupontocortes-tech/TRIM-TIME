@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma"
 import { prismaAppointmentUnitFilter } from "@/lib/unit-context"
 import { parseAppointmentDate } from "@/lib/appointment-prisma-helpers"
 import { COMMISSION_APPOINTMENT_STATUSES } from "@/lib/commissions"
+import { loadFinancialLedgerEntries } from "@/lib/db/financial-ledger-store"
+import { shopExpenseCategoryLabel } from "@/lib/shop-expenses"
 
 const SALE_STATUSES: AppointmentStatus[] = [...COMMISSION_APPOINTMENT_STATUSES]
 
@@ -160,16 +162,11 @@ export async function buildFinancialSummary(
         unit: { select: { name: true } },
       },
     }),
-    prisma.financialLedgerEntry.findMany({
-      where: {
-        barbershopId,
-        occurredAt: {
-          gte: new Date(`${from}T00:00:00.000Z`),
-          lte: new Date(`${to}T23:59:59.999Z`),
-        },
-      },
-      orderBy: { occurredAt: "desc" },
-      take: 25,
+    loadFinancialLedgerEntries({
+      barbershopId,
+      occurredGte: new Date(`${from}T00:00:00.000Z`),
+      occurredLte: new Date(`${to}T23:59:59.999Z`),
+      limit: 25,
     }),
     todayWhere
       ? prisma.appointment.aggregate({
@@ -265,8 +262,8 @@ export async function buildFinancialSummary(
     return {
       id: `ledger-${e.id}`,
       tipo: out ? "saida" : "entrada",
-      titulo: e.note || e.category || "Lançamento",
-      sub: e.category,
+      titulo: e.note?.trim() || shopExpenseCategoryLabel(e.category),
+      sub: shopExpenseCategoryLabel(e.category),
       valor: Math.round(amt * 100) / 100,
       quando: e.occurredAt.toISOString().slice(0, 16).replace("T", " "),
     }

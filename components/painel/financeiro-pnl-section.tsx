@@ -29,6 +29,7 @@ export type PnlData = {
     category_label: string
     amount: number
     note: string | null
+    name?: string
     vendor: string | null
     occurred_at: string
     unit_name: string | null
@@ -55,9 +56,9 @@ export function FinanceiroPnlSection({ from, to, isNetworkView, onChanged }: Pro
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
   const [category, setCategory] = useState("produtos")
+  const [expenseName, setExpenseName] = useState("")
   const [amount, setAmount] = useState("")
   const [vendor, setVendor] = useState("")
-  const [note, setNote] = useState("")
   const [expenseDate, setExpenseDate] = useState("")
 
   const load = useCallback(async () => {
@@ -97,9 +98,9 @@ export function FinanceiroPnlSection({ from, to, isNetworkView, onChanged }: Pro
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           category,
+          name: expenseName.trim(),
           amount: Number(amount.replace(",", ".")),
           vendor: vendor.trim() || undefined,
-          note: note.trim() || undefined,
           occurred_at: expenseDate || undefined,
         }),
       })
@@ -109,8 +110,8 @@ export function FinanceiroPnlSection({ from, to, isNetworkView, onChanged }: Pro
         return
       }
       setAmount("")
+      setExpenseName("")
       setVendor("")
-      setNote("")
       setExpenseDate("")
       void load()
       onChanged()
@@ -230,6 +231,15 @@ export function FinanceiroPnlSection({ from, to, isNetworkView, onChanged }: Pro
           </CardHeader>
           <CardContent>
             <form onSubmit={(e) => void handleAdd(e)} className="space-y-4">
+              <div className="space-y-1.5">
+                <Label>Nome da despesa</Label>
+                <Input
+                  value={expenseName}
+                  onChange={(e) => setExpenseName(e.target.value)}
+                  placeholder="Ex.: Conta de luz março, Shampoo profissional"
+                  required
+                />
+              </div>
               <div className="grid sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label>Categoria</Label>
@@ -269,11 +279,7 @@ export function FinanceiroPnlSection({ from, to, isNetworkView, onChanged }: Pro
                   <Input value={vendor} onChange={(e) => setVendor(e.target.value)} placeholder="Ex.: CEMIG, fornecedor" />
                 </div>
               </div>
-              <div className="space-y-1.5">
-                <Label>Observação (opcional)</Label>
-                <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Detalhes da compra ou conta" />
-              </div>
-              <Button type="submit" className="w-full" disabled={saving}>
+              <Button type="submit" className="w-full" disabled={saving || !expenseName.trim()}>
                 {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
                 Adicionar despesa
               </Button>
@@ -327,7 +333,8 @@ export function FinanceiroPnlSection({ from, to, isNetworkView, onChanged }: Pro
                   <tr className="border-b border-border text-muted-foreground text-left">
                     <th className="py-2 pr-3 font-medium">Data</th>
                     <th className="py-2 pr-3 font-medium">Categoria</th>
-                    <th className="py-2 pr-3 font-medium">Descrição</th>
+                    <th className="py-2 pr-3 font-medium">Nome</th>
+                    <th className="py-2 pr-3 font-medium">Fornecedor</th>
                     <th className="py-2 pr-3 font-medium text-right">Valor</th>
                     <th className="py-2 w-10" />
                   </tr>
@@ -339,9 +346,11 @@ export function FinanceiroPnlSection({ from, to, isNetworkView, onChanged }: Pro
                         {new Date(`${ex.occurred_at}T12:00:00`).toLocaleDateString("pt-BR")}
                       </td>
                       <td className="py-2.5 pr-3">{ex.category_label}</td>
+                      <td className="py-2.5 pr-3 font-medium text-foreground">
+                        {ex.name ?? ex.note ?? ex.category_label}
+                      </td>
                       <td className="py-2.5 pr-3 text-muted-foreground">
-                        {[ex.vendor, ex.note].filter(Boolean).join(" · ") || "—"}
-                        {ex.unit_name ? ` · ${ex.unit_name}` : ""}
+                        {[ex.vendor, ex.unit_name].filter(Boolean).join(" · ") || "—"}
                       </td>
                       <td className="py-2.5 pr-3 text-right font-medium text-red-500">
                         R$ {brl(ex.amount)}

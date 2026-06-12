@@ -1,18 +1,13 @@
-import type { Prisma } from "@prisma/client"
 import {
   aggregateCommissionsForRange,
   COMMISSION_APPOINTMENT_STATUSES,
 } from "@/lib/commissions"
 import { parseAppointmentDate } from "@/lib/appointment-prisma-helpers"
 import { isLedgerOutDirection, shopExpenseCategoryLabel, type ShopExpenseRow, ledgerEntryToExpense } from "@/lib/shop-expenses"
+import { loadFinancialLedgerEntries } from "@/lib/db/financial-ledger-store"
 import { prisma } from "@/lib/prisma"
 import { prismaAppointmentUnitFilter } from "@/lib/unit-context"
 import type { AppointmentStatus } from "@prisma/client"
-
-function prismaLedgerUnitFilter(unitId: string | null): Prisma.FinancialLedgerEntryWhereInput {
-  if (!unitId) return {}
-  return { unitId }
-}
 
 export type FinancialPnlPayload = {
   from: string
@@ -36,7 +31,6 @@ export async function buildFinancialPnl(
   commissionEnabled: boolean
 ): Promise<FinancialPnlPayload> {
   const unitFilter = unitId ? prismaAppointmentUnitFilter(unitId) : {}
-  const ledgerUnitFilter = prismaLedgerUnitFilter(unitId)
 
   const fromDate = parseAppointmentDate(from)
   const toDate = parseAppointmentDate(to)
@@ -53,14 +47,11 @@ export async function buildFinancialPnl(
       },
       _sum: { totalPrice: true },
     }),
-    prisma.financialLedgerEntry.findMany({
-      where: {
-        barbershopId,
-        ...ledgerUnitFilter,
-        occurredAt: { gte: occurredGte, lte: occurredLte },
-      },
-      orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }],
-      include: { unit: { select: { name: true } } },
+    loadFinancialLedgerEntries({
+      barbershopId,
+      unitId,
+      occurredGte,
+      occurredLte,
     }),
     commissionEnabled
       ? aggregateCommissionsForRange(barbershopId, from, to, unitId)

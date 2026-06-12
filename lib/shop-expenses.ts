@@ -32,6 +32,7 @@ export type ShopExpenseRow = {
   id: string
   category: ShopExpenseCategory | string
   category_label: string
+  name: string
   amount: number
   note: string | null
   vendor: string | null
@@ -50,10 +51,12 @@ export function ledgerEntryToExpense(row: {
   unitId: string | null
   unit?: { name: string } | null
 }): ShopExpenseRow {
+  const name = row.note?.trim() || shopExpenseCategoryLabel(row.category)
   return {
     id: row.id,
     category: row.category,
     category_label: shopExpenseCategoryLabel(row.category),
+    name,
     amount: Math.round(Number(row.amount) * 100) / 100,
     note: row.note,
     vendor: row.vendor,

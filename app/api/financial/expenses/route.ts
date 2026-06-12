@@ -9,7 +9,7 @@ import {
   ledgerEntryToExpense,
   SHOP_EXPENSE_CATEGORIES,
 } from "@/lib/shop-expenses"
-import { prisma } from "@/lib/prisma"
+import { createFinancialLedgerExpense } from "@/lib/db/financial-ledger-store"
 
 function parseYmd(v: unknown): string | null {
   if (typeof v !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(v.trim())) return null
@@ -64,6 +64,7 @@ export async function POST(request: Request) {
     const body = (await request.json()) as {
       category?: string
       amount?: number
+      name?: string
       note?: string
       vendor?: string
       occurred_at?: string
@@ -85,25 +86,30 @@ export async function POST(request: Request) {
     }
 
     const scopeUnit = await resolveSelectedUnitId(barbershopId)
-    const note = typeof body.note === "string" ? body.note.trim().slice(0, 500) : null
+    const nameRaw =
+      typeof body.name === "string"
+        ? body.name.trim()
+        : typeof body.note === "string"
+          ? body.note.trim()
+          : ""
+    if (!nameRaw) {
+      return NextResponse.json({ error: "Informe o nome da despesa." }, { status: 400 })
+    }
+    const note = nameRaw.slice(0, 500)
     const vendor = typeof body.vendor === "string" ? body.vendor.trim().slice(0, 200) : null
 
     const occurredAt = occurredYmd
       ? new Date(`${occurredYmd}T12:00:00.000Z`)
       : new Date()
 
-    const created = await prisma.financialLedgerEntry.create({
-      data: {
-        barbershopId,
-        unitId: scopeUnit,
-        direction: "out",
-        category,
-        amount,
-        note: note || SHOP_EXPENSE_CATEGORIES[category],
-        vendor,
-        occurredAt,
-      },
-      include: { unit: { select: { name: true } } },
+    const created = await createFinancialLedgerExpense({
+      barbershopId,
+      unitId: scopeUnit,
+      category,
+      amount,
+      note,
+      vendor,
+      occurredAt,
     })
 
     return NextResponse.json(ledgerEntryToExpense(created))

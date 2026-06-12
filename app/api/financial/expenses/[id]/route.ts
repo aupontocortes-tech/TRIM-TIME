@@ -2,8 +2,11 @@ import { NextResponse } from "next/server"
 import { requireBarbershopId } from "@/lib/tenant"
 import { resolveEffectivePlanForActiveSession } from "@/lib/barbershop-effective-plan-server"
 import { getUpgradeMessage, hasFeature } from "@/lib/plans"
-import { isShopExpenseCategory, ledgerEntryToExpense, SHOP_EXPENSE_CATEGORIES } from "@/lib/shop-expenses"
-import { prisma } from "@/lib/prisma"
+import { isShopExpenseCategory, ledgerEntryToExpense } from "@/lib/shop-expenses"
+import {
+  deleteFinancialLedgerExpense,
+  updateFinancialLedgerExpense,
+} from "@/lib/db/financial-ledger-store"
 
 type RouteCtx = { params: Promise<{ id: string }> }
 
@@ -21,14 +24,10 @@ export async function DELETE(_request: Request, ctx: RouteCtx) {
     }
 
     const { id } = await ctx.params
-    const row = await prisma.financialLedgerEntry.findFirst({
-      where: { id, barbershopId },
-    })
-    if (!row) {
+    const deleted = await deleteFinancialLedgerExpense(id, barbershopId)
+    if (!deleted) {
       return NextResponse.json({ error: "Despesa não encontrada." }, { status: 404 })
     }
-
-    await prisma.financialLedgerEntry.delete({ where: { id } })
     return NextResponse.json({ ok: true })
   } catch (e) {
     return NextResponse.json(
@@ -47,16 +46,11 @@ export async function PATCH(request: Request, ctx: RouteCtx) {
     }
 
     const { id } = await ctx.params
-    const existing = await prisma.financialLedgerEntry.findFirst({
-      where: { id, barbershopId },
-    })
-    if (!existing) {
-      return NextResponse.json({ error: "Despesa não encontrada." }, { status: 404 })
-    }
 
     const body = (await request.json()) as {
       category?: string
       amount?: number
+      name?: string
       note?: string
       vendor?: string
       occurred_at?: string
@@ -85,8 +79,17 @@ export async function PATCH(request: Request, ctx: RouteCtx) {
       data.amount = amount
     }
 
-    if (body.note !== undefined) {
-      data.note = typeof body.note === "string" ? body.note.trim().slice(0, 500) : null
+    if (body.name !== undefined || body.note !== undefined) {
+      const nameRaw =
+        typeof body.name === "string"
+          ? body.name.trim()
+          : typeof body.note === "string"
+            ? body.note.trim()
+            : ""
+      if (!nameRaw) {
+        return NextResponse.json({ error: "Informe o nome da despesa." }, { status: 400 })
+      }
+      data.note = nameRaw.slice(0, 500)
     }
 
     if (body.vendor !== undefined) {
@@ -101,11 +104,10 @@ export async function PATCH(request: Request, ctx: RouteCtx) {
       data.occurredAt = new Date(`${ymd}T12:00:00.000Z`)
     }
 
-    const updated = await prisma.financialLedgerEntry.update({
-      where: { id },
-      data,
-      include: { unit: { select: { name: true } } },
-    })
+    const updated = await updateFinancialLedgerExpense(id, barbershopId, data)
+    if (!updated) {
+      return NextResponse.json({ error: "Despesa não encontrada." }, { status: 404 })
+    }
 
     return NextResponse.json(ledgerEntryToExpense(updated))
   } catch (e) {
