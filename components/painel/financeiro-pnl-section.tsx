@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Loader2, Plus, Trash2, TrendingDown, TrendingUp, Wallet, Receipt } from "lucide-react"
+import { Loader2, Plus, Trash2 } from "lucide-react"
 
 export type PnlData = {
   from: string
@@ -48,6 +48,19 @@ function brl(n: number) {
   return n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
+function Stat({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
+  return (
+    <div
+      className={`rounded-lg border p-4 ${
+        highlight ? "border-primary/40 bg-primary/5" : "border-border bg-card"
+      }`}
+    >
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className={`text-xl font-bold mt-1 ${highlight ? "text-primary" : "text-foreground"}`}>{value}</p>
+    </div>
+  )
+}
+
 export function FinanceiroPnlSection({ from, to, isNetworkView, onChanged }: Props) {
   const [pnl, setPnl] = useState<PnlData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -58,7 +71,6 @@ export function FinanceiroPnlSection({ from, to, isNetworkView, onChanged }: Pro
   const [category, setCategory] = useState("produtos")
   const [expenseName, setExpenseName] = useState("")
   const [amount, setAmount] = useState("")
-  const [vendor, setVendor] = useState("")
   const [expenseDate, setExpenseDate] = useState("")
 
   const load = useCallback(async () => {
@@ -100,7 +112,6 @@ export function FinanceiroPnlSection({ from, to, isNetworkView, onChanged }: Pro
           category,
           name: expenseName.trim(),
           amount: Number(amount.replace(",", ".")),
-          vendor: vendor.trim() || undefined,
           occurred_at: expenseDate || undefined,
         }),
       })
@@ -111,7 +122,6 @@ export function FinanceiroPnlSection({ from, to, isNetworkView, onChanged }: Pro
       }
       setAmount("")
       setExpenseName("")
-      setVendor("")
       setExpenseDate("")
       void load()
       onChanged()
@@ -159,60 +169,20 @@ export function FinanceiroPnlSection({ from, to, isNetworkView, onChanged }: Pro
   }
 
   return (
-    <div className="space-y-6">
-      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="bg-card border-border">
-          <CardContent className="p-5">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
-              <TrendingUp className="w-4 h-4 text-emerald-500" />
-              Faturamento
-            </div>
-            <p className="text-2xl font-bold text-foreground">
-              {loading ? "—" : `R$ ${brl(pnl?.revenue ?? 0)}`}
-            </p>
-          </CardContent>
-        </Card>
-        <Card className="bg-card border-border">
-          <CardContent className="p-5">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
-              <TrendingDown className="w-4 h-4 text-red-500" />
-              Despesas da loja
-            </div>
-            <p className="text-2xl font-bold text-foreground">
-              {loading ? "—" : `R$ ${brl(pnl?.expenses_total ?? 0)}`}
-            </p>
-          </CardContent>
-        </Card>
-        <Card className="bg-card border-border">
-          <CardContent className="p-5">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
-              <Wallet className="w-4 h-4 text-amber-500" />
-              Comissões (barbeiros)
-            </div>
-            <p className="text-2xl font-bold text-foreground">
-              {loading ? "—" : pnl?.commission_enabled ? `R$ ${brl(pnl.commissions_total)}` : "—"}
-            </p>
-            {!loading && !pnl?.commission_enabled ? (
-              <p className="text-xs text-muted-foreground mt-1">Plano Pro/Premium</p>
-            ) : null}
-          </CardContent>
-        </Card>
-        <Card className="bg-card border-primary/40 border-2">
-          <CardContent className="p-5">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
-              <Receipt className="w-4 h-4 text-primary" />
-              Lucro do dono
-            </div>
-            <p
-              className={`text-2xl font-bold ${
-                (pnl?.owner_profit ?? 0) >= 0 ? "text-emerald-600" : "text-red-500"
-              }`}
-            >
-              {loading ? "—" : `R$ ${brl(pnl?.owner_profit ?? 0)}`}
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">Faturamento − despesas − comissões</p>
-          </CardContent>
-        </Card>
+    <div className="space-y-5">
+      <div className="grid sm:grid-cols-3 gap-3">
+        <Stat label="Despesas" value={loading ? "—" : `R$ ${brl(pnl?.expenses_total ?? 0)}`} />
+        <Stat
+          label="Comissões"
+          value={
+            loading ? "—" : pnl?.commission_enabled ? `R$ ${brl(pnl.commissions_total)}` : "—"
+          }
+        />
+        <Stat
+          label="Lucro do dono"
+          value={loading ? "—" : `R$ ${brl(pnl?.owner_profit ?? 0)}`}
+          highlight
+        />
       </div>
 
       {err ? (
@@ -221,120 +191,74 @@ export function FinanceiroPnlSection({ from, to, isNetworkView, onChanged }: Pro
         </div>
       ) : null}
 
-      <div className="grid lg:grid-cols-2 gap-6">
-        <Card className="bg-card border-border">
-          <CardHeader>
-            <CardTitle className="text-lg">Registrar despesa</CardTitle>
-            <CardDescription>
-              Produtos, energia, água, aluguel e outros custos da loja no período selecionado.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={(e) => void handleAdd(e)} className="space-y-4">
-              <div className="space-y-1.5">
-                <Label>Nome da despesa</Label>
-                <Input
-                  value={expenseName}
-                  onChange={(e) => setExpenseName(e.target.value)}
-                  placeholder="Ex.: Conta de luz março, Shampoo profissional"
-                  required
-                />
-              </div>
-              <div className="grid sm:grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label>Categoria</Label>
-                  <Select value={category} onValueChange={setCategory}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Object.entries(categories).map(([key, label]) => (
-                        <SelectItem key={key} value={key}>
-                          {label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Valor (R$)</Label>
-                  <Input
-                    inputMode="decimal"
-                    placeholder="0,00"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    required
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Data</Label>
-                  <Input
-                    type="date"
-                    value={expenseDate}
-                    onChange={(e) => setExpenseDate(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Fornecedor (opcional)</Label>
-                  <Input value={vendor} onChange={(e) => setVendor(e.target.value)} placeholder="Ex.: CEMIG, fornecedor" />
-                </div>
-              </div>
-              <Button type="submit" className="w-full" disabled={saving || !expenseName.trim()}>
-                {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
-                Adicionar despesa
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-card border-border">
-          <CardHeader>
-            <CardTitle className="text-lg">Despesas por categoria</CardTitle>
-            <CardDescription>No intervalo {from} até {to}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <p className="text-sm text-muted-foreground py-8 text-center">Carregando…</p>
-            ) : !pnl?.expenses_by_category.length ? (
-              <p className="text-sm text-muted-foreground py-8 text-center">
-                Nenhuma despesa registrada neste período.
-              </p>
-            ) : (
-              <ul className="space-y-2">
-                {pnl.expenses_by_category.map((c) => (
-                  <li
-                    key={c.category}
-                    className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-sm"
-                  >
-                    <span className="text-foreground">{c.label}</span>
-                    <span className="font-semibold text-red-500">R$ {brl(c.amount)}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+      <Card className="bg-card border-border">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Nova despesa</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={(e) => void handleAdd(e)} className="grid sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end">
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label className="text-xs">Nome</Label>
+              <Input
+                value={expenseName}
+                onChange={(e) => setExpenseName(e.target.value)}
+                placeholder="Ex.: Conta de luz"
+                required
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Categoria</Label>
+              <Select value={category} onValueChange={setCategory}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(categories).map(([key, label]) => (
+                    <SelectItem key={key} value={key}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Valor (R$)</Label>
+              <Input
+                inputMode="decimal"
+                placeholder="0,00"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                required
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Data</Label>
+              <Input type="date" value={expenseDate} onChange={(e) => setExpenseDate(e.target.value)} />
+            </div>
+            <Button type="submit" className="w-full" disabled={saving || !expenseName.trim()}>
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+              Adicionar
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
 
       <Card className="bg-card border-border">
-        <CardHeader>
-          <CardTitle className="text-lg">Histórico de despesas</CardTitle>
-          <CardDescription>Todas as saídas registradas no período</CardDescription>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Despesas do período</CardTitle>
         </CardHeader>
         <CardContent>
           {loading ? (
-            <p className="text-sm text-muted-foreground py-8 text-center">Carregando…</p>
+            <p className="text-sm text-muted-foreground py-6 text-center">Carregando…</p>
           ) : !pnl?.expenses.length ? (
-            <p className="text-sm text-muted-foreground py-8 text-center">Nenhuma despesa no histórico.</p>
+            <p className="text-sm text-muted-foreground py-6 text-center">Nenhuma despesa registrada.</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border text-muted-foreground text-left">
                     <th className="py-2 pr-3 font-medium">Data</th>
-                    <th className="py-2 pr-3 font-medium">Categoria</th>
                     <th className="py-2 pr-3 font-medium">Nome</th>
-                    <th className="py-2 pr-3 font-medium">Fornecedor</th>
                     <th className="py-2 pr-3 font-medium text-right">Valor</th>
                     <th className="py-2 w-10" />
                   </tr>
@@ -342,20 +266,19 @@ export function FinanceiroPnlSection({ from, to, isNetworkView, onChanged }: Pro
                 <tbody>
                   {pnl.expenses.map((ex) => (
                     <tr key={ex.id} className="border-b border-border/60">
-                      <td className="py-2.5 pr-3 whitespace-nowrap">
+                      <td className="py-2 pr-3 whitespace-nowrap text-muted-foreground">
                         {new Date(`${ex.occurred_at}T12:00:00`).toLocaleDateString("pt-BR")}
                       </td>
-                      <td className="py-2.5 pr-3">{ex.category_label}</td>
-                      <td className="py-2.5 pr-3 font-medium text-foreground">
-                        {ex.name ?? ex.note ?? ex.category_label}
+                      <td className="py-2 pr-3">
+                        <span className="font-medium text-foreground">
+                          {ex.name ?? ex.note ?? ex.category_label}
+                        </span>
+                        <span className="text-muted-foreground text-xs ml-2">{ex.category_label}</span>
                       </td>
-                      <td className="py-2.5 pr-3 text-muted-foreground">
-                        {[ex.vendor, ex.unit_name].filter(Boolean).join(" · ") || "—"}
-                      </td>
-                      <td className="py-2.5 pr-3 text-right font-medium text-red-500">
+                      <td className="py-2 pr-3 text-right font-medium text-red-500">
                         R$ {brl(ex.amount)}
                       </td>
-                      <td className="py-2.5">
+                      <td className="py-2">
                         <Button
                           type="button"
                           variant="ghost"

@@ -28,6 +28,8 @@ export type FinancialSummaryPayload = {
   revenue_previous: number
   revenue_today: number | null
   appointment_sale_count: number
+  future_appointments_count: number
+  future_appointments_revenue: number
   ticket_avg: number
   daily: { date: string; revenue: number }[]
   monthly_six: { key: string; mes: string; valor: number }[]
@@ -116,6 +118,17 @@ export async function buildFinancialSummary(
     }
   }
 
+  const futureFromYmd = today && today > from ? today : from
+  const futureWhere: Prisma.AppointmentWhereInput = {
+    barbershopId,
+    ...unitFilter,
+    status: { in: ["pending", "confirmed"] },
+    date: {
+      gte: parseAppointmentDate(futureFromYmd),
+      lte: parseAppointmentDate(to),
+    },
+  }
+
   const [
     periodAgg,
     prevAgg,
@@ -125,6 +138,7 @@ export async function buildFinancialSummary(
     recentAppointments,
     ledgerRows,
     todayAgg,
+    futureAgg,
   ] = await Promise.all([
     prisma.appointment.aggregate({
       where: saleWhere,
@@ -174,6 +188,11 @@ export async function buildFinancialSummary(
           _sum: { totalPrice: true },
         })
       : Promise.resolve(null),
+    prisma.appointment.aggregate({
+      where: futureWhere,
+      _sum: { totalPrice: true },
+      _count: { _all: true },
+    }),
   ])
 
   const revenue = Number(periodAgg._sum.totalPrice ?? 0)
@@ -183,6 +202,8 @@ export async function buildFinancialSummary(
 
   const revenuePrevious = Number(prevAgg._sum.totalPrice ?? 0)
   const revenueToday = todayAgg ? Number(todayAgg._sum.totalPrice ?? 0) : null
+  const futureAppointmentsCount = futureAgg._count._all
+  const futureAppointmentsRevenue = Math.round(Number(futureAgg._sum.totalPrice ?? 0) * 100) / 100
 
   const daily = dailyGroups
     .map((g) => ({
@@ -282,6 +303,8 @@ export async function buildFinancialSummary(
     revenue_previous: Math.round(revenuePrevious * 100) / 100,
     revenue_today: revenueToday != null ? Math.round(revenueToday * 100) / 100 : null,
     appointment_sale_count: appointmentSaleCount,
+    future_appointments_count: futureAppointmentsCount,
+    future_appointments_revenue: futureAppointmentsRevenue,
     ticket_avg: ticketAvg,
     daily,
     monthly_six,
