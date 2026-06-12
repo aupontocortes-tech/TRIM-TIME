@@ -15,6 +15,9 @@ import {
   Wallet,
 } from "lucide-react"
 import type { CommissionsSummaryResponse } from "@/lib/commissions"
+import { FinanceiroPnlSection } from "@/components/painel/financeiro-pnl-section"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import {
   BarChart,
   Bar,
@@ -30,7 +33,7 @@ import {
   Cell,
 } from "recharts"
 
-const periodos = ["Hoje", "Esta Semana", "Este Mês", "Este Ano"]
+const periodos = ["Hoje", "Esta Semana", "Este Mês", "Trimestre", "Semestre", "Este Ano", "Personalizado"]
 
 function pad2(n: number) {
   return String(n).padStart(2, "0")
@@ -41,9 +44,12 @@ function toYMD(d: Date) {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
 }
 
-function dateRangeForPeriod(period: string): { from: string; to: string } {
+function dateRangeForPeriod(period: string, customFrom?: string, customTo?: string): { from: string; to: string } {
   const now = new Date()
   const to = toYMD(now)
+  if (period === "Personalizado" && customFrom && customTo) {
+    return customFrom <= customTo ? { from: customFrom, to: customTo } : { from: customTo, to: customFrom }
+  }
   if (period === "Hoje") return { from: to, to }
   if (period === "Esta Semana") {
     const d = new Date(now)
@@ -54,6 +60,16 @@ function dateRangeForPeriod(period: string): { from: string; to: string } {
   }
   if (period === "Este Mês") {
     const d = new Date(now.getFullYear(), now.getMonth(), 1)
+    return { from: toYMD(d), to }
+  }
+  if (period === "Trimestre") {
+    const q = Math.floor(now.getMonth() / 3)
+    const d = new Date(now.getFullYear(), q * 3, 1)
+    return { from: toYMD(d), to }
+  }
+  if (period === "Semestre") {
+    const half = now.getMonth() < 6 ? 0 : 6
+    const d = new Date(now.getFullYear(), half, 1)
     return { from: toYMD(d), to }
   }
   const d = new Date(now.getFullYear(), 0, 1)
@@ -102,6 +118,12 @@ export default function FinanceiroPage() {
     ? units.find((u) => u.id === selectedUnitId)?.name ?? null
     : null
   const [periodoSelecionado, setPeriodoSelecionado] = useState("Este Mês")
+  const [customFrom, setCustomFrom] = useState(() => {
+    const d = new Date()
+    return toYMD(new Date(d.getFullYear(), d.getMonth(), 1))
+  })
+  const [customTo, setCustomTo] = useState(() => toYMD(new Date()))
+  const [pnlRefresh, setPnlRefresh] = useState(0)
   const [commissionSummary, setCommissionSummary] = useState<CommissionsSummaryResponse | null>(null)
   const [commissionLoading, setCommissionLoading] = useState(true)
   const [financial, setFinancial] = useState<FinancialSummary | null>(null)
@@ -112,7 +134,7 @@ export default function FinanceiroPage() {
     setCommissionLoading(true)
     setFinancialLoading(true)
     setFinancialError(null)
-    const { from, to } = dateRangeForPeriod(period)
+    const { from, to } = dateRangeForPeriod(period, customFrom, customTo)
     const today = toYMD(new Date())
 
     try {
@@ -151,12 +173,15 @@ export default function FinanceiroPage() {
       setCommissionLoading(false)
       setFinancialLoading(false)
     }
-  }, [isNetworkView])
+  }, [isNetworkView, customFrom, customTo])
+
+  const activeRange = dateRangeForPeriod(periodoSelecionado, customFrom, customTo)
 
   useEffect(() => {
     if (unitsLoading) return
+    if (periodoSelecionado === "Personalizado" && (!customFrom || !customTo)) return
     void loadPeriod(periodoSelecionado)
-  }, [periodoSelecionado, loadPeriod, selectedUnitId, unitsLoading, isNetworkView])
+  }, [periodoSelecionado, loadPeriod, selectedUnitId, unitsLoading, isNetworkView, customFrom, customTo, pnlRefresh])
 
   const prev = financial?.revenue_previous ?? 0
   const rev = financial?.revenue ?? 0
@@ -186,7 +211,7 @@ export default function FinanceiroPage() {
         <div>
           <h1 className="text-2xl font-bold text-foreground">Financeiro</h1>
           <p className="text-muted-foreground">
-            Faturamento e serviços com base nos seus agendamentos (confirmados ou concluídos com valor).
+            Faturamento, despesas da loja, comissões dos barbeiros e lucro do dono — com histórico por período.
           </p>
         </div>
         <Button variant="outline" asChild className="border-border text-foreground hover:bg-secondary w-full sm:w-auto">
@@ -235,6 +260,46 @@ export default function FinanceiroPage() {
           </Button>
         ))}
       </div>
+
+      {periodoSelecionado === "Personalizado" ? (
+        <div className="flex flex-col sm:flex-row gap-3 items-end rounded-lg border border-border p-4 bg-card">
+          <div className="space-y-1.5 flex-1">
+            <Label htmlFor="fin-from">De</Label>
+            <Input
+              id="fin-from"
+              type="date"
+              value={customFrom}
+              onChange={(e) => setCustomFrom(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5 flex-1">
+            <Label htmlFor="fin-to">Até</Label>
+            <Input
+              id="fin-to"
+              type="date"
+              value={customTo}
+              onChange={(e) => setCustomTo(e.target.value)}
+            />
+          </div>
+          <p className="text-xs text-muted-foreground sm:pb-2">
+            Período: {activeRange.from} → {activeRange.to}
+          </p>
+        </div>
+      ) : (
+        <p className="text-xs text-muted-foreground -mt-2">
+          Período: {activeRange.from} até {activeRange.to}
+        </p>
+      )}
+
+      <FinanceiroPnlSection
+        from={activeRange.from}
+        to={activeRange.to}
+        isNetworkView={isNetworkView}
+        onChanged={() => {
+          setPnlRefresh((n) => n + 1)
+          void loadPeriod(periodoSelecionado)
+        }}
+      />
 
       {financialError ? (
         <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">
@@ -389,7 +454,9 @@ export default function FinanceiroPage() {
             </button>
           ) : commissionChartData.length === 0 ? (
             <p className="text-sm text-muted-foreground py-12 text-center">
-              Nenhum dado no período. Confira se os agendamentos têm valor e status concluído/confirmado.
+              Nenhuma comissão no período. Confira: agendamentos <strong>confirmados ou concluídos</strong> com
+              valor, <strong>% de comissão</strong> em Configurações → Equipe e a{" "}
+              <strong>unidade ativa</strong> na barra lateral (ou &quot;Todas as unidades&quot;).
             </p>
           ) : (
             <div className="h-72 w-full min-h-[280px]">

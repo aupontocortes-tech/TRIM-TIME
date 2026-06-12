@@ -1,7 +1,10 @@
 /**
  * Cálculo e agregação de comissões de barbeiros (Trim Time).
  */
-import type { SupabaseClient } from "@supabase/supabase-js"
+import type { AppointmentStatus } from "@prisma/client"
+import { parseAppointmentDate } from "@/lib/appointment-prisma-helpers"
+import { prisma } from "@/lib/prisma"
+import { prismaAppointmentUnitFilter, prismaBarberUnitFilter } from "@/lib/unit-context"
 
 /** Status de agendamento que entram no faturamento/comissão (alinhado ao dashboard). */
 export const COMMISSION_APPOINTMENT_STATUSES = ["completed", "confirmed"] as const
@@ -31,52 +34,71 @@ export type CommissionsSummaryResponse = {
 
 /**
  * Soma comissões no período [startDate, endDate] (YYYY-MM-DD) por barbeiro.
+ * Usa Prisma + filtro de unidade alinhado ao financeiro (`prismaAppointmentUnitFilter`).
  */
 export async function aggregateCommissionsForRange(
-  supabase: SupabaseClient,
   barbershopId: string,
   startDate: string,
   endDate: string,
   unitId?: string | null
 ): Promise<{ total: number; byBarber: CommissionBarberRow[] }> {
-  let appointmentsQuery = supabase
-    .from("appointments")
-    .select("barber_id, total_price")
-    .eq("barbershop_id", barbershopId)
-    .gte("date", startDate)
-    .lte("date", endDate)
-    .in("status", [...COMMISSION_APPOINTMENT_STATUSES])
-  if (unitId) appointmentsQuery = appointmentsQuery.eq("unit_id", unitId)
+  const unitFilter = unitId ? prismaAppointmentUnitFilter(unitId) : {}
+  const barberUnitFilter = unitId ? prismaBarberUnitFilter(unitId) : {}
 
-  const [{ data: appointments }, { data: barbers }] = await Promise.all([
-    appointmentsQuery,
-    supabase.from("barbers").select("id, name, commission").eq("barbershop_id", barbershopId),
+  const [appointments, barbers] = await Promise.all([
+    prisma.appointment.findMany({
+      where: {
+        barbershopId,
+        ...unitFilter,
+        date: {
+          gte: parseAppointmentDate(startDate),
+          lte: parseAppointmentDate(endDate),
+        },
+        status: { in: [...COMMISSION_APPOINTMENT_STATUSES] as AppointmentStatus[] },
+      },
+      select: {
+        barberId: true,
+        totalPrice: true,
+        commissionAmount: true,
+        commissionPercent: true,
+      },
+    }),
+    prisma.barber.findMany({
+      where: { barbershopId, ...barberUnitFilter },
+      select: { id: true, name: true, commission: true },
+    }),
   ])
 
   const pctById = new Map<string, number>()
   const nameById = new Map<string, string>()
-  for (const b of barbers ?? []) {
+  for (const b of barbers) {
     pctById.set(b.id, Number(b.commission) || 0)
     nameById.set(b.id, b.name ?? "Barbeiro")
   }
 
   const amountByBarber = new Map<string, number>()
-  for (const a of appointments ?? []) {
-    const price = Number(a.total_price) || 0
-    const pct = pctById.get(a.barber_id) ?? 0
-    const amt = saleCommissionAmount(price, pct)
-    amountByBarber.set(a.barber_id, (amountByBarber.get(a.barber_id) ?? 0) + amt)
+  for (const a of appointments) {
+    const stored =
+      a.commissionAmount != null ? Number(a.commissionAmount) : null
+    let amt: number
+    if (stored != null && Number.isFinite(stored)) {
+      amt = stored
+    } else {
+      const price = Number(a.totalPrice) || 0
+      const pct =
+        a.commissionPercent != null
+          ? Number(a.commissionPercent)
+          : (pctById.get(a.barberId) ?? 0)
+      amt = saleCommissionAmount(price, pct)
+    }
+    amountByBarber.set(a.barberId, (amountByBarber.get(a.barberId) ?? 0) + amt)
   }
-
-  const barberIds = new Set<string>()
-  for (const b of barbers ?? []) barberIds.add(b.id)
-  for (const id of amountByBarber.keys()) barberIds.add(id)
 
   let total = 0
   const byBarber: CommissionBarberRow[] = []
-  for (const barberId of barberIds) {
-    const raw = amountByBarber.get(barberId) ?? 0
+  for (const [barberId, raw] of amountByBarber) {
     const rounded = Math.round(raw * 100) / 100
+    if (rounded <= 0) continue
     total += rounded
     byBarber.push({
       barber_id: barberId,

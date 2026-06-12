@@ -208,6 +208,7 @@ model BarbershopUnit {
   barbers        Barber[]
   barberInvites  BarberInvite[]
   clients        Client[]
+  financialLedgerEntries FinancialLedgerEntry[]
 
   @@index([barbershopId])
   @@map("barbershop_units")
@@ -234,19 +235,25 @@ model Payment {
 
 // ========== FINANCIAL LEDGER ==========
 model FinancialLedgerEntry {
-  id            String        @id @default(uuid()) @db.Uuid
-  barbershopId  String        @map("barbershop_id") @db.Uuid
-  barbershop    Barbershop    @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  id            String         @id @default(uuid()) @db.Uuid
+  barbershopId  String         @map("barbershop_id") @db.Uuid
+  barbershop    Barbershop     @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  unitId        String?        @map("unit_id") @db.Uuid
+  unit          BarbershopUnit? @relation(fields: [unitId], references: [id], onDelete: SetNull)
   direction     String
   category      String
-  amount        Decimal       @db.Decimal(12, 2)
-  appointmentId String?     @map("appointment_id") @db.Uuid
-  appointment   Appointment?  @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  amount        Decimal        @db.Decimal(12, 2)
+  appointmentId String?        @map("appointment_id") @db.Uuid
+  appointment   Appointment?   @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
   note          String?
+  vendor        String?
   metadata      Json?
-  occurredAt    DateTime      @default(now()) @map("occurred_at") @db.Timestamptz
+  occurredAt    DateTime       @default(now()) @map("occurred_at") @db.Timestamptz
+  createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime       @updatedAt @map("updated_at") @db.Timestamptz
 
   @@index([barbershopId, occurredAt])
+  @@index([barbershopId, unitId, occurredAt])
   @@map("financial_ledger_entries")
 }
 

@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server"
-import { createServiceRoleClient } from "@/lib/supabase/server"
 import { requireBarbershopId } from "@/lib/tenant"
-import { fetchBarbershopPlanContext } from "@/lib/barbershop-plan-server"
-import { mergePlanContextWithSimulation } from "@/lib/plan-simulation-server"
+import { resolveEffectivePlanForActiveSession } from "@/lib/barbershop-effective-plan-server"
 import { canUseBarberCommission } from "@/lib/plans"
 import { aggregateCommissionsForRange, type CommissionsSummaryResponse } from "@/lib/commissions"
 import { resolveSelectedUnitId } from "@/lib/unit-context"
@@ -10,8 +8,7 @@ import { resolveSelectedUnitId } from "@/lib/unit-context"
 export async function GET(request: Request) {
   try {
     const barbershopId = await requireBarbershopId()
-    const baseCtx = await fetchBarbershopPlanContext(barbershopId)
-    const { plan } = await mergePlanContextWithSimulation(baseCtx)
+    const plan = await resolveEffectivePlanForActiveSession(barbershopId)
     const enabled = canUseBarberCommission(plan)
 
     const { searchParams } = new URL(request.url)
@@ -38,12 +35,10 @@ export async function GET(request: Request) {
       return NextResponse.json(empty)
     }
 
-    const supabase = createServiceRoleClient()
     const scope = searchParams.get("scope")
     const unitIdForQuery =
       scope === "network" ? null : await resolveSelectedUnitId(barbershopId)
     const { total, byBarber } = await aggregateCommissionsForRange(
-      supabase,
       barbershopId,
       from,
       to,

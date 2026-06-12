@@ -2,8 +2,7 @@ import { NextResponse } from "next/server"
 import { createServiceRoleClient } from "@/lib/supabase/server"
 import { requireBarbershopId } from "@/lib/tenant"
 import type { DashboardStats } from "@/lib/db/types"
-import { fetchBarbershopPlanContext } from "@/lib/barbershop-plan-server"
-import { mergePlanContextWithSimulation } from "@/lib/plan-simulation-server"
+import { resolveEffectivePlanForActiveSession } from "@/lib/barbershop-effective-plan-server"
 import { canUseBarberCommission } from "@/lib/plans"
 import { aggregateCommissionsForRange } from "@/lib/commissions"
 import { resolveSelectedUnitId } from "@/lib/unit-context"
@@ -101,13 +100,11 @@ export async function GET(request: Request) {
       }
     }
 
-    const baseCtx = await fetchBarbershopPlanContext(barbershopId)
-    const { plan } = await mergePlanContextWithSimulation(baseCtx)
+    const plan = await resolveEffectivePlanForActiveSession(barbershopId)
     const commissionEnabled = canUseBarberCommission(plan)
     let commissionMonth = 0
     if (commissionEnabled) {
       const { total } = await aggregateCommissionsForRange(
-        supabase,
         barbershopId,
         startOfMonthStr,
         today,
