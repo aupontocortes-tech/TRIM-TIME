@@ -3,6 +3,7 @@ import { cookies } from "next/headers"
 import { BARBERSHOP_ID_COOKIE } from "@/lib/tenant"
 import { hashPassword, verifyPassword } from "@/lib/auth/password"
 import { withBarbershopPasswordHash, getBarbershopPasswordHash } from "@/lib/barbershop-auth-settings"
+import { findBarbershopByLoginEmail } from "@/lib/barbershop-login"
 import { prisma } from "@/lib/prisma"
 
 /**
@@ -11,17 +12,14 @@ import { prisma } from "@/lib/prisma"
  */
 export async function POST(request: Request) {
   try {
-    const body = await request.json() as { email: string; password: string }
-    const email = body.email?.trim()?.toLowerCase()
+    const body = (await request.json()) as { email: string; password: string }
+    const email = body.email?.trim()
     const password = body.password?.trim()
     if (!email || !password) {
       return NextResponse.json({ error: "Email e senha são obrigatórios" }, { status: 400 })
     }
 
-    const barbershop = await prisma.barbershop.findFirst({
-      where: { email },
-      select: { id: true, role: true, settings: true, suspendedAt: true },
-    })
+    const barbershop = await findBarbershopByLoginEmail(email)
     if (!barbershop) {
       return NextResponse.json({ error: "Email não encontrado" }, { status: 401 })
     }
@@ -36,7 +34,13 @@ export async function POST(request: Request) {
         data: { settings: withBarbershopPasswordHash(barbershop.settings, hashPassword(password)) },
       })
     } else if (!verifyPassword(password, storedHash)) {
-      return NextResponse.json({ error: "Email ou senha inválidos" }, { status: 401 })
+      return NextResponse.json(
+        {
+          error:
+            "Email ou senha inválidos. Se você criou a conta com Google, use «Entrar com Google».",
+        },
+        { status: 401 }
+      )
     }
 
     const cookieStore = await cookies()

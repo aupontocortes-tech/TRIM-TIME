@@ -1,4 +1,3 @@
-import crypto from "node:crypto"
 import { NextResponse } from "next/server"
 import { cookies } from "next/headers"
 import { getBarbershopIdFromRequest } from "@/lib/tenant"
@@ -79,15 +78,16 @@ export async function POST(request: Request) {
     }
 
     const emailCanonEarly = canonicalSignupEmail(normalizeSignupEmail(body.email))
-    let passwordPlain = String(body.password ?? "").trim()
-    if (!passwordPlain) {
-      const jar = await cookies()
-      const proof = verifyPainelSignupSession(jar.get(PAINEL_SIGNUP_COOKIE)?.value)
-      if (proof && proof.e === emailCanonEarly && proof.x > Date.now()) {
-        passwordPlain = crypto.randomBytes(24).toString("base64url")
-      }
-    }
-    if (!passwordPlain || passwordPlain.length < 6) {
+    const passwordPlain = String(body.password ?? "").trim()
+    const jar = await cookies()
+    const proof = verifyPainelSignupSession(jar.get(PAINEL_SIGNUP_COOKIE)?.value)
+    const isOauthSignup =
+      !passwordPlain &&
+      !!proof &&
+      proof.e === emailCanonEarly &&
+      proof.x > Date.now()
+
+    if (!isOauthSignup && (!passwordPlain || passwordPlain.length < 6)) {
       return NextResponse.json(
         { error: "Informe uma senha com pelo menos 6 caracteres (ou conclua o cadastro com Google)." },
         { status: 400 }
@@ -190,7 +190,9 @@ export async function POST(request: Request) {
           phone,
           slug,
           role: isSuperAdmin ? "super_admin" : "admin_barbershop",
-          settings: withBarbershopPasswordHash(null, hashPassword(passwordPlain)),
+          settings: passwordPlain
+            ? withBarbershopPasswordHash(null, hashPassword(passwordPlain))
+            : {},
         },
       })
       await tx.subscription.create({
