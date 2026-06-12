@@ -5,7 +5,8 @@ import { useUnits } from "@/hooks/use-units"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import type { CommissionsSummaryResponse } from "@/lib/commissions"
-import { FinanceiroPnlSection } from "@/components/painel/financeiro-pnl-section"
+import { FinanceiroPnlSection, type PnlData } from "@/components/painel/financeiro-pnl-section"
+import { FinanceiroRelatorioSection } from "@/components/painel/financeiro-relatorio-section"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -79,11 +80,19 @@ function Stat({ label, value, sub }: { label: string; value: string; sub?: strin
 
 type FinancialSummary = {
   revenue: number
+  revenue_previous: number
   revenue_today: number | null
+  appointment_sale_count: number
   future_appointments_count: number
   future_appointments_revenue: number
   ticket_avg: number
   daily: { date: string; revenue: number }[]
+  by_service: {
+    service_id: string
+    nome: string
+    revenue: number
+    percent: number
+  }[]
   recent: {
     id: string
     tipo: "entrada" | "saida"
@@ -108,6 +117,7 @@ export default function FinanceiroPage() {
   const [commissionSummary, setCommissionSummary] = useState<CommissionsSummaryResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [financial, setFinancial] = useState<FinancialSummary | null>(null)
+  const [pnl, setPnl] = useState<PnlData | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const activeRange = dateRangeForPeriod(periodoSelecionado, customFrom, customTo)
@@ -121,19 +131,26 @@ export default function FinanceiroPage() {
     try {
       const commissionQs = new URLSearchParams({ from, to })
       const financialQs = new URLSearchParams({ from, to, today })
-      if (isNetworkView) commissionQs.set("scope", "network")
+      const pnlQs = new URLSearchParams({ from, to })
+      if (isNetworkView) {
+        commissionQs.set("scope", "network")
+        pnlQs.set("scope", "network")
+      }
 
       const financialPath = isNetworkView ? "/api/financial/network-summary" : "/api/financial/summary"
-      const [cRes, fRes] = await Promise.all([
+      const [cRes, fRes, pRes] = await Promise.all([
         fetch(`/api/commissions/summary?${commissionQs}`, { credentials: "include" }),
         fetch(`${financialPath}?${financialQs}`, { credentials: "include" }),
+        fetch(`/api/financial/expenses?${pnlQs}`, { credentials: "include" }),
       ])
 
       setCommissionSummary(cRes.ok ? ((await cRes.json()) as CommissionsSummaryResponse) : null)
+      setPnl(pRes.ok ? ((await pRes.json()) as PnlData) : null)
 
       if (!fRes.ok) {
         const j = (await fRes.json().catch(() => ({}))) as { error?: string }
         setFinancial(null)
+        setPnl(null)
         setError(typeof j.error === "string" ? j.error : "Erro ao carregar.")
         return
       }
@@ -141,6 +158,7 @@ export default function FinanceiroPage() {
     } catch {
       setCommissionSummary(null)
       setFinancial(null)
+      setPnl(null)
       setError("Erro de rede.")
     } finally {
       setLoading(false)
@@ -210,9 +228,10 @@ export default function FinanceiroPage() {
       )}
 
       <Tabs defaultValue="faturamento" className="space-y-5">
-        <TabsList className="w-full grid grid-cols-2 h-auto p-1">
+        <TabsList className="w-full grid grid-cols-3 h-auto p-1">
           <TabsTrigger value="faturamento">Entradas</TabsTrigger>
           <TabsTrigger value="pagamentos">Saídas</TabsTrigger>
+          <TabsTrigger value="relatorio">Relatório</TabsTrigger>
         </TabsList>
 
         <TabsContent value="faturamento" className="space-y-5 mt-0">
@@ -364,6 +383,24 @@ export default function FinanceiroPage() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="relatorio" className="space-y-5 mt-0">
+          {error ? (
+            <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">
+              {error}
+            </div>
+          ) : null}
+          <FinanceiroRelatorioSection
+            from={activeRange.from}
+            to={activeRange.to}
+            isNetworkView={isNetworkView}
+            unitLabel={activeUnitName}
+            financial={financial}
+            pnl={pnl}
+            commissions={commissionSummary}
+            loading={loading}
+          />
         </TabsContent>
       </Tabs>
     </div>
