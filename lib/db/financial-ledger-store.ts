@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto"
 import { prisma } from "@/lib/prisma"
 
 export type LedgerExpenseRow = {
@@ -146,9 +147,11 @@ export async function createFinancialLedgerExpense(params: {
     occurred_at: Date
   }
 
+  const newId = randomUUID()
+
   const inserted = await prisma.$queryRaw<RawRow[]>`
-    INSERT INTO financial_ledger_entries (barbershop_id, direction, category, amount, note, occurred_at)
-    VALUES (${barbershopId}::uuid, 'out', ${category}, ${amount}, ${note}, ${occurredAt})
+    INSERT INTO financial_ledger_entries (id, barbershop_id, direction, category, amount, note, occurred_at)
+    VALUES (${newId}::uuid, ${barbershopId}::uuid, 'out', ${category}, ${amount}, ${note}, ${occurredAt})
     RETURNING id, barbershop_id, direction, category, amount, note, occurred_at
   `
 
