@@ -211,8 +211,8 @@ export default function FinanceiroPage() {
 
       <Tabs defaultValue="faturamento" className="space-y-5">
         <TabsList className="w-full grid grid-cols-2 h-auto p-1">
-          <TabsTrigger value="faturamento">Faturamento</TabsTrigger>
-          <TabsTrigger value="pagamentos">Pagamentos</TabsTrigger>
+          <TabsTrigger value="faturamento">Entradas</TabsTrigger>
+          <TabsTrigger value="pagamentos">Saídas</TabsTrigger>
         </TabsList>
 
         <TabsContent value="faturamento" className="space-y-5 mt-0">
