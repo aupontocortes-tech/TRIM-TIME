@@ -37,7 +37,8 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           error:
-            "Email ou senha inválidos. Se você criou a conta com Google, use «Entrar com Google».",
+            "Email ou senha inválidos. Criou a conta com Google? Use «Entrar com Google» ou redefina a senha.",
+          hint: "forgot_password",
         },
         { status: 401 }
       )

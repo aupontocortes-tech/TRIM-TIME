@@ -72,8 +72,13 @@ function LoginPageContent() {
         credentials: "include",
       })
       if (!res.ok) {
-        const err = (await res.json().catch(() => ({}))) as { error?: string }
-        setError(err.error || "Email ou senha inválidos")
+        const err = (await res.json().catch(() => ({}))) as { error?: string; hint?: string }
+        const base = err.error || "Email ou senha inválidos"
+        setError(
+          err.hint === "forgot_password"
+            ? `${base} Acesse «Esqueceu a senha?» abaixo para definir uma nova.`
+            : base
+        )
         setIsLoading(false)
         return
       }
