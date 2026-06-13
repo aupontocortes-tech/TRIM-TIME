@@ -157,3 +157,12 @@ export async function assignClientsWithoutUnit(barbershopId: string): Promise<vo
     data: { unitId: principalUnitId },
   })
 }
+
+/** Com 2+ unidades, cliente é da rede — remove `unit_id` legado que escondia cadastros em outras filiais. */
+export async function ensureClientsNetworkWide(barbershopId: string): Promise<void> {
+  if (!(await barbershopHasMultipleUnits(barbershopId))) return
+  await prisma.client.updateMany({
+    where: { barbershopId, unitId: { not: null } },
+    data: { unitId: null },
+  })
+}

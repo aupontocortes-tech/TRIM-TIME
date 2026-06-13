@@ -61,8 +61,6 @@ export default function ClientesPage() {
     plan && hasFeature(plan, "loyalty_program")
       ? parseLoyaltyProgram(barbershop?.settings ?? null)
       : null
-  /** Cadastro manual exige unidade; listagem funciona em "Todas as unidades". */
-  const needsUnitForCreate = units.length > 1 && !selectedUnitId
   const nomeUnidadeAtiva =
     selectedUnitId && units.length ? units.find((u) => u.id === selectedUnitId)?.name ?? null : null
 
@@ -84,14 +82,28 @@ export default function ClientesPage() {
     try {
       const [clientsRes, appointmentsRes] = await Promise.all([
         fetch(clientsListUrl(selectedUnitId), { credentials: "include", cache: "no-store" }),
-        fetch("/api/appointments", { credentials: "include", cache: "no-store" }),
+        fetch("/api/appointments?network=1", { credentials: "include", cache: "no-store" }),
       ])
       const [clientsData, appointmentsData] = await Promise.all([
-        clientsRes.ok ? clientsRes.json() : [],
+        clientsRes.ok ? clientsRes.json() : null,
         appointmentsRes.ok ? appointmentsRes.json() : [],
       ])
 
-      const clients = (Array.isArray(clientsData) ? clientsData : []) as Client[]
+      if (!clientsRes.ok || !Array.isArray(clientsData)) {
+        const msg =
+          clientsData &&
+          typeof clientsData === "object" &&
+          "error" in clientsData &&
+          typeof (clientsData as { error?: unknown }).error === "string"
+            ? (clientsData as { error: string }).error
+            : "Não foi possível carregar os clientes."
+        setErro(msg)
+        setClientes([])
+        setAppointments([])
+        return
+      }
+
+      const clients = clientsData as Client[]
       const appointments = (Array.isArray(appointmentsData) ? appointmentsData : []) as Appointment[]
       setAppointments(appointments)
 
@@ -243,11 +255,11 @@ export default function ClientesPage() {
         <div>
           <h1 className="text-2xl font-bold text-foreground">Clientes</h1>
           <p className="text-muted-foreground">
-            {nomeUnidadeAtiva
-              ? `Unidade: ${nomeUnidadeAtiva} — clientes e histórico desta loja`
-              : units.length > 1
-                ? "Todas as unidades — clientes de toda a rede"
-                : "Gerencie seus clientes e histórico de atendimentos"}
+            {units.length > 1
+              ? nomeUnidadeAtiva
+                ? `Clientes de toda a rede — o seletor (${nomeUnidadeAtiva}) não limita esta lista`
+                : "Clientes de toda a rede — quem agenda em qualquer unidade aparece aqui"
+              : "Gerencie seus clientes e histórico de atendimentos"}
           </p>
         </div>
         <Dialog open={openNovoCliente} onOpenChange={setOpenNovoCliente}>
@@ -255,7 +267,6 @@ export default function ClientesPage() {
             <Button
               type="button"
               className="bg-primary text-primary-foreground hover:bg-primary/90 w-full sm:w-auto"
-              disabled={needsUnitForCreate}
               onClick={() => setOpenNovoCliente(true)}
             >
               + Novo Cliente

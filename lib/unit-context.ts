@@ -71,31 +71,14 @@ export function prismaBarberUnitFilter(selectedUnitId: string | null): Prisma.Ba
 }
 
 /**
- * Filtro de clientes: com unidade escolhida, só desta loja (cadastro ou histórico legado).
- * Sem unidade (Todas): todos da barbearia.
+ * Clientes pertencem à barbearia (rede), não a uma filial — quem agenda na unidade 1
+ * pode remarcar na unidade 2 com o mesmo cadastro.
  */
 export function prismaClientUnitFilter(
-  selectedUnitId: string | null,
-  multiUnit: boolean
+  _selectedUnitId: string | null,
+  _multiUnit: boolean
 ): Prisma.ClientWhereInput {
-  if (!selectedUnitId) return {}
-  if (multiUnit) {
-    return {
-      OR: [
-        { unitId: selectedUnitId },
-        {
-          unitId: null,
-          OR: [
-            { appointments: { some: { unitId: selectedUnitId } } },
-            { waitingList: { some: { barber: { unitId: selectedUnitId } } } },
-          ],
-        },
-      ],
-    }
-  }
-  return {
-    OR: [{ unitId: selectedUnitId }, { unitId: null }],
-  }
+  return {}
 }
 
 /** Filtro da fila de espera pelo profissional da unidade ativa. */

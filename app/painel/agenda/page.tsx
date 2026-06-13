@@ -25,6 +25,8 @@ import {
   Plus,
   Trash2,
   Loader2,
+  MessageCircle,
+  CalendarClock,
 } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
@@ -52,6 +54,10 @@ import { barbersListUrl } from "@/lib/barbers-list-url"
 import { clientsListUrl } from "@/lib/clients-list-url"
 import { formatWaitlistDayLabel, shopTodayYmd } from "@/lib/waitlist-expiry"
 import { isSlotPastGraceFromYmd } from "@/lib/appointment-reminder-time"
+import {
+  appointmentContactWhatsAppMessage,
+  buildClientWhatsAppUrl,
+} from "@/lib/client-whatsapp-url"
 
 type AgendaItem = {
   id: string
@@ -209,6 +215,81 @@ function mapAgendaItem(appointment: Appointment): AgendaItem {
   }
 }
 
+function AgendaQuickActions({
+  agendamento,
+  shopName,
+  actionLoadingId,
+  onRemarcar,
+}: {
+  agendamento: AgendaItem
+  shopName: string
+  actionLoadingId: string | null
+  onRemarcar: (item: AgendaItem) => void
+}) {
+  const podeRemarcar =
+    agendamento.status === "pending" || agendamento.status === "confirmed"
+  const waUrl = buildClientWhatsAppUrl(
+    agendamento.telefone,
+    appointmentContactWhatsAppMessage({
+      clientName: agendamento.cliente,
+      shopName,
+      dateYmd: agendamento.raw.date ?? "",
+      time: agendamento.hora,
+      service: agendamento.servico,
+    })
+  )
+
+  if (!waUrl && !podeRemarcar) return null
+
+  return (
+    <div
+      className="flex items-center gap-2 shrink-0"
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => e.stopPropagation()}
+    >
+      {waUrl ? (
+        <Button
+          asChild
+          size="sm"
+          variant="outline"
+          className="h-8 gap-1.5 border-green-500/40 text-green-600 hover:bg-green-500/10 dark:text-green-400"
+        >
+          <a href={waUrl} target="_blank" rel="noopener noreferrer" title="Falar no WhatsApp">
+            <MessageCircle className="w-4 h-4 shrink-0" />
+            <span className="hidden lg:inline">WhatsApp</span>
+          </a>
+        </Button>
+      ) : (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="h-8 gap-1.5 opacity-50"
+          disabled
+          title="Cliente sem WhatsApp cadastrado"
+        >
+          <MessageCircle className="w-4 h-4 shrink-0" />
+          <span className="hidden lg:inline">WhatsApp</span>
+        </Button>
+      )}
+      {podeRemarcar ? (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="h-8 gap-1.5 border-primary/40 text-primary hover:bg-primary/10"
+          disabled={actionLoadingId === agendamento.id}
+          title="Alterar data e horário"
+          onClick={() => onRemarcar(agendamento)}
+        >
+          <CalendarClock className="w-4 h-4 shrink-0" />
+          <span className="hidden lg:inline">Remarcar</span>
+        </Button>
+      ) : null}
+    </div>
+  )
+}
+
 export default function AgendaPage() {
   const { barbershop, plan } = useBarbershop()
   const { units, selectedUnitId, unitScopeVersion, changeUnit, loading: unitsLoading } = useUnits()
@@ -261,6 +342,9 @@ export default function AgendaPage() {
     serviceId: "",
     time: "",
   })
+  const [remarcarDialog, setRemarcarDialog] = useState<AgendaItem | null>(null)
+  const [remarcarForm, setRemarcarForm] = useState({ date: "", time: "" })
+  const [remarcarSaving, setRemarcarSaving] = useState(false)
 
   const profissionais = useMemo(
     () => ["Todos", ...barbersForUnit.filter((b) => b.active).map((b) => b.name)],
@@ -504,6 +588,8 @@ export default function AgendaPage() {
       if (payload.status === "confirmed") setFeedback("Agendamento confirmado.")
       else if (payload.status === "completed") setFeedback("Atendimento marcado como concluído.")
       else if (payload.status === "canceled") setFeedback("Agendamento cancelado.")
+      else if (payload.date !== undefined || payload.time !== undefined)
+        setFeedback("Horário remarcado com sucesso.")
       else setFeedback("Agendamento atualizado com sucesso.")
       await carregarAgendamentos()
       if (payload.status === "completed" && !needsUnitPick) {
@@ -584,6 +670,31 @@ export default function AgendaPage() {
 
   const podeEditarServicoValorPainel =
     agendamentoSelecionado?.status === "pending" || agendamentoSelecionado?.status === "confirmed"
+
+  const abrirRemarcar = (item: AgendaItem) => {
+    const date = item.raw.date ?? toYMD(dataSelecionada)
+    setRemarcarForm({ date, time: item.hora.slice(0, 5) })
+    setRemarcarDialog(item)
+  }
+
+  const salvarRemarcacao = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!remarcarDialog) return
+    if (!remarcarForm.date.trim() || !remarcarForm.time.trim()) {
+      setError("Informe a nova data e o horário.")
+      return
+    }
+    setRemarcarSaving(true)
+    setError("")
+    const ok = await aplicarAcao(remarcarDialog.id, {
+      date: remarcarForm.date,
+      time: remarcarForm.time,
+    })
+    setRemarcarSaving(false)
+    if (ok) setRemarcarDialog(null)
+  }
+
+  const nomeBarbearia = barbershop?.name ?? "Barbearia"
 
   const sincronizarPainelServicoValorComSelecao = () => {
     const sel = agendamentoSelecionado
@@ -1242,6 +1353,12 @@ export default function AgendaPage() {
                             </div>
                             <p className="text-sm text-muted-foreground">{agendamento.servico}</p>
                           </div>
+                          <AgendaQuickActions
+                            agendamento={agendamento}
+                            shopName={nomeBarbearia}
+                            actionLoadingId={actionLoadingId}
+                            onRemarcar={abrirRemarcar}
+                          />
                           <span
                             className={`px-2 py-1 rounded-full text-xs font-medium shrink-0 ${
                               agendamento.status === "confirmed"
@@ -1308,6 +1425,13 @@ export default function AgendaPage() {
                       </p>
                     ) : null}
                   </div>
+
+                  <AgendaQuickActions
+                    agendamento={agendamento}
+                    shopName={nomeBarbearia}
+                    actionLoadingId={actionLoadingId}
+                    onRemarcar={abrirRemarcar}
+                  />
 
                   <div className="flex items-center gap-3">
                     <span className="text-sm font-semibold text-primary">
@@ -1420,6 +1544,14 @@ export default function AgendaPage() {
                           <span className="truncate">{agendamentoSelecionado.telefone}</span>
                         </a>
                       ) : null}
+                      <div className="pt-2">
+                        <AgendaQuickActions
+                          agendamento={agendamentoSelecionado}
+                          shopName={nomeBarbearia}
+                          actionLoadingId={actionLoadingId}
+                          onRemarcar={abrirRemarcar}
+                        />
+                      </div>
                     </div>
                   </div>
 
@@ -2024,6 +2156,83 @@ export default function AgendaPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog
+        open={!!remarcarDialog}
+        onOpenChange={(open) => {
+          if (!open && !remarcarSaving) setRemarcarDialog(null)
+        }}
+      >
+        <DialogContent className="bg-card border-border max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-foreground">Remarcar horário</DialogTitle>
+            <DialogDescription className="text-muted-foreground">
+              {remarcarDialog
+                ? `Altere a data e o horário de ${remarcarDialog.cliente}. O cliente verá a atualização no app de agendamento.`
+                : null}
+            </DialogDescription>
+          </DialogHeader>
+          <form className="space-y-4" onSubmit={(e) => void salvarRemarcacao(e)}>
+            <div>
+              <Label htmlFor="remarcar-date" className="text-foreground">
+                Nova data
+              </Label>
+              <Input
+                id="remarcar-date"
+                type="date"
+                required
+                value={remarcarForm.date}
+                onChange={(e) => setRemarcarForm((prev) => ({ ...prev, date: e.target.value }))}
+                className="mt-1 bg-input border-border text-foreground"
+                disabled={remarcarSaving}
+              />
+            </div>
+            <div>
+              <Label htmlFor="remarcar-time" className="text-foreground">
+                Novo horário
+              </Label>
+              <Input
+                id="remarcar-time"
+                type="time"
+                required
+                value={remarcarForm.time}
+                onChange={(e) => setRemarcarForm((prev) => ({ ...prev, time: e.target.value }))}
+                className="mt-1 bg-input border-border text-foreground"
+                disabled={remarcarSaving}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Se o horário já estiver ocupado para o mesmo profissional, o sistema avisará. Combine com o cliente
+              pelo WhatsApp antes, se precisar.
+            </p>
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                className="border-border text-foreground"
+                disabled={remarcarSaving}
+                onClick={() => setRemarcarDialog(null)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="submit"
+                className="bg-primary text-primary-foreground hover:bg-primary/90"
+                disabled={remarcarSaving || actionLoadingId === remarcarDialog?.id}
+              >
+                {remarcarSaving ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Salvando…
+                  </>
+                ) : (
+                  "Confirmar remarcação"
+                )}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={novoAgendamentoOpen} onOpenChange={setNovoAgendamentoOpen}>
         <DialogContent className="bg-card border-border max-w-lg">

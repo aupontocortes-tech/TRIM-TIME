@@ -35,7 +35,8 @@ export async function GET(request: Request) {
     const from = searchParams.get("from")
     const to = searchParams.get("to")
     const barberId = searchParams.get("barber_id")
-    const selectedUnitId = await resolveSelectedUnitId(barbershopId)
+    const networkScope = searchParams.get("network") === "1"
+    const selectedUnitId = networkScope ? null : await resolveSelectedUnitId(barbershopId)
 
     const dateFilter: Prisma.DateTimeFilter | undefined = (() => {
       if (date) return { equals: parseAppointmentDate(date) }

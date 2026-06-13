@@ -7,12 +7,10 @@ import { assertValidProfilePhotoDataUrl } from "@/lib/photo-data-url"
 import { cpfDigits } from "@/lib/cpf"
 import { findClientByPhoneDigits } from "@/lib/client-by-phone"
 import type { Prisma } from "@prisma/client"
-import { assignClientsWithoutUnit } from "@/lib/barbershop-units-seed"
+import { assignClientsWithoutUnit, ensureClientsNetworkWide } from "@/lib/barbershop-units-seed"
 import {
   barbershopHasMultipleUnits,
-  prismaClientUnitFilter,
   requireSelectedUnitForClientCreate,
-  resolveClientListUnitId,
 } from "@/lib/unit-context"
 import { ensureClientsUnitSchemaReady } from "@/lib/client-unit-schema"
 
@@ -51,16 +49,12 @@ export async function GET(request: Request) {
     const barbershopId = await requireBarbershopId()
     const { searchParams } = new URL(request.url)
     const q = searchParams.get("q")?.trim() || ""
-    const queryUnit = searchParams.get("unit_id")
 
     await ensureClientsUnitSchemaReady()
+    await ensureClientsNetworkWide(barbershopId)
     await assignClientsWithoutUnit(barbershopId)
 
-    const multiUnit = await barbershopHasMultipleUnits(barbershopId)
-    const selectedUnitId = await resolveClientListUnitId(barbershopId, queryUnit)
-    const unitFilter = prismaClientUnitFilter(selectedUnitId, multiUnit)
     const andParts: Prisma.ClientWhereInput[] = []
-    if (Object.keys(unitFilter).length > 0) andParts.push(unitFilter)
     if (q) {
       andParts.push({
         OR: [
@@ -138,9 +132,14 @@ export async function POST(request: Request) {
       }
     }
 
-    const { unitId, error: unitError } = await requireSelectedUnitForClientCreate(barbershopId)
-    if (unitError) {
-      return NextResponse.json({ error: unitError }, { status: 400 })
+    const multiUnit = await barbershopHasMultipleUnits(barbershopId)
+    let unitId: string | null = null
+    if (!multiUnit) {
+      const picked = await requireSelectedUnitForClientCreate(barbershopId)
+      if (picked.error) {
+        return NextResponse.json({ error: picked.error }, { status: 400 })
+      }
+      unitId = picked.unitId
     }
 
     const data = await prisma.client.create({
