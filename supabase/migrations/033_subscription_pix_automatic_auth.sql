@@ -1,4 +1,7 @@
 -- Pix Automático (Asaas): autorização recorrente na assinatura
+ALTER TABLE "Subscription"
+  ADD COLUMN IF NOT EXISTS asaas_pix_automatic_auth_id TEXT;
+
 ALTER TABLE subscriptions
   ADD COLUMN IF NOT EXISTS asaas_pix_automatic_auth_id TEXT;
 
