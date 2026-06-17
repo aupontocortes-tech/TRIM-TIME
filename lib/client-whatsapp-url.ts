@@ -1,4 +1,4 @@
-import { whatsappDigitsForWaMe } from "@/lib/platform-settings"
+import { whatsappDigitsForWaMe } from "@/lib/whatsapp-phone"
 
 export function buildClientWhatsAppUrl(phone: string, text: string): string | null {
   const digits = whatsappDigitsForWaMe(phone)
