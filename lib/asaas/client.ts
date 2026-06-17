@@ -183,6 +183,14 @@ export async function getAsaasPayment(paymentId: string): Promise<AsaasPayment> 
   return asaasFetch<AsaasPayment>(`/payments/${paymentId}`)
 }
 
+/** Sandbox: confirma pagamento via API (equivalente a "Receber pagamento" no painel). */
+export async function confirmSandboxAsaasPayment(paymentId: string): Promise<AsaasPayment> {
+  return asaasFetch<AsaasPayment>(`/sandbox/payment/${paymentId}/confirm`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  })
+}
+
 export type AsaasRefundResult = {
   id: string
   status: string

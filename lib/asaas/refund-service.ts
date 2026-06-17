@@ -1,4 +1,11 @@
-import { refundAsaasPayment, getAsaasPayment } from "@/lib/asaas/client"
+import {
+  refundAsaasPayment,
+  getAsaasPayment,
+  confirmSandboxAsaasPayment,
+  AsaasApiError,
+  type AsaasPayment,
+} from "@/lib/asaas/client"
+import { getAsaasEnvironment } from "@/lib/asaas/config"
 import { isBillingEnabled } from "@/lib/asaas/billing-service"
 import { prisma } from "@/lib/prisma"
 
@@ -22,6 +29,115 @@ function normalizePaymentStatus(status: string): string {
   return status.trim().toUpperCase()
 }
 
+function isRefundableAsaasStatus(status: string): boolean {
+  return REFUNDABLE_ASAAS_STATUSES.has(normalizePaymentStatus(status))
+}
+
+function isRefundableStatusError(message: string): boolean {
+  const m = message.toLowerCase()
+  return m.includes("confirmadas ou recebidas") || m.includes("confirmed or received")
+}
+
+function asaasEnvLabel(): string {
+  return getAsaasEnvironment() === "production" ? "produção (api.asaas.com)" : "sandbox (sandbox.asaas.com)"
+}
+
+function refundBlockedMessage(payment: AsaasPayment, externalId: string): string {
+  return (
+    `No Asaas (${asaasEnvLabel()}) a cobrança ${externalId} está "${payment.status}" ` +
+    `(forma: ${payment.billingType ?? "?"}). Só dá para estornar confirmada ou recebida. ` +
+    "Confira se ASAAS_ENVIRONMENT e ASAAS_API_KEY na Vercel são do mesmo ambiente em que você pagou."
+  )
+}
+
+async function tryConfirmSandboxPayment(externalId: string): Promise<AsaasPayment | null> {
+  if (getAsaasEnvironment() !== "sandbox") return null
+  try {
+    return await confirmSandboxAsaasPayment(externalId)
+  } catch (e) {
+    console.warn("[refund] sandbox confirm failed", externalId, e)
+    return null
+  }
+}
+
+async function resolveRefundableAsaasPayment(externalId: string): Promise<AsaasPayment> {
+  let payment = await getAsaasPayment(externalId)
+  if (isRefundableAsaasStatus(payment.status)) return payment
+
+  const confirmed = await tryConfirmSandboxPayment(externalId)
+  if (confirmed) {
+    payment = confirmed
+    if (isRefundableAsaasStatus(payment.status)) return payment
+  }
+
+  payment = await getAsaasPayment(externalId)
+  if (isRefundableAsaasStatus(payment.status)) return payment
+
+  throw new Error(refundBlockedMessage(payment, externalId))
+}
+
+async function requestAsaasRefund(
+  externalId: string,
+  input: { value?: number; description?: string }
+) {
+  try {
+    return await refundAsaasPayment(externalId, input)
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    if (!isRefundableStatusError(msg)) throw e
+
+    const confirmed = await tryConfirmSandboxPayment(externalId)
+    if (confirmed && isRefundableAsaasStatus(confirmed.status)) {
+      return await refundAsaasPayment(externalId, input)
+    }
+
+    const latest = await getAsaasPayment(externalId).catch(() => null)
+    if (latest) {
+      throw new Error(refundBlockedMessage(latest, externalId))
+    }
+    throw e
+  }
+}
+
+/** Consulta status real no Asaas (para exibir no modal de estorno). */
+export async function getAsaasPaymentRefundPreview(externalId: string | null): Promise<{
+  asaas_id: string | null
+  asaas_status: string | null
+  billing_type: string | null
+  environment: string
+  error: string | null
+}> {
+  const environment = asaasEnvLabel()
+  if (!externalId) {
+    return {
+      asaas_id: null,
+      asaas_status: null,
+      billing_type: null,
+      environment,
+      error: "Cobrança sem ID no Asaas.",
+    }
+  }
+  try {
+    const payment = await getAsaasPayment(externalId)
+    return {
+      asaas_id: payment.id,
+      asaas_status: payment.status,
+      billing_type: payment.billingType ?? null,
+      environment,
+      error: null,
+    }
+  } catch (e) {
+    const msg = e instanceof AsaasApiError ? e.message : e instanceof Error ? e.message : "Erro ao consultar Asaas"
+    return {
+      asaas_id: externalId,
+      asaas_status: null,
+      billing_type: null,
+      environment,
+      error: `${msg} Verifique ASAAS_ENVIRONMENT e ASAAS_API_KEY na Vercel.`,
+    }
+  }
+}
+
 export async function refundBarbershopPayment(params: {
   paymentId: string
   adminBarbershopId: string
@@ -43,14 +159,8 @@ export async function refundBarbershopPayment(params: {
     throw new Error(`Status "${row.status}" não permite estorno pelo app.`)
   }
 
-  const asaasPayment = await getAsaasPayment(row.externalId)
+  const asaasPayment = await resolveRefundableAsaasPayment(row.externalId)
   const asaasStatus = normalizePaymentStatus(asaasPayment.status)
-  if (!REFUNDABLE_ASAAS_STATUSES.has(asaasStatus)) {
-    throw new Error(
-      `No Asaas esta cobrança está "${asaasPayment.status}". Só dá para estornar confirmada ou recebida. ` +
-        "No sandbox, abra a cobrança no Asaas e use \"Receber pagamento\" se ainda estiver pendente."
-    )
-  }
 
   if (normalizePaymentStatus(row.status) !== asaasStatus) {
     await prisma.payment.update({
@@ -74,7 +184,7 @@ export async function refundBarbershopPayment(params: {
     params.description?.trim() ||
     `Estorno Trim Time — ${row.barbershop.name}`
 
-  const refund = await refundAsaasPayment(row.externalId, {
+  const refund = await requestAsaasRefund(row.externalId, {
     value: params.value,
     description: reason,
   })
@@ -94,9 +204,10 @@ export async function refundBarbershopPayment(params: {
         refunded_by: params.adminBarbershopId,
         refund_reason: reason,
         asaas_refund_status: refund.status,
+        asaas_status_at_refund: asaasPayment.status,
       },
     },
   })
 
-  return { ok: true, refundStatus: refund.status, asaasStatus }
+  return { ok: true, refundStatus: refund.status, asaasStatus: asaasPayment.status }
 }

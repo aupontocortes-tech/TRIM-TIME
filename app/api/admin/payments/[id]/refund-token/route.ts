@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { requireSuperAdmin } from "@/lib/admin-auth"
 import { issueRefundConfirmToken } from "@/lib/admin-refund-confirm"
+import { getAsaasPaymentRefundPreview } from "@/lib/asaas/refund-service"
 import { prisma } from "@/lib/prisma"
 
 export const dynamic = "force-dynamic"
@@ -14,14 +15,15 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     const { id } = await params
     const row = await prisma.payment.findUnique({
       where: { id },
-      select: { id: true, status: true },
+      select: { id: true, status: true, externalId: true },
     })
     if (!row) {
       return NextResponse.json({ error: "Cobrança não encontrada." }, { status: 404 })
     }
 
     const issued = issueRefundConfirmToken(id, auth.barbershopId)
-    return NextResponse.json(issued)
+    const asaas = await getAsaasPaymentRefundPreview(row.externalId)
+    return NextResponse.json({ ...issued, ...asaas })
   } catch (e) {
     console.error("[admin/payments/refund-token]", e)
     return NextResponse.json(

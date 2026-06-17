@@ -59,6 +59,13 @@ function FinanceiroContent() {
   const [refundSession, setRefundSession] = useState("")
   const [refundIssueCode, setRefundIssueCode] = useState("")
   const [refundIssueLoading, setRefundIssueLoading] = useState(false)
+  const [refundAsaasPreview, setRefundAsaasPreview] = useState<{
+    asaas_id: string | null
+    asaas_status: string | null
+    billing_type: string | null
+    environment: string
+    error: string | null
+  } | null>(null)
   const [copiedCode, setCopiedCode] = useState(false)
   const [refundBusy, setRefundBusy] = useState(false)
 
@@ -67,6 +74,7 @@ function FinanceiroContent() {
     setRefundIssueCode("")
     setRefundSession("")
     setRefundConfirmToken("")
+    setRefundAsaasPreview(null)
     setCopiedCode(false)
     try {
       const r = await fetch(`/api/admin/payments/${paymentId}/refund-token`)
@@ -77,6 +85,13 @@ function FinanceiroContent() {
       }
       setRefundIssueCode(typeof j.code === "string" ? j.code : "")
       setRefundSession(typeof j.session === "string" ? j.session : "")
+      setRefundAsaasPreview({
+        asaas_id: typeof j.asaas_id === "string" ? j.asaas_id : null,
+        asaas_status: typeof j.asaas_status === "string" ? j.asaas_status : null,
+        billing_type: typeof j.billing_type === "string" ? j.billing_type : null,
+        environment: typeof j.environment === "string" ? j.environment : "",
+        error: typeof j.error === "string" ? j.error : null,
+      })
     } catch {
       setErr("Erro de rede ao gerar código de confirmação")
     } finally {
@@ -120,6 +135,7 @@ function FinanceiroContent() {
     setCopiedCode(false)
     setMsg("")
     setErr("")
+    setRefundAsaasPreview(null)
     void issueRefundCode(row.id)
   }
 
@@ -333,6 +349,30 @@ function FinanceiroContent() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
+            {refundAsaasPreview ? (
+              <div className="rounded-lg border border-zinc-800 bg-zinc-900/80 p-3 text-xs text-zinc-400 space-y-1">
+                <p>
+                  <span className="text-zinc-500">Ambiente API:</span>{" "}
+                  {refundAsaasPreview.environment || "—"}
+                </p>
+                {refundAsaasPreview.asaas_id ? (
+                  <p>
+                    <span className="text-zinc-500">ID Asaas:</span>{" "}
+                    <code className="text-zinc-300">{refundAsaasPreview.asaas_id}</code>
+                  </p>
+                ) : null}
+                {refundAsaasPreview.asaas_status ? (
+                  <p>
+                    <span className="text-zinc-500">Status real no Asaas:</span>{" "}
+                    <span className="text-zinc-200 font-medium">{refundAsaasPreview.asaas_status}</span>
+                    {refundAsaasPreview.billing_type ? ` (${refundAsaasPreview.billing_type})` : null}
+                  </p>
+                ) : null}
+                {refundAsaasPreview.error ? (
+                  <p className="text-red-400">{refundAsaasPreview.error}</p>
+                ) : null}
+              </div>
+            ) : null}
             <div className="rounded-lg border border-[#D4AF37]/30 bg-[#D4AF37]/5 p-4 space-y-2">
               <p className="text-xs text-zinc-400">
                 Copie o código abaixo e cole no campo de confirmação (válido por 10 minutos).
