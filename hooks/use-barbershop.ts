@@ -78,6 +78,14 @@ export function useBarbershop(): BarbershopState {
       nextBarbershop = null
     }
 
+    if (!nextBarbershop) {
+      setBarbershop(null)
+      setSubscription(null)
+      setError(err)
+      setLoading(false)
+      return
+    }
+
     try {
       const subRes = await fetch("/api/subscriptions", {
         credentials: "include",

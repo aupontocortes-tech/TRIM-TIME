@@ -26,6 +26,11 @@ export const metadata: Metadata = {
   title: 'Trim Time - Sistema de Agendamento para Barbearias',
   description: 'A plataforma completa para barbearias. Agendamentos online, gestão financeira e muito mais.',
   keywords: ['barbearia', 'agendamento', 'barber', 'corte', 'cabelo', 'barba', 'Trim Time'],
+  icons: {
+    icon: [{ url: '/icon.png', type: 'image/png' }],
+    shortcut: '/icon.png',
+    apple: '/icon.png',
+  },
   // Manifest PWA: só em /painel (painel/layout) e /b/[slug] (layout do link do cliente).
   // Ícones: use app/icon.png e app/apple-icon.png (convenção oficial do Next.js)
 }

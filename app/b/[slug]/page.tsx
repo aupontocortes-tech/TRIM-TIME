@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo, useRef, useCallback } from "react"
+import Link from "next/link"
 import { useParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -46,6 +47,8 @@ import { compressImageToJpegDataUrl } from "@/lib/client-image-compress"
 import { MAX_PROFILE_PHOTO_DATA_URL_CHARS } from "@/lib/photo-data-url"
 import { urlBase64ToUint8Array } from "@/lib/push-client-utils"
 import { AppInstallPrompt } from "@/components/app-install-prompt"
+import { BrandLogo } from "@/components/brand-logo"
+import { TrimTimeWordmark } from "@/components/trim-time-wordmark"
 import { TrimPlayGame } from "@/components/trim-play/TrimPlayGame"
 import { TrimPlaySplash } from "@/components/trim-play/TrimPlaySplash"
 import {
@@ -541,6 +544,8 @@ export default function BarbeariaPage() {
   }
 
   useEffect(() => {
+    if (publicMetaLoading || publicMetaError || !publicMeta) return
+
     let cancelled = false
 
     const run = async () => {
@@ -615,7 +620,7 @@ export default function BarbeariaPage() {
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- completeClientOAuthSession estável por slug
-  }, [slug])
+  }, [slug, publicMetaLoading, publicMetaError, publicMeta])
 
   /** Lembrete push já ativado nesta aba — esconde o botão após refresh. */
   useEffect(() => {
@@ -1823,15 +1828,49 @@ export default function BarbeariaPage() {
 
   const barbershopId = publicMeta?.id ?? ""
 
-  /** Sempre no mesmo “slot” do React — não desmonta ao mudar loading → logado (evita sumir o modal PWA). */
-  const clientBookingInstallPrompt = (
-    <AppInstallPrompt storageSuffix={storageSuffix} variant="clientBooking" />
-  )
+  /** Modal PWA só depois que o cliente entra — não atrapalha cadastro/login. */
+  const clientBookingInstallPrompt =
+    authPhase === "logado" ? (
+      <AppInstallPrompt storageSuffix={storageSuffix} variant="clientBooking" />
+    ) : null
 
   // —— Telas de acesso: loading, cadastro, login ——
+  if (publicMetaLoading) {
+    return (
+      <>
+        {clientBookingInstallPrompt}
+        <div className="min-h-screen bg-background flex items-center justify-center p-4">
+          <div className="text-muted-foreground">Carregando...</div>
+        </div>
+      </>
+    )
+  }
+
+  if (publicMetaError || !publicMeta) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4">
+        <div className="flex items-center gap-3 mb-8">
+          <BrandLogo size="lg" priority={false} withBorder={false} />
+          <TrimTimeWordmark className="text-2xl" />
+        </div>
+        <p className="text-muted-foreground text-sm uppercase tracking-widest mb-2">Link inválido</p>
+        <h1 className="text-2xl font-semibold text-foreground text-center mb-2">
+          Barbearia não encontrada
+        </h1>
+        <p className="text-muted-foreground text-center text-sm max-w-md mb-8">
+          {publicMetaError ?? "Confira se o link de agendamento está correto ou peça um novo link à barbearia."}
+        </p>
+        <Button asChild className="bg-primary text-primary-foreground">
+          <Link href="/">Voltar ao início</Link>
+        </Button>
+      </div>
+    )
+  }
+
   if (authPhase === "loading") {
     return (
       <>
+        {clientBookingInstallPrompt}
         <div className="min-h-screen bg-background flex items-center justify-center p-4">
           <div className="text-muted-foreground">Carregando...</div>
         </div>
