@@ -65,6 +65,7 @@ function FinanceiroContent() {
     billing_type: string | null
     environment: string
     error: string | null
+    warning: string | null
   } | null>(null)
   const [copiedCode, setCopiedCode] = useState(false)
   const [refundBusy, setRefundBusy] = useState(false)
@@ -91,6 +92,7 @@ function FinanceiroContent() {
         billing_type: typeof j.billing_type === "string" ? j.billing_type : null,
         environment: typeof j.environment === "string" ? j.environment : "",
         error: typeof j.error === "string" ? j.error : null,
+        warning: typeof j.warning === "string" ? j.warning : null,
       })
     } catch {
       setErr("Erro de rede ao gerar código de confirmação")
@@ -370,6 +372,9 @@ function FinanceiroContent() {
                 ) : null}
                 {refundAsaasPreview.error ? (
                   <p className="text-red-400">{refundAsaasPreview.error}</p>
+                ) : null}
+                {refundAsaasPreview.warning ? (
+                  <p className="text-amber-400">{refundAsaasPreview.warning}</p>
                 ) : null}
               </div>
             ) : null}

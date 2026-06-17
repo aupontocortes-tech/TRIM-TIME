@@ -2,6 +2,7 @@ import {
   refundAsaasPayment,
   getAsaasPayment,
   confirmSandboxAsaasPayment,
+  undoAsaasReceivedInCash,
   AsaasApiError,
   type AsaasPayment,
 } from "@/lib/asaas/client"
@@ -18,19 +19,28 @@ const REFUNDABLE_LOCAL_STATUSES = new Set([
   "PAYMENT_RECEIVED",
 ])
 
-/** Status real no Asaas — fonte da verdade no estorno. */
-const REFUNDABLE_ASAAS_STATUSES = new Set([
-  "CONFIRMED",
-  "RECEIVED",
-  "RECEIVED_IN_CASH",
-])
-
 function normalizePaymentStatus(status: string): string {
   return status.trim().toUpperCase()
 }
 
-function isRefundableAsaasStatus(status: string): boolean {
-  return REFUNDABLE_ASAAS_STATUSES.has(normalizePaymentStatus(status))
+function billingTypeOf(payment: AsaasPayment): string {
+  return (payment.billingType ?? "").trim().toUpperCase()
+}
+
+/** Status que a API de estorno do Asaas aceita de fato (varia por forma de pagamento). */
+function isRefundableByAsaasApi(payment: AsaasPayment): boolean {
+  const status = normalizePaymentStatus(payment.status)
+  const billing = billingTypeOf(payment)
+
+  if (billing === "CREDIT_CARD" || billing === "DEBIT_CARD") {
+    return status === "CONFIRMED" || status === "RECEIVED"
+  }
+
+  return (
+    status === "CONFIRMED" ||
+    status === "RECEIVED" ||
+    status === "RECEIVED_IN_CASH"
+  )
 }
 
 function isRefundableStatusError(message: string): boolean {
@@ -43,9 +53,23 @@ function asaasEnvLabel(): string {
 }
 
 function refundBlockedMessage(payment: AsaasPayment, externalId: string): string {
+  const status = payment.status
+  const billing = billingTypeOf(payment) || "?"
+
+  if (
+    (billing === "CREDIT_CARD" || billing === "DEBIT_CARD") &&
+    normalizePaymentStatus(status) === "RECEIVED_IN_CASH"
+  ) {
+    return (
+      `A cobrança ${externalId} é de cartão, mas no Asaas está como "recebida em dinheiro" ` +
+      `(RECEIVED_IN_CASH). Isso impede estorno pela API. O app tentou corrigir automaticamente; ` +
+      "se ainda falhou, estorne pelo painel sandbox.asaas.com ou crie uma nova cobrança de teste."
+    )
+  }
+
   return (
-    `No Asaas (${asaasEnvLabel()}) a cobrança ${externalId} está "${payment.status}" ` +
-    `(forma: ${payment.billingType ?? "?"}). Só dá para estornar confirmada ou recebida. ` +
+    `No Asaas (${asaasEnvLabel()}) a cobrança ${externalId} está "${status}" (forma: ${billing}). ` +
+    "Só dá para estornar cobranças confirmadas ou recebidas pelo meio original (cartão/PIX). " +
     "Confira se ASAAS_ENVIRONMENT e ASAAS_API_KEY na Vercel são do mesmo ambiente em que você pagou."
   )
 }
@@ -60,18 +84,42 @@ async function tryConfirmSandboxPayment(externalId: string): Promise<AsaasPaymen
   }
 }
 
-async function resolveRefundableAsaasPayment(externalId: string): Promise<AsaasPayment> {
-  let payment = await getAsaasPayment(externalId)
-  if (isRefundableAsaasStatus(payment.status)) return payment
+/** Cartão marcado como "recebido em dinheiro" no painel Asaas — normaliza antes do estorno. */
+async function normalizePaymentForRefund(payment: AsaasPayment, externalId: string): Promise<AsaasPayment> {
+  const billing = billingTypeOf(payment)
+  const status = normalizePaymentStatus(payment.status)
 
-  const confirmed = await tryConfirmSandboxPayment(externalId)
-  if (confirmed) {
-    payment = confirmed
-    if (isRefundableAsaasStatus(payment.status)) return payment
+  if (
+    (billing === "CREDIT_CARD" || billing === "DEBIT_CARD") &&
+    status === "RECEIVED_IN_CASH"
+  ) {
+    try {
+      payment = await undoAsaasReceivedInCash(externalId)
+    } catch (e) {
+      console.warn("[refund] undoReceivedInCash failed", externalId, e)
+    }
+
+    const confirmed = await tryConfirmSandboxPayment(externalId)
+    if (confirmed) return confirmed
+
+    return await getAsaasPayment(externalId)
   }
 
+  return payment
+}
+
+async function resolveRefundableAsaasPayment(externalId: string): Promise<AsaasPayment> {
+  let payment = await getAsaasPayment(externalId)
+  payment = await normalizePaymentForRefund(payment, externalId)
+
+  if (isRefundableByAsaasApi(payment)) return payment
+
+  const confirmed = await tryConfirmSandboxPayment(externalId)
+  if (confirmed && isRefundableByAsaasApi(confirmed)) return confirmed
+
   payment = await getAsaasPayment(externalId)
-  if (isRefundableAsaasStatus(payment.status)) return payment
+  payment = await normalizePaymentForRefund(payment, externalId)
+  if (isRefundableByAsaasApi(payment)) return payment
 
   throw new Error(refundBlockedMessage(payment, externalId))
 }
@@ -86,8 +134,15 @@ async function requestAsaasRefund(
     const msg = e instanceof Error ? e.message : String(e)
     if (!isRefundableStatusError(msg)) throw e
 
+    let payment = await getAsaasPayment(externalId)
+    payment = await normalizePaymentForRefund(payment, externalId)
+
+    if (isRefundableByAsaasApi(payment)) {
+      return await refundAsaasPayment(externalId, input)
+    }
+
     const confirmed = await tryConfirmSandboxPayment(externalId)
-    if (confirmed && isRefundableAsaasStatus(confirmed.status)) {
+    if (confirmed && isRefundableByAsaasApi(confirmed)) {
       return await refundAsaasPayment(externalId, input)
     }
 
@@ -106,6 +161,7 @@ export async function getAsaasPaymentRefundPreview(externalId: string | null): P
   billing_type: string | null
   environment: string
   error: string | null
+  warning: string | null
 }> {
   const environment = asaasEnvLabel()
   if (!externalId) {
@@ -115,16 +171,25 @@ export async function getAsaasPaymentRefundPreview(externalId: string | null): P
       billing_type: null,
       environment,
       error: "Cobrança sem ID no Asaas.",
+      warning: null,
     }
   }
   try {
     const payment = await getAsaasPayment(externalId)
+    const billing = billingTypeOf(payment)
+    const status = normalizePaymentStatus(payment.status)
+    const warning =
+      (billing === "CREDIT_CARD" || billing === "DEBIT_CARD") && status === "RECEIVED_IN_CASH"
+        ? "Cartão marcado como recebido em dinheiro no Asaas — o estorno vai tentar corrigir isso automaticamente."
+        : null
+
     return {
       asaas_id: payment.id,
       asaas_status: payment.status,
       billing_type: payment.billingType ?? null,
       environment,
       error: null,
+      warning,
     }
   } catch (e) {
     const msg = e instanceof AsaasApiError ? e.message : e instanceof Error ? e.message : "Erro ao consultar Asaas"
@@ -134,6 +199,7 @@ export async function getAsaasPaymentRefundPreview(externalId: string | null): P
       billing_type: null,
       environment,
       error: `${msg} Verifique ASAAS_ENVIRONMENT e ASAAS_API_KEY na Vercel.`,
+      warning: null,
     }
   }
 }

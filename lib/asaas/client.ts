@@ -191,6 +191,14 @@ export async function confirmSandboxAsaasPayment(paymentId: string): Promise<Asa
   })
 }
 
+/** Desfaz confirmação manual "recebido em dinheiro" (ex.: cartão marcado errado no painel). */
+export async function undoAsaasReceivedInCash(paymentId: string): Promise<AsaasPayment> {
+  return asaasFetch<AsaasPayment>(`/payments/${paymentId}/undoReceivedInCash`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  })
+}
+
 export type AsaasRefundResult = {
   id: string
   status: string
