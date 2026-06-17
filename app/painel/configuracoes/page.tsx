@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react"
 import Link from "next/link"
+import { useSearchParams } from "next/navigation"
 import { useBarbershop } from "@/hooks/use-barbershop"
 import { useUnits } from "@/hooks/use-units"
 import { hasFeature, PLAN_FEATURES, PLAN_LABELS, PLAN_PRICES } from "@/lib/plans"
@@ -61,7 +62,7 @@ import {
   Check,
   Share2,
   QrCode,
-  Shield,
+  CreditCard,
   Smartphone,
   Building2,
   UserPlus,
@@ -87,6 +88,8 @@ import {
 } from "@/components/ui/dialog"
 import { renderNotificationTemplate } from "@/lib/notification-template"
 import { barbersListUrl } from "@/lib/barbers-list-url"
+import { cn } from "@/lib/utils"
+import { planSalesButtonVariant, planSalesTheme } from "@/lib/plan-sales-theme"
 import { BarberPhotoAdjust } from "@/components/barber-photo-adjust"
 import { WhatsAppConnectWizard } from "@/components/painel/whatsapp-connect-wizard"
 import { ChangePasswordForm } from "@/components/account/change-password-form"
@@ -155,10 +158,57 @@ const WA_SECTION_REMINDER_OPTIONS = [
 ] as const
 
 const CONFIG_TABS_LIST_CLASS =
-  "bg-secondary/50 border border-border w-full max-w-none grid grid-cols-2 min-[480px]:grid-cols-3 lg:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-9 gap-1.5 p-2 rounded-xl h-auto shadow-sm"
+  "bg-secondary/50 border border-border w-full max-w-none grid grid-cols-2 min-[480px]:grid-cols-3 lg:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-10 gap-1.5 p-2 rounded-xl h-auto shadow-sm"
 
-const CONFIG_TAB_TRIGGER_CLASS =
-  "data-[state=active]:bg-primary data-[state=active]:text-primary-foreground w-full min-h-[52px] flex flex-col sm:flex-row items-center justify-center gap-1.5 sm:gap-2 px-2 py-2.5 text-sm sm:text-base font-semibold leading-tight text-center [&_svg]:!size-5 sm:[&_svg]:!size-6"
+const CONFIG_TAB_IDS = [
+  "barbearia",
+  "horarios",
+  "servicos",
+  "equipe",
+  "plano",
+  "conta",
+  "unidades",
+  "notificacoes",
+  "integracao",
+  "trimplay",
+] as const
+
+type ConfigTabId = (typeof CONFIG_TAB_IDS)[number]
+
+function isConfigTabId(value: string | null): value is ConfigTabId {
+  return CONFIG_TAB_IDS.includes(value as ConfigTabId)
+}
+
+const CONFIG_TAB_TRIGGER_BASE =
+  "w-full min-h-[52px] flex flex-col sm:flex-row items-center justify-center gap-1.5 sm:gap-2 px-2 py-2.5 text-sm sm:text-base font-semibold leading-tight text-center rounded-lg transition-colors text-muted-foreground [&_svg]:!size-5 sm:[&_svg]:!size-6 data-[state=active]:shadow-md data-[state=active]:border-transparent"
+
+/** Cor própria por aba quando selecionada — sem repetir azul/ciano */
+const CONFIG_TAB_THEME: Record<string, string> = {
+  barbearia:
+    "hover:bg-amber-500/10 data-[state=active]:!bg-amber-600 data-[state=active]:!text-white",
+  horarios:
+    "hover:bg-stone-500/10 data-[state=active]:!bg-stone-600 data-[state=active]:!text-white",
+  servicos:
+    "hover:bg-emerald-500/10 data-[state=active]:!bg-emerald-600 data-[state=active]:!text-white",
+  equipe:
+    "hover:bg-violet-500/10 data-[state=active]:!bg-violet-600 data-[state=active]:!text-white",
+  plano:
+    "hover:bg-fuchsia-500/10 data-[state=active]:!bg-fuchsia-600 data-[state=active]:!text-white",
+  conta:
+    "hover:bg-sky-500/10 data-[state=active]:!bg-sky-600 data-[state=active]:!text-white",
+  unidades:
+    "hover:bg-lime-500/10 data-[state=active]:!bg-lime-600 data-[state=active]:!text-lime-950",
+  notificacoes:
+    "hover:bg-orange-500/10 data-[state=active]:!bg-orange-600 data-[state=active]:!text-white",
+  integracao:
+    "hover:bg-rose-500/10 data-[state=active]:!bg-rose-600 data-[state=active]:!text-white",
+  trimplay:
+    "hover:bg-yellow-500/10 data-[state=active]:!bg-yellow-500 data-[state=active]:!text-yellow-950",
+}
+
+function configTabTrigger(id: string) {
+  return cn(CONFIG_TAB_TRIGGER_BASE, CONFIG_TAB_THEME[id] ?? CONFIG_TAB_THEME.barbearia)
+}
 
 const CONFIG_TAB_LABEL_CLASS = "max-w-[9rem] sm:max-w-none"
 
@@ -174,6 +224,18 @@ function isLocalDevOrigin(origin: string): boolean {
 }
 
 export default function ConfiguracoesPage() {
+  const searchParams = useSearchParams()
+  const tabFromUrl = searchParams.get("tab")
+  const [activeTab, setActiveTab] = useState<ConfigTabId>(() =>
+    isConfigTabId(tabFromUrl) ? tabFromUrl : "barbearia"
+  )
+
+  useEffect(() => {
+    if (isConfigTabId(tabFromUrl)) {
+      setActiveTab(tabFromUrl)
+    }
+  }, [tabFromUrl])
+
   const {
     plan,
     subscription,
@@ -1832,41 +1894,45 @@ export default function ConfiguracoesPage() {
         </DialogContent>
       </Dialog>
 
-      <Tabs defaultValue="barbearia" className="space-y-6">
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as ConfigTabId)} className="space-y-6">
         <TabsList className={CONFIG_TABS_LIST_CLASS}>
-          <TabsTrigger value="barbearia" className={CONFIG_TAB_TRIGGER_CLASS}>
+          <TabsTrigger value="barbearia" className={configTabTrigger("barbearia")}>
             <Store className="shrink-0" />
             <span className={CONFIG_TAB_LABEL_CLASS}>Barbearia</span>
           </TabsTrigger>
-          <TabsTrigger value="horarios" className={CONFIG_TAB_TRIGGER_CLASS}>
+          <TabsTrigger value="horarios" className={configTabTrigger("horarios")}>
             <Clock className="shrink-0" />
             <span className={CONFIG_TAB_LABEL_CLASS}>Horários</span>
           </TabsTrigger>
-          <TabsTrigger value="servicos" className={CONFIG_TAB_TRIGGER_CLASS}>
+          <TabsTrigger value="servicos" className={configTabTrigger("servicos")}>
             <Scissors className="shrink-0" />
             <span className={CONFIG_TAB_LABEL_CLASS}>Serviços</span>
           </TabsTrigger>
-          <TabsTrigger value="equipe" className={CONFIG_TAB_TRIGGER_CLASS}>
+          <TabsTrigger value="equipe" className={configTabTrigger("equipe")}>
             <Users className="shrink-0" />
             <span className={CONFIG_TAB_LABEL_CLASS}>Equipe</span>
           </TabsTrigger>
-          <TabsTrigger value="plano" className={CONFIG_TAB_TRIGGER_CLASS}>
-            <Shield className="shrink-0" />
-            <span className={CONFIG_TAB_LABEL_CLASS}>Plano &amp; conta</span>
+          <TabsTrigger value="plano" className={configTabTrigger("plano")}>
+            <CreditCard className="shrink-0" />
+            <span className={CONFIG_TAB_LABEL_CLASS}>Plano</span>
           </TabsTrigger>
-          <TabsTrigger value="unidades" className={CONFIG_TAB_TRIGGER_CLASS}>
+          <TabsTrigger value="conta" className={configTabTrigger("conta")}>
+            <Lock className="shrink-0" />
+            <span className={CONFIG_TAB_LABEL_CLASS}>Minha conta</span>
+          </TabsTrigger>
+          <TabsTrigger value="unidades" className={configTabTrigger("unidades")}>
             <Building2 className="shrink-0" />
             <span className={CONFIG_TAB_LABEL_CLASS}>Unidades</span>
           </TabsTrigger>
-          <TabsTrigger value="notificacoes" className={CONFIG_TAB_TRIGGER_CLASS}>
+          <TabsTrigger value="notificacoes" className={configTabTrigger("notificacoes")}>
             <Bell className="shrink-0" />
             <span className={CONFIG_TAB_LABEL_CLASS}>Notificações</span>
           </TabsTrigger>
-          <TabsTrigger value="integracao" className={CONFIG_TAB_TRIGGER_CLASS}>
+          <TabsTrigger value="integracao" className={configTabTrigger("integracao")}>
             <Plug className="shrink-0" />
             <span className={CONFIG_TAB_LABEL_CLASS}>Integração</span>
           </TabsTrigger>
-          <TabsTrigger value="trimplay" className={CONFIG_TAB_TRIGGER_CLASS}>
+          <TabsTrigger value="trimplay" className={configTabTrigger("trimplay")}>
             <Trophy className="shrink-0" />
             <span className={CONFIG_TAB_LABEL_CLASS}>Trim Play</span>
           </TabsTrigger>
@@ -3440,7 +3506,7 @@ export default function ConfiguracoesPage() {
                   <p className="text-foreground font-medium mb-1">Status atual</p>
                   <p>
                     Plano efetivo:{" "}
-                    <strong className="text-primary">
+                    <strong className={plan ? planSalesTheme(plan).price : "text-foreground"}>
                       {plan ? PLAN_LABELS[plan] : "Sem plano ativo"}
                     </strong>
                     {" • "}
@@ -3474,6 +3540,7 @@ export default function ConfiguracoesPage() {
                 <div className="grid gap-3 md:grid-cols-3">
                   {planCards.map((planOption) => {
                     const isCurrent = plan === planOption && subscription?.status !== "canceled"
+                    const theme = planSalesTheme(planOption)
                     const featuresPreview = PLAN_FEATURES[planOption].slice(0, 4)
                     const actionLabel = isCurrent
                       ? "Plano atual"
@@ -3492,12 +3559,14 @@ export default function ConfiguracoesPage() {
                             setPlanDetailOpen(planOption)
                           }
                         }}
-                        className={`rounded-lg border p-4 text-left cursor-pointer transition-colors hover:border-primary/60 hover:bg-secondary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
-                          isCurrent ? "border-primary bg-primary/5" : "border-border bg-secondary/10"
-                        }`}
+                        className={cn(
+                          "rounded-lg border p-4 text-left cursor-pointer transition-colors hover:bg-secondary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                          theme.ring,
+                          isCurrent ? theme.cardCurrent : theme.card
+                        )}
                       >
                         <p className="font-semibold text-foreground">{PLAN_LABELS[planOption]}</p>
-                        <p className="text-primary text-lg font-bold mt-1">
+                        <p className={cn("text-lg font-bold mt-1", theme.price)}>
                           R$ {PLAN_PRICES[planOption]}/mês
                         </p>
                         <ul className="mt-3 space-y-1 text-xs text-muted-foreground">
@@ -3505,11 +3574,14 @@ export default function ConfiguracoesPage() {
                             <li key={`${planOption}_${feature}`}>- {feature}</li>
                           ))}
                         </ul>
-                        <p className="mt-2 text-[11px] text-primary/90 font-medium">Ver plano completo →</p>
+                        <p className={cn("mt-2 text-[11px] font-medium", theme.link)}>
+                          Ver plano completo →
+                        </p>
                         {managedByBilling && !isCurrent ? (
                           <Button
                             type="button"
-                            className="w-full mt-3 bg-primary text-primary-foreground hover:bg-primary/90"
+                            variant={planSalesButtonVariant(planOption)}
+                            className={cn("w-full mt-3", theme.button)}
                             asChild
                             onClick={(e) => e.stopPropagation()}
                           >
@@ -3518,7 +3590,11 @@ export default function ConfiguracoesPage() {
                         ) : (
                           <Button
                             type="button"
-                            className="w-full mt-3 bg-primary text-primary-foreground hover:bg-primary/90"
+                            variant={planSalesButtonVariant(planOption)}
+                            className={cn(
+                              "w-full mt-3",
+                              isCurrent ? theme.buttonCurrent : theme.button
+                            )}
                             disabled={subscriptionBusy || isCurrent}
                             onClick={(e) => {
                               e.stopPropagation()
@@ -3547,7 +3623,12 @@ export default function ConfiguracoesPage() {
                             Plano {PLAN_LABELS[planDetailOpen]}
                           </DialogTitle>
                           <DialogDescription className="text-muted-foreground">
-                            <span className="text-primary font-semibold text-base">
+                            <span
+                              className={cn(
+                                "font-semibold text-base",
+                                planSalesTheme(planDetailOpen).price
+                              )}
+                            >
                               R$ {PLAN_PRICES[planDetailOpen]}/mês
                             </span>
                             <span className="block mt-2">
@@ -3558,13 +3639,20 @@ export default function ConfiguracoesPage() {
                         <ul className="mt-2 space-y-2 text-sm text-muted-foreground border-t border-border pt-4">
                           {PLAN_FEATURES[planDetailOpen].map((feature) => (
                             <li key={`detail_${planDetailOpen}_${feature}`} className="flex gap-2">
-                              <Check className="w-4 h-4 shrink-0 text-primary mt-0.5" aria-hidden />
+                              <Check
+                                className={cn(
+                                  "w-4 h-4 shrink-0 mt-0.5",
+                                  planSalesTheme(planDetailOpen).check
+                                )}
+                                aria-hidden
+                              />
                               <span className="text-foreground/90">{feature}</span>
                             </li>
                           ))}
                         </ul>
                         {(() => {
                           const opt = planDetailOpen
+                          const detailTheme = planSalesTheme(opt)
                           const isCurrentModal = plan === opt && subscription?.status !== "canceled"
                           const label = isCurrentModal
                             ? "Plano atual"
@@ -3574,7 +3662,8 @@ export default function ConfiguracoesPage() {
                           return managedByBilling && !isCurrentModal ? (
                             <Button
                               type="button"
-                              className="w-full mt-6 bg-primary text-primary-foreground hover:bg-primary/90"
+                              variant={planSalesButtonVariant(opt)}
+                              className={cn("w-full mt-6", detailTheme.button)}
                               asChild
                             >
                               <Link href="/painel/assinatura" onClick={() => setPlanDetailOpen(null)}>
@@ -3584,7 +3673,11 @@ export default function ConfiguracoesPage() {
                           ) : (
                             <Button
                               type="button"
-                              className="w-full mt-6 bg-primary text-primary-foreground hover:bg-primary/90"
+                              variant={planSalesButtonVariant(opt)}
+                              className={cn(
+                                "w-full mt-6",
+                                isCurrentModal ? detailTheme.buttonCurrent : detailTheme.button
+                              )}
                               disabled={subscriptionBusy || isCurrentModal}
                               onClick={() => {
                                 void handleChoosePlan(opt)
@@ -3667,8 +3760,14 @@ export default function ConfiguracoesPage() {
                 )}
               </CardContent>
             </Card>
+          </div>
+        </TabsContent>
 
-            <ChangePasswordForm />
+        <TabsContent value="conta">
+          <div className="space-y-4 max-w-2xl">
+            <ChangePasswordForm
+              description="E-mail e senha com que você entra no painel (Google ou senha). Isso é o seu login pessoal — não é o plano nem os dados da barbearia na aba Barbearia."
+            />
 
             {showInternalAccountHints ? (
               <Card className="bg-card border-border">
@@ -3679,7 +3778,7 @@ export default function ConfiguracoesPage() {
                     localhost).
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-4 max-w-2xl text-sm text-muted-foreground">
+                <CardContent className="space-y-4 text-sm text-muted-foreground">
                   <div>
                     <p className="text-foreground font-medium mb-1">Tipo de conta da barbearia</p>
                     {barbershop.role === "super_admin" ? (

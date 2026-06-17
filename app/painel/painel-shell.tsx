@@ -20,6 +20,7 @@ import {
   Bell,
   ChevronDown,
   Shield,
+  Lock,
   MessageCircle,
   Building2,
 } from "lucide-react"
@@ -204,6 +205,12 @@ function PainelLayoutInner({ children }: { children: React.ReactNode }) {
               <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuLabel>Minha conta</DropdownMenuLabel>
                 <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                  <Link href="/painel/configuracoes?tab=conta" className="cursor-pointer">
+                    <Lock className="w-4 h-4 mr-2" />
+                    Senha e login
+                  </Link>
+                </DropdownMenuItem>
                 <DropdownMenuItem asChild>
                   <Link href="/painel/configuracoes" className="cursor-pointer">
                     <Settings className="w-4 h-4 mr-2" />

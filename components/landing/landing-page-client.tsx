@@ -17,6 +17,8 @@ import { BrandLogo } from "@/components/brand-logo"
 import { TrimTimeWordmark } from "@/components/trim-time-wordmark"
 import { LandingFeaturesCarousel } from "@/components/landing/landing-features-carousel"
 import { LANDING_FEATURES } from "@/lib/landing-features"
+import { landingPlanButtonClass, landingPlanCardClass, planSalesTheme } from "@/lib/plan-sales-theme"
+import { cn } from "@/lib/utils"
 
 function WhatsappIcon({ className }: { className?: string }) {
   return (
@@ -371,34 +373,36 @@ function LandingPageContent({
 
           <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
             {/* Plano Básico - borda azul */}
-            <Card className="bg-card border-2 border-blue-500">
+            <Card className={landingPlanCardClass("basic")}>
               <CardContent className="p-6">
                 <div className="mb-6">
                   <h3 className="text-lg font-semibold text-foreground mb-1">{PLAN_LABELS.basic}</h3>
                   <p className="text-sm text-muted-foreground">Para começar</p>
                 </div>
                 <div className="mb-6">
-                  <span className="text-4xl font-bold text-blue-600">R${planPrices.basic}</span>
+                  <span className={cn("text-4xl font-bold", planSalesTheme("basic").price)}>
+                    R${planPrices.basic}
+                  </span>
                   <span className="text-muted-foreground">/mês</span>
                 </div>
                 <ul className="space-y-3 mb-6">
                   {PLAN_FEATURES.basic.map((item, i) => (
                     <li key={i} className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Check className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                      <Check className={cn("w-4 h-4 flex-shrink-0", planSalesTheme("basic").check)} />
                       {item}
                     </li>
                   ))}
                 </ul>
                 <Link href="/cadastro?tipo=barbearia">
-                  <Button variant="outline" className="w-full border-blue-500 text-blue-600 hover:bg-blue-500/10">
+                  <Button variant="outline" className={landingPlanButtonClass("basic")}>
                     Cadastrar — teste Pro grátis
                   </Button>
                 </Link>
               </CardContent>
             </Card>
 
-            {/* Plano Pro - Mais Popular - borda amarela */}
-            <Card className="bg-card border-2 border-amber-500 relative">
+            {/* Plano Pro - Mais Popular - borda âmbar */}
+            <Card className={cn(landingPlanCardClass("pro"), "relative")}>
               <div className="absolute -top-3 left-1/2 -translate-x-1/2">
                 <span className="px-3 py-1 bg-amber-500 text-white text-xs font-medium rounded-full">
                   Mais Popular
@@ -410,19 +414,21 @@ function LandingPageContent({
                   <p className="text-sm text-muted-foreground">Para crescer</p>
                 </div>
                 <div className="mb-6">
-                  <span className="text-4xl font-bold text-primary">R${planPrices.pro}</span>
+                  <span className={cn("text-4xl font-bold", planSalesTheme("pro").price)}>
+                    R${planPrices.pro}
+                  </span>
                   <span className="text-muted-foreground">/mês</span>
                 </div>
                 <ul className="space-y-3 mb-6">
                   {PLAN_FEATURES.pro.map((item, i) => (
                     <li key={i} className="flex items-center gap-2 text-sm text-foreground">
-                      <Check className="w-4 h-4 text-primary flex-shrink-0" />
+                      <Check className={cn("w-4 h-4 flex-shrink-0", planSalesTheme("pro").check)} />
                       {item}
                     </li>
                   ))}
                 </ul>
                 <Link href="/cadastro?tipo=barbearia">
-                  <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90">
+                  <Button className={landingPlanButtonClass("pro")}>
                     Cadastrar — teste Pro grátis
                   </Button>
                 </Link>
@@ -430,26 +436,28 @@ function LandingPageContent({
             </Card>
 
             {/* Plano Premium - borda verde */}
-            <Card className="bg-card border-2 border-green-600 relative">
+            <Card className={cn(landingPlanCardClass("premium"), "relative")}>
               <CardContent className="p-6">
                 <div className="mb-6">
                   <h3 className="text-lg font-semibold text-foreground mb-1">{PLAN_LABELS.premium}</h3>
                   <p className="text-sm text-muted-foreground">Tudo que você precisa</p>
                 </div>
                 <div className="mb-6">
-                  <span className="text-4xl font-bold text-green-600">R${planPrices.premium}</span>
+                  <span className={cn("text-4xl font-bold", planSalesTheme("premium").price)}>
+                    R${planPrices.premium}
+                  </span>
                   <span className="text-muted-foreground">/mês</span>
                 </div>
                 <ul className="space-y-3 mb-6">
                   {PLAN_FEATURES.premium.map((item, i) => (
                     <li key={i} className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Check className="w-4 h-4 text-green-600 flex-shrink-0" />
+                      <Check className={cn("w-4 h-4 flex-shrink-0", planSalesTheme("premium").check)} />
                       {item}
                     </li>
                   ))}
                 </ul>
                 <Link href="/cadastro?tipo=barbearia">
-                  <Button variant="outline" className="w-full border-green-600 text-green-600 hover:bg-green-600/10">
+                  <Button variant="outline" className={landingPlanButtonClass("premium")}>
                     Cadastrar — teste Pro grátis
                   </Button>
                 </Link>
