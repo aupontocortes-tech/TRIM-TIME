@@ -2,7 +2,7 @@
  * Multi-tenant: obter barbershop_id no backend (API routes / Server Components)
  */
 
-import { cookies, headers } from "next/headers"
+import { cookies } from "next/headers"
 
 const BARBERSHOP_ID_COOKIE = "trimtime_barbershop_id"
 export const BARBERSHOP_UNIT_COOKIE = "trimtime_barbershop_unit_id"
@@ -13,10 +13,7 @@ export async function getBarbershopIdFromRequest(): Promise<string | null> {
   const cookieStore = await cookies()
   const impersonateId = cookieStore.get(IMPERSONATE_COOKIE)?.value
   if (impersonateId) return impersonateId
-  const id = cookieStore.get(BARBERSHOP_ID_COOKIE)?.value
-  if (id) return id
-  const h = await headers()
-  return h.get("x-barbershop-id") || null
+  return cookieStore.get(BARBERSHOP_ID_COOKIE)?.value ?? null
 }
 
 /** Id real da sessão (ignora impersonação). Usado em APIs de admin para checar role. */

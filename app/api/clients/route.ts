@@ -12,7 +12,7 @@ import {
   barbershopHasMultipleUnits,
   requireSelectedUnitForClientCreate,
 } from "@/lib/unit-context"
-import { ensureClientsUnitSchemaReady } from "@/lib/client-unit-schema"
+import { ensureClientsUnitSchemaReady } from "@/lib/appointment-db-schema"
 
 function mapClient(c: {
   id: string
