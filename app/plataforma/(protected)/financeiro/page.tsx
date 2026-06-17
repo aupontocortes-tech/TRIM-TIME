@@ -55,6 +55,7 @@ function FinanceiroContent() {
   const [msg, setMsg] = useState("")
   const [refundTarget, setRefundTarget] = useState<PaymentRow | null>(null)
   const [refundReason, setRefundReason] = useState("")
+  const [refundConfirmToken, setRefundConfirmToken] = useState("")
   const [refundBusy, setRefundBusy] = useState(false)
 
   const load = useCallback(async () => {
@@ -87,17 +88,15 @@ function FinanceiroContent() {
   const openRefund = (row: PaymentRow) => {
     setRefundTarget(row)
     setRefundReason(`Estorno solicitado — ${row.barbershop_name}`)
+    setRefundConfirmToken("")
     setMsg("")
     setErr("")
   }
 
   const confirmRefund = async () => {
     if (!refundTarget) return
-    if (
-      !confirm(
-        `Estornar ${formatBrl(refundTarget.amount)} para ${refundTarget.barbershop_name}? O valor volta pelo Asaas (cartão ou PIX).`
-      )
-    ) {
+    if (!refundConfirmToken.trim()) {
+      setErr("Digite o código de confirmação do estorno.")
       return
     }
     setRefundBusy(true)
@@ -106,7 +105,10 @@ function FinanceiroContent() {
       const r = await fetch(`/api/admin/payments/${refundTarget.id}/refund`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ description: refundReason.trim() || undefined }),
+        body: JSON.stringify({
+          description: refundReason.trim() || undefined,
+          confirm_token: refundConfirmToken.trim(),
+        }),
       })
       const j = await r.json()
       if (!r.ok) {
@@ -280,16 +282,36 @@ function FinanceiroContent() {
                 : null}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-2">
-            <Label htmlFor="refund-reason" className="text-zinc-300">
-              Motivo (registro interno)
-            </Label>
-            <Input
-              id="refund-reason"
-              value={refundReason}
-              onChange={(e) => setRefundReason(e.target.value)}
-              className="bg-zinc-900 border-zinc-700 text-white"
-            />
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="refund-confirm" className="text-zinc-300">
+                Código de confirmação
+              </Label>
+              <Input
+                id="refund-confirm"
+                type="password"
+                autoComplete="off"
+                placeholder="Mesmo código configurado na Vercel"
+                value={refundConfirmToken}
+                onChange={(e) => setRefundConfirmToken(e.target.value)}
+                className="bg-zinc-900 border-zinc-700 text-white"
+              />
+              <p className="text-xs text-zinc-500">
+                Variável <code className="text-zinc-400">ADMIN_REFUND_CONFIRM_TOKEN</code> na Vercel — só quem
+                souber o código confirma o estorno.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="refund-reason" className="text-zinc-300">
+                Motivo (registro interno)
+              </Label>
+              <Input
+                id="refund-reason"
+                value={refundReason}
+                onChange={(e) => setRefundReason(e.target.value)}
+                className="bg-zinc-900 border-zinc-700 text-white"
+              />
+            </div>
           </div>
           <DialogFooter className="gap-2">
             <Button
@@ -304,7 +326,7 @@ function FinanceiroContent() {
             <Button
               type="button"
               className="bg-[#D4AF37] text-black hover:bg-[#c9a227]"
-              disabled={refundBusy}
+              disabled={refundBusy || !refundConfirmToken.trim()}
               onClick={() => void confirmRefund()}
             >
               {refundBusy ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}

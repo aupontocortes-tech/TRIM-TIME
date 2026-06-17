@@ -1,8 +1,9 @@
-import { refundAsaasPayment } from "@/lib/asaas/client"
+import { refundAsaasPayment, getAsaasPayment } from "@/lib/asaas/client"
 import { isBillingEnabled } from "@/lib/asaas/billing-service"
 import { prisma } from "@/lib/prisma"
 
-const REFUNDABLE_STATUSES = new Set([
+/** Status no Trim Time (webhook / registro local). */
+const REFUNDABLE_LOCAL_STATUSES = new Set([
   "CONFIRMED",
   "RECEIVED",
   "RECEIVED_IN_CASH",
@@ -10,12 +11,23 @@ const REFUNDABLE_STATUSES = new Set([
   "PAYMENT_RECEIVED",
 ])
 
+/** Status real no Asaas — fonte da verdade no estorno. */
+const REFUNDABLE_ASAAS_STATUSES = new Set([
+  "CONFIRMED",
+  "RECEIVED",
+  "RECEIVED_IN_CASH",
+])
+
+function normalizePaymentStatus(status: string): string {
+  return status.trim().toUpperCase()
+}
+
 export async function refundBarbershopPayment(params: {
   paymentId: string
   adminBarbershopId: string
   description?: string
   value?: number
-}): Promise<{ ok: true; refundStatus: string }> {
+}): Promise<{ ok: true; refundStatus: string; asaasStatus: string }> {
   if (!(await isBillingEnabled())) {
     throw new Error("Cobrança online não está ativa.")
   }
@@ -27,8 +39,24 @@ export async function refundBarbershopPayment(params: {
   if (!row) throw new Error("Cobrança não encontrada.")
   if (!row.externalId) throw new Error("Cobrança sem ID no Asaas — estorne pelo painel Asaas.")
   if (row.status === "REFUNDED") throw new Error("Esta cobrança já foi estornada.")
-  if (!REFUNDABLE_STATUSES.has(row.status)) {
+  if (!REFUNDABLE_LOCAL_STATUSES.has(normalizePaymentStatus(row.status))) {
     throw new Error(`Status "${row.status}" não permite estorno pelo app.`)
+  }
+
+  const asaasPayment = await getAsaasPayment(row.externalId)
+  const asaasStatus = normalizePaymentStatus(asaasPayment.status)
+  if (!REFUNDABLE_ASAAS_STATUSES.has(asaasStatus)) {
+    throw new Error(
+      `No Asaas esta cobrança está "${asaasPayment.status}". Só dá para estornar confirmada ou recebida. ` +
+        "No sandbox, abra a cobrança no Asaas e use \"Receber pagamento\" se ainda estiver pendente."
+    )
+  }
+
+  if (normalizePaymentStatus(row.status) !== asaasStatus) {
+    await prisma.payment.update({
+      where: { id: row.id },
+      data: { status: asaasStatus },
+    })
   }
 
   const amount = Number(row.amount)
@@ -70,5 +98,5 @@ export async function refundBarbershopPayment(params: {
     },
   })
 
-  return { ok: true, refundStatus: refund.status }
+  return { ok: true, refundStatus: refund.status, asaasStatus }
 }
