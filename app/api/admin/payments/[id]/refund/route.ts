@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { requireSuperAdmin } from "@/lib/admin-auth"
-import { assertRefundConfirmToken } from "@/lib/admin-refund-confirm"
+import { assertRefundConfirmSession } from "@/lib/admin-refund-confirm"
 import { refundBarbershopPayment } from "@/lib/asaas/refund-service"
 
 export async function POST(
@@ -15,10 +15,11 @@ export async function POST(
     const body = (await request.json().catch(() => ({}))) as {
       description?: string
       value?: number
-      confirm_token?: string
+      confirm_code?: string
+      confirm_session?: string
     }
 
-    assertRefundConfirmToken(body.confirm_token)
+    assertRefundConfirmSession(id, auth.barbershopId, body.confirm_code, body.confirm_session)
 
     const result = await refundBarbershopPayment({
       paymentId: id,

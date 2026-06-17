@@ -15,7 +15,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
-import { Loader2, RefreshCw, RotateCcw, Search, Wallet } from "lucide-react"
+import { Loader2, RefreshCw, RotateCcw, Search, Wallet, Copy, Check } from "lucide-react"
 
 type PaymentRow = {
   id: string
@@ -56,7 +56,33 @@ function FinanceiroContent() {
   const [refundTarget, setRefundTarget] = useState<PaymentRow | null>(null)
   const [refundReason, setRefundReason] = useState("")
   const [refundConfirmToken, setRefundConfirmToken] = useState("")
+  const [refundSession, setRefundSession] = useState("")
+  const [refundIssueCode, setRefundIssueCode] = useState("")
+  const [refundIssueLoading, setRefundIssueLoading] = useState(false)
+  const [copiedCode, setCopiedCode] = useState(false)
   const [refundBusy, setRefundBusy] = useState(false)
+
+  const issueRefundCode = useCallback(async (paymentId: string) => {
+    setRefundIssueLoading(true)
+    setRefundIssueCode("")
+    setRefundSession("")
+    setRefundConfirmToken("")
+    setCopiedCode(false)
+    try {
+      const r = await fetch(`/api/admin/payments/${paymentId}/refund-token`)
+      const j = await r.json()
+      if (!r.ok) {
+        setErr(typeof j.error === "string" ? j.error : "Não foi possível gerar o código")
+        return
+      }
+      setRefundIssueCode(typeof j.code === "string" ? j.code : "")
+      setRefundSession(typeof j.session === "string" ? j.session : "")
+    } catch {
+      setErr("Erro de rede ao gerar código de confirmação")
+    } finally {
+      setRefundIssueLoading(false)
+    }
+  }, [])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -89,14 +115,37 @@ function FinanceiroContent() {
     setRefundTarget(row)
     setRefundReason(`Estorno solicitado — ${row.barbershop_name}`)
     setRefundConfirmToken("")
+    setRefundSession("")
+    setRefundIssueCode("")
+    setCopiedCode(false)
     setMsg("")
     setErr("")
+    void issueRefundCode(row.id)
+  }
+
+  const copyIssueCode = async () => {
+    if (!refundIssueCode) return
+    try {
+      await navigator.clipboard.writeText(refundIssueCode)
+      setCopiedCode(true)
+      setTimeout(() => setCopiedCode(false), 2000)
+    } catch {
+      setErr("Não foi possível copiar. Selecione o código manualmente.")
+    }
   }
 
   const confirmRefund = async () => {
     if (!refundTarget) return
+    if (!refundSession) {
+      setErr("Aguarde o código de confirmação ser gerado.")
+      return
+    }
     if (!refundConfirmToken.trim()) {
-      setErr("Digite o código de confirmação do estorno.")
+      setErr("Cole o código de confirmação abaixo.")
+      return
+    }
+    if (refundConfirmToken.trim() !== refundIssueCode) {
+      setErr("O código colado não confere com o exibido acima.")
       return
     }
     setRefundBusy(true)
@@ -107,7 +156,8 @@ function FinanceiroContent() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           description: refundReason.trim() || undefined,
-          confirm_token: refundConfirmToken.trim(),
+          confirm_code: refundConfirmToken.trim(),
+          confirm_session: refundSession,
         }),
       })
       const j = await r.json()
@@ -283,23 +333,57 @@ function FinanceiroContent() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
+            <div className="rounded-lg border border-[#D4AF37]/30 bg-[#D4AF37]/5 p-4 space-y-2">
+              <p className="text-xs text-zinc-400">
+                Copie o código abaixo e cole no campo de confirmação (válido por 10 minutos).
+              </p>
+              {refundIssueLoading ? (
+                <div className="flex items-center gap-2 text-sm text-zinc-400">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Gerando código…
+                </div>
+              ) : refundIssueCode ? (
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 text-center text-2xl font-bold tracking-[0.35em] text-[#D4AF37] bg-zinc-900 rounded-md py-3 px-2">
+                    {refundIssueCode}
+                  </code>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="shrink-0 border-[#D4AF37]/40 text-[#D4AF37] hover:bg-[#D4AF37]/10"
+                    onClick={() => void copyIssueCode()}
+                    title="Copiar código"
+                  >
+                    {copiedCode ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="border-[#D4AF37]/40 text-zinc-300"
+                  onClick={() => refundTarget && void issueRefundCode(refundTarget.id)}
+                >
+                  Gerar novo código
+                </Button>
+              )}
+            </div>
             <div className="space-y-2">
               <Label htmlFor="refund-confirm" className="text-zinc-300">
-                Código de confirmação
+                Cole o código aqui
               </Label>
               <Input
                 id="refund-confirm"
-                type="password"
+                type="text"
+                inputMode="numeric"
                 autoComplete="off"
-                placeholder="Mesmo código configurado na Vercel"
+                placeholder="000000"
                 value={refundConfirmToken}
-                onChange={(e) => setRefundConfirmToken(e.target.value)}
-                className="bg-zinc-900 border-zinc-700 text-white"
+                onChange={(e) => setRefundConfirmToken(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                className="bg-zinc-900 border-zinc-700 text-white text-lg tracking-widest text-center font-mono"
               />
-              <p className="text-xs text-zinc-500">
-                Variável <code className="text-zinc-400">ADMIN_REFUND_CONFIRM_TOKEN</code> na Vercel — só quem
-                souber o código confirma o estorno.
-              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="refund-reason" className="text-zinc-300">
@@ -326,7 +410,7 @@ function FinanceiroContent() {
             <Button
               type="button"
               className="bg-[#D4AF37] text-black hover:bg-[#c9a227]"
-              disabled={refundBusy || !refundConfirmToken.trim()}
+              disabled={refundBusy || !refundConfirmToken.trim() || !refundSession || refundIssueLoading}
               onClick={() => void confirmRefund()}
             >
               {refundBusy ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
