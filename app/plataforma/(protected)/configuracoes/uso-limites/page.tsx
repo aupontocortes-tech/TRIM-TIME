@@ -8,7 +8,7 @@ const GOLD = "#D4AF37"
 
 export default function PlataformaUsoLimitesPage() {
   return (
-    <div className="space-y-6 max-w-3xl">
+    <div className="space-y-6 max-w-4xl">
       <div className="flex items-start gap-3">
         <Link
           href="/plataforma/configuracoes"

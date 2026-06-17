@@ -89,6 +89,7 @@ import { renderNotificationTemplate } from "@/lib/notification-template"
 import { barbersListUrl } from "@/lib/barbers-list-url"
 import { BarberPhotoAdjust } from "@/components/barber-photo-adjust"
 import { WhatsAppConnectWizard } from "@/components/painel/whatsapp-connect-wizard"
+import { ChangePasswordForm } from "@/components/account/change-password-form"
 import {
   barbeariaContactFormFromScope,
   isPrincipalBarbershopUnit,
@@ -3666,6 +3667,8 @@ export default function ConfiguracoesPage() {
                 )}
               </CardContent>
             </Card>
+
+            <ChangePasswordForm />
 
             {showInternalAccountHints ? (
               <Card className="bg-card border-border">

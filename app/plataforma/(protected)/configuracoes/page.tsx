@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/collapsible"
 import Link from "next/link"
 import { ChevronDown, ChevronRight, CreditCard, Loader2, MessageCircle, Gauge } from "lucide-react"
+import { ChangePasswordForm } from "@/components/account/change-password-form"
 import type { SubscriptionPlan } from "@/lib/db/types"
 import { PLAN_LABELS, PLAN_PRICES, TRIAL_DAYS } from "@/lib/plans"
 
@@ -307,6 +308,12 @@ export default function PlataformaConfiguracoesPage() {
           icon={Gauge}
           summary={infraSummary}
           href="/plataforma/configuracoes/uso-limites"
+        />
+
+        <ChangePasswordForm
+          variant="platform"
+          title="Senha da plataforma"
+          description="Mesma conta do login em /plataforma/login. Funciona junto com Google — defina ou troque a senha aqui."
         />
 
         <ConfigSection

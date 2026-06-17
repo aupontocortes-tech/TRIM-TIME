@@ -60,6 +60,9 @@ function MetricCard({ metric }: { metric: InfraMetric }) {
         <div className="min-w-0">
           <p className="font-medium text-white text-sm">{metric.label}</p>
           <p className="text-xs text-zinc-500 mt-0.5">{metric.description}</p>
+          <p className="text-[10px] text-zinc-600 mt-0.5 uppercase tracking-wide">
+            Fonte: {metric.source === "api" ? "API externa" : metric.source === "database" ? "Banco / app" : metric.source === "estimate" ? "Estimativa" : "Config"}
+          </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <span
@@ -221,11 +224,19 @@ export function InfrastructureUsagePanel() {
 
       <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-4 text-xs text-zinc-400 space-y-2">
         <p className="font-medium text-zinc-300">Integrações no servidor</p>
-        <ul className="grid sm:grid-cols-3 gap-2">
+        <ul className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
           <li>
             Resend:{" "}
             <span className={data.integrations.resend_configured ? "text-emerald-400" : "text-amber-400"}>
-              {data.integrations.resend_configured ? "configurado" : "não configurado"}
+              {data.integrations.resend_configured
+                ? `configurado (${data.integrations.resend_quota_source === "api" ? "cota via API" : "proxy banco"})`
+                : "não configurado"}
+            </span>
+          </li>
+          <li>
+            Canais e-mail:{" "}
+            <span className="text-zinc-300">
+              Resend {data.email_channels.via_resend} · Supabase {data.email_channels.via_supabase}
             </span>
           </li>
           <li>
@@ -244,10 +255,19 @@ export function InfrastructureUsagePanel() {
               {data.integrations.supabase_url_configured ? "URL ok" : "faltando"}
             </span>
           </li>
+          <li>
+            Vercel métricas:{" "}
+            <span
+              className={
+                data.integrations.vercel_usage_configured ? "text-emerald-400" : "text-zinc-500"
+              }
+            >
+              {data.integrations.vercel_usage_configured ? "token configurado" : "opcional (painel Vercel)"}
+            </span>
+          </li>
         </ul>
         <p className="text-zinc-500 pt-1 border-t border-zinc-800">
-          Vercel: uso de banda e invocações — consulte o painel da Vercel. MAU exato do Auth — painel
-          Supabase → Usage.
+          Banda Vercel e detalhes extras — painel Vercel → Usage. MAU oficial — Supabase → Usage.
         </p>
       </div>
 
@@ -255,9 +275,8 @@ export function InfrastructureUsagePanel() {
         className="rounded-lg p-3 text-xs text-zinc-400 border border-[#D4AF37]/25"
         style={{ backgroundColor: `${GOLD}08` }}
       >
-        <strong className="text-[#D4AF37]">Ordem sugerida ao crescer:</strong> Vercel Pro (app
-        comercial) → Resend (muitos OTP) → Supabase Pro (MAU / banco). Cadastro com Google reduz
-        e-mails no Resend.
+        <strong className="text-[#D4AF37]">Ordem sugerida ao crescer:</strong> Vercel Pro → Resend pago →
+        Supabase Pro (MAU / banco / storage). Login Google reduz e-mails no Resend.
       </div>
     </div>
   )

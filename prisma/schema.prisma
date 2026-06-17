@@ -85,6 +85,7 @@ model Barbershop {
   loyaltyLedgerEntries LoyaltyLedgerEntry[]
   marketingCampaigns   MarketingCampaign[]
   supportMessages      SupportMessage[]
+  productFeedback      ProductFeedback[]
   trimPlayScores      TrimPlayScore[]
   barberInvites       BarberInvite[]
   clientOtpCodes      ClientOtpCode[]
@@ -183,6 +184,31 @@ model SupportMessage {
 
   @@index([barbershopId, createdAt])
   @@map("support_messages")
+}
+
+// ========== FEEDBACK DE PRODUTO (MELHORIAS / ROADMAP) ==========
+model ProductFeedback {
+  id           String     @id @default(uuid()) @db.Uuid
+  barbershopId String     @map("barbershop_id") @db.Uuid
+  barbershop   Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  /// feature | improvement | ux | bug | integration | other
+  category     String     @db.VarChar(24)
+  /// agenda | clientes | financeiro | …
+  area         String?    @db.VarChar(24)
+  title        String     @db.VarChar(200)
+  description  String     @db.Text
+  /// low | medium | high
+  impact       String     @default("medium") @db.VarChar(16)
+  /// new | reviewing | planned | in_progress | shipped | declined
+  status       String     @default("new") @db.VarChar(24)
+  adminNotes   String?    @map("admin_notes") @db.Text
+  readByAdmin  Boolean    @default(false) @map("read_by_admin")
+  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime   @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([barbershopId, createdAt])
+  @@index([status, createdAt])
+  @@map("product_feedback")
 }
 
 // ========== BARBERSHOP UNITS (multi-unidade — opcional) ==========

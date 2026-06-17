@@ -66,7 +66,7 @@ export default function PlataformaSuporteChatPage() {
   }
 
   return (
-    <div className="space-y-4 max-w-3xl mx-auto">
+    <div className="space-y-4 w-full min-w-0">
       <div className="flex items-center gap-3">
         <Button
           type="button"
@@ -96,9 +96,9 @@ export default function PlataformaSuporteChatPage() {
       </div>
       {error ? <div className="rounded-lg border border-red-500/30 bg-red-950/40 p-3 text-sm text-red-200">{error}</div> : null}
 
-      <Card className="bg-zinc-950 border-[#D4AF37]/35 min-h-[320px] flex flex-col">
-        <CardContent className="p-4 flex-1 flex flex-col gap-3">
-          <div className="flex-1 space-y-2 overflow-y-auto max-h-[50vh]">
+      <Card className="bg-zinc-950 border-[#D4AF37]/35 w-full min-h-[calc(100dvh-13rem)] flex flex-col">
+        <CardContent className="p-4 sm:p-6 flex-1 flex flex-col gap-3 min-h-0">
+          <div className="flex-1 min-h-[320px] space-y-2 overflow-y-auto">
             {loading ? (
               <p className="text-zinc-500">Carregando…</p>
             ) : messages.length === 0 ? (
@@ -121,7 +121,7 @@ export default function PlataformaSuporteChatPage() {
               ))
             )}
           </div>
-          <div className="flex gap-2 pt-2 border-t border-zinc-800">
+          <div className="flex gap-2 pt-2 border-t border-zinc-800 shrink-0">
             <Input
               value={text}
               onChange={(e) => setText(e.target.value)}
