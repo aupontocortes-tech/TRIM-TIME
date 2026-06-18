@@ -199,6 +199,33 @@ export async function undoAsaasReceivedInCash(paymentId: string): Promise<AsaasP
   })
 }
 
+export async function createAsaasPayment(input: {
+  customerId: string
+  billingType: AsaasBillingType
+  value: number
+  dueDate: string
+  description: string
+  externalReference?: string
+  subscriptionId?: string
+}): Promise<AsaasPayment> {
+  return asaasFetch<AsaasPayment>("/payments", {
+    method: "POST",
+    body: JSON.stringify({
+      customer: input.customerId,
+      billingType: input.billingType,
+      value: input.value,
+      dueDate: input.dueDate,
+      description: input.description,
+      externalReference: input.externalReference,
+      ...(input.subscriptionId ? { subscription: input.subscriptionId } : {}),
+    }),
+  })
+}
+
+export async function deleteAsaasPayment(paymentId: string): Promise<void> {
+  await asaasFetch(`/payments/${paymentId}`, { method: "DELETE" })
+}
+
 export type AsaasRefundResult = {
   id: string
   status: string

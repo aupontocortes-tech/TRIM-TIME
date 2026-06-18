@@ -11,7 +11,9 @@ import {
   cancelAsaasSubscription,
   cancelPixAutomaticAuthorization,
   createAsaasCustomer,
+  createAsaasPayment,
   createAsaasSubscription,
+  deleteAsaasPayment,
   findAsaasCustomerByReference,
   listSubscriptionPayments,
   tokenizeAsaasCreditCard,
@@ -19,6 +21,7 @@ import {
   updateAsaasSubscriptionCreditCard,
   type AsaasBillingType,
 } from "@/lib/asaas/client"
+import { computePlanChangeBilling } from "@/lib/billing/plan-change-proration"
 import { getAppBaseUrl, isAsaasConfigured } from "@/lib/asaas/config"
 import {
   autoConfirmAndSyncSubscriptionPayment,
@@ -28,6 +31,7 @@ import { getPlanCatalog, getPlanPrice } from "@/lib/plan-catalog"
 import { onBarbershopPlanChanged } from "@/lib/barbershop-units-plan"
 import { isPaymentApiActive } from "@/lib/platform-settings"
 import { prisma } from "@/lib/prisma"
+import type { Prisma } from "@prisma/client"
 import { createGraceAccessUntilDate } from "@/lib/subscription"
 
 function formatDateYmd(d: Date): string {
@@ -94,6 +98,7 @@ export type CheckoutResult = {
   paymentUrl: string | null
   pixQrCode?: string | null
   pixCopyPaste?: string | null
+  proration?: { mode: string; amount: number }
 }
 
 export async function startSubscriptionCheckout(
@@ -186,38 +191,141 @@ export async function startSubscriptionCheckout(
 export async function changeSubscriptionPlan(
   barbershopId: string,
   newPlan: SubscriptionPlan
-): Promise<CheckoutResult | { ok: true; plan: SubscriptionPlan }> {
+): Promise<
+  CheckoutResult | { ok: true; plan: SubscriptionPlan; proration?: { mode: string; amount: number } }
+> {
   const sub = await prisma.subscription.findUnique({ where: { barbershopId } })
   if (!sub) throw new Error("Assinatura não encontrada")
 
-  const price = await getPlanPrice(newPlan)
+  const currentPlan = sub.plan as SubscriptionPlan
+  if (currentPlan === newPlan) {
+    return { ok: true, plan: newPlan }
+  }
 
   if (sub.asaasSubscriptionId && (await isBillingEnabled())) {
+    const billing = await computePlanChangeBilling(barbershopId, currentPlan, newPlan)
+    const catalog = await getPlanCatalog()
+
     await updateAsaasSubscription(sub.asaasSubscriptionId, {
-      value: price,
-      updatePendingPayments: true,
+      value: billing.nextSubscriptionValue,
+      updatePendingPayments: billing.updatePendingPayments,
     })
+
     await prisma.subscription.update({
       where: { barbershopId },
       data: { plan: newPlan },
     })
     await onBarbershopPlanChanged(barbershopId, newPlan)
-    const payments = await listSubscriptionPayments(sub.asaasSubscriptionId, "PENDING")
-    const payment = payments[0]
-    if (payment && sub.billingType === "CREDIT_CARD") {
-      await autoConfirmAndSyncSubscriptionPayment({
-        barbershopId,
-        paymentId: payment.id,
-        plan: newPlan,
-        asaasSubscriptionId: sub.asaasSubscriptionId,
-        billingType: "CREDIT_CARD",
+
+    const billingType = (sub.billingType ?? "CREDIT_CARD") as AsaasBillingType
+    let paymentUrl: string | null = null
+
+    if (billing.chargeMode === "difference" && billing.chargeAmount > 0) {
+      const pending = await listSubscriptionPayments(sub.asaasSubscriptionId, "PENDING")
+      for (const p of pending) {
+        await deleteAsaasPayment(p.id).catch((e) => {
+          console.warn("[billing/plan] delete pending payment", p.id, e)
+        })
+        await prisma.payment.deleteMany({
+          where: { provider: "asaas", externalId: p.id },
+        })
+      }
+
+      const customerId = sub.asaasCustomerId ?? (await ensureAsaasCustomer(barbershopId))
+      const diffPayment = await createAsaasPayment({
+        customerId,
+        billingType,
+        value: billing.chargeAmount,
+        dueDate: formatDateYmd(new Date()),
+        description: `Trim Time — upgrade ${catalog.plans[currentPlan].name} → ${catalog.plans[newPlan].name} (diferença)`,
+        externalReference: `${barbershopId}:upgrade:${newPlan}`,
+        subscriptionId: sub.asaasSubscriptionId,
       })
+
+      await prisma.payment.create({
+        data: {
+          barbershopId,
+          provider: "asaas",
+          externalId: diffPayment.id,
+          amount: diffPayment.value,
+          status: diffPayment.status,
+          plan: newPlan,
+          metadata: {
+            billingType,
+            subscriptionId: sub.asaasSubscriptionId,
+            proration: true,
+            fromPlan: currentPlan,
+            toPlan: newPlan,
+            chargeMode: billing.chargeMode,
+          } as Prisma.InputJsonValue,
+        },
+      })
+
+      if (billingType === "CREDIT_CARD") {
+        await autoConfirmAndSyncSubscriptionPayment({
+          barbershopId,
+          paymentId: diffPayment.id,
+          plan: newPlan,
+          asaasSubscriptionId: sub.asaasSubscriptionId,
+          billingType,
+        })
+      }
+
+      paymentUrl = diffPayment.invoiceUrl || diffPayment.bankSlipUrl || null
+
+      return {
+        asaasSubscriptionId: sub.asaasSubscriptionId,
+        paymentUrl,
+        pixQrCode: diffPayment.pixTransaction?.encodedImage ?? null,
+        pixCopyPaste: diffPayment.pixTransaction?.payload ?? null,
+        proration: { mode: billing.chargeMode, amount: billing.chargeAmount },
+      }
     }
+
+    if (billing.chargeMode === "full") {
+      const payments = await listSubscriptionPayments(sub.asaasSubscriptionId, "PENDING")
+      const payment = payments[0]
+      if (payment) {
+        const existing = await prisma.payment.findFirst({
+          where: { provider: "asaas", externalId: payment.id },
+        })
+        if (!existing) {
+          await prisma.payment.create({
+            data: {
+              barbershopId,
+              provider: "asaas",
+              externalId: payment.id,
+              amount: payment.value,
+              status: payment.status,
+              plan: newPlan,
+              metadata: { billingType, subscriptionId: sub.asaasSubscriptionId },
+            },
+          })
+        }
+        if (billingType === "CREDIT_CARD") {
+          await autoConfirmAndSyncSubscriptionPayment({
+            barbershopId,
+            paymentId: payment.id,
+            plan: newPlan,
+            asaasSubscriptionId: sub.asaasSubscriptionId,
+            billingType,
+          })
+        }
+      }
+      paymentUrl = payment?.invoiceUrl || payment?.bankSlipUrl || null
+      return {
+        asaasSubscriptionId: sub.asaasSubscriptionId,
+        paymentUrl,
+        pixQrCode: payment?.pixTransaction?.encodedImage ?? null,
+        pixCopyPaste: payment?.pixTransaction?.payload ?? null,
+        proration: { mode: billing.chargeMode, amount: billing.chargeAmount },
+      }
+    }
+
     return {
-      asaasSubscriptionId: sub.asaasSubscriptionId,
-      paymentUrl: payment?.invoiceUrl || payment?.bankSlipUrl || null,
-      pixQrCode: payment?.pixTransaction?.encodedImage ?? null,
-      pixCopyPaste: payment?.pixTransaction?.payload ?? null,
+      ok: true,
+      plan: newPlan,
+      proration: { mode: billing.chargeMode, amount: billing.chargeAmount },
     }
   }
 

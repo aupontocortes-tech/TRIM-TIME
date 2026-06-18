@@ -171,7 +171,7 @@ export async function syncPendingSandboxPaymentsFromDb(limit = 25): Promise<numb
     where: {
       provider: "asaas",
       externalId: { not: null },
-      status: { in: ["PENDING", "OVERDUE"] },
+      status: { in: ["PENDING", "OVERDUE", "RECEIVED_IN_CASH", "CONFIRMED", "RECEIVED"] },
     },
     take: limit,
     orderBy: { createdAt: "desc" },
