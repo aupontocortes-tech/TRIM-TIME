@@ -155,3 +155,65 @@ export async function autoConfirmPendingSubscriptionPayments(params: {
     })
   }
 }
+
+/** Atualiza cobranças antigas ainda PENDENTES no banco (sandbox + cartão). */
+export async function syncPendingSandboxPaymentsFromDb(limit = 25): Promise<number> {
+  if (getAsaasEnvironment() !== "sandbox") return 0
+
+  const rows = await prisma.payment.findMany({
+    where: {
+      provider: "asaas",
+      externalId: { not: null },
+      status: { in: ["PENDING", "OVERDUE"] },
+    },
+    take: limit,
+    orderBy: { createdAt: "desc" },
+  })
+
+  let synced = 0
+  for (const row of rows) {
+    if (!row.externalId || !row.plan) continue
+
+    const meta =
+      row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
+        ? (row.metadata as Record<string, unknown>)
+        : {}
+    const billingType = (meta.billingType as AsaasBillingType | undefined) ?? "CREDIT_CARD"
+    const subId = typeof meta.subscriptionId === "string" ? meta.subscriptionId : ""
+
+    try {
+      const asaasPayment = await getAsaasPayment(row.externalId)
+      const asaasSubId = subId || asaasPayment.subscription || ""
+
+      if (isPaidAsaasStatus(asaasPayment.status)) {
+        await syncBarbershopPaymentFromAsaas({
+          barbershopId: row.barbershopId,
+          payment: asaasPayment,
+          plan: row.plan as SubscriptionPlan,
+          asaasSubscriptionId: asaasSubId,
+          billingType,
+          metadata: { synced_from_admin: true },
+        })
+        synced++
+        continue
+      }
+
+      if (!isCardBilling(billingType) && !isCardBilling(asaasPayment.billingType)) continue
+
+      const confirmed = await autoConfirmAndSyncSubscriptionPayment({
+        barbershopId: row.barbershopId,
+        paymentId: row.externalId,
+        plan: row.plan as SubscriptionPlan,
+        asaasSubscriptionId: asaasSubId,
+        billingType: isCardBilling(asaasPayment.billingType)
+          ? asaasPayment.billingType
+          : billingType,
+      })
+      if (confirmed && isPaidAsaasStatus(confirmed.status)) synced++
+    } catch (e) {
+      console.warn("[sandbox] sync pending payment", row.id, e)
+    }
+  }
+
+  return synced
+}

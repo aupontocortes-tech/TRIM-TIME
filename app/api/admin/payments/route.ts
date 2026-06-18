@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { requireSuperAdmin } from "@/lib/admin-auth"
+import { syncPendingSandboxPaymentsFromDb } from "@/lib/asaas/sandbox-payment-sync"
 import { prisma } from "@/lib/prisma"
 
 export const dynamic = "force-dynamic"
@@ -13,6 +14,8 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const barbershopId = searchParams.get("barbershop_id")?.trim() || undefined
     const q = searchParams.get("q")?.trim().toLowerCase() || ""
+
+    await syncPendingSandboxPaymentsFromDb()
 
     const rows = await prisma.payment.findMany({
       where: {
