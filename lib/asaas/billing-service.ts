@@ -26,6 +26,7 @@ import { getAppBaseUrl, isAsaasConfigured } from "@/lib/asaas/config"
 import {
   autoConfirmAndSyncSubscriptionPayment,
   autoConfirmPendingSubscriptionPayments,
+  waitForSubscriptionPendingPayment,
 } from "@/lib/asaas/sandbox-payment-sync"
 import { getPlanCatalog, getPlanPrice } from "@/lib/plan-catalog"
 import { onBarbershopPlanChanged } from "@/lib/barbershop-units-plan"
@@ -113,7 +114,8 @@ export async function startSubscriptionCheckout(
   const catalog = await getPlanCatalog()
   const price = catalog.plans[plan].price
   const customerId = await ensureAsaasCustomer(barbershopId)
-  const nextDue = formatDateYmd(addMonths(new Date(), 1))
+  /** Cobrança imediata — vencimento hoje (não daqui a 1 mês). */
+  const nextDue = formatDateYmd(new Date())
   const description = `Trim Time — ${catalog.plans[plan].name}`
 
   const current = await prisma.subscription.findUnique({ where: { barbershopId } })
@@ -123,6 +125,7 @@ export async function startSubscriptionCheckout(
     await updateAsaasSubscription(asaasSubId, {
       value: price,
       billingType,
+      nextDueDate: nextDue,
       updatePendingPayments: true,
     })
     await prisma.subscription.update({
@@ -154,7 +157,7 @@ export async function startSubscriptionCheckout(
   }
 
   const payments = await listSubscriptionPayments(asaasSubId, "PENDING")
-  const payment = payments[0]
+  const payment = payments[0] ?? (await waitForSubscriptionPendingPayment(asaasSubId))
   const paymentUrl = payment?.invoiceUrl || payment?.bankSlipUrl || null
 
   if (payment) {

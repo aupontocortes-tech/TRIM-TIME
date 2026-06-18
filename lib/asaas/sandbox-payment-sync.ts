@@ -1,6 +1,7 @@
 import {
   confirmSandboxAsaasPayment,
   getAsaasPayment,
+  listAllSubscriptionPayments,
   listSubscriptionPayments,
   type AsaasBillingType,
   type AsaasPayment,
@@ -42,9 +43,25 @@ export async function tryAutoConfirmSandboxCreditCardPayment(
     payment = await confirmSandboxAsaasPayment(paymentId)
     return payment
   } catch (e) {
-    console.warn("[sandbox] auto-confirm payment failed", paymentId, e)
+    const msg = e instanceof Error ? e.message : String(e)
+    console.warn("[sandbox] auto-confirm payment failed", paymentId, msg)
     return null
   }
+}
+
+export async function waitForSubscriptionPendingPayment(
+  subscriptionId: string,
+  attempts = 6
+): Promise<AsaasPayment | null> {
+  for (let i = 0; i < attempts; i++) {
+    const pending = await listSubscriptionPayments(subscriptionId, "PENDING")
+    if (pending[0]) return pending[0]
+    if (i < attempts - 1) {
+      await new Promise((r) => setTimeout(r, 600))
+    }
+  }
+  const all = await listAllSubscriptionPayments(subscriptionId, "3")
+  return all.find((p) => p.status?.toUpperCase() === "PENDING") ?? null
 }
 
 function paymentMetadata(
@@ -151,20 +168,20 @@ export async function autoConfirmPendingSubscriptionPayments(params: {
 }): Promise<void> {
   if (getAsaasEnvironment() !== "sandbox" || !isCardBilling(params.billingType)) return
 
-  const pending = await listSubscriptionPayments(params.asaasSubscriptionId, "PENDING")
-  for (const p of pending) {
-    await autoConfirmAndSyncSubscriptionPayment({
-      barbershopId: params.barbershopId,
-      paymentId: p.id,
-      plan: params.plan,
-      asaasSubscriptionId: params.asaasSubscriptionId,
-      billingType: params.billingType,
-    })
-  }
+  const pending = await waitForSubscriptionPendingPayment(params.asaasSubscriptionId)
+  if (!pending) return
+
+  await autoConfirmAndSyncSubscriptionPayment({
+    barbershopId: params.barbershopId,
+    paymentId: pending.id,
+    plan: params.plan,
+    asaasSubscriptionId: params.asaasSubscriptionId,
+    billingType: params.billingType,
+  })
 }
 
 /** Atualiza cobranças antigas ainda PENDENTES no banco (sandbox + cartão). */
-export async function syncPendingSandboxPaymentsFromDb(limit = 25): Promise<number> {
+export async function syncPendingSandboxPaymentsFromDb(limit = 50): Promise<number> {
   if (getAsaasEnvironment() !== "sandbox") return 0
 
   const rows = await prisma.payment.findMany({

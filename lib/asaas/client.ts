@@ -179,6 +179,18 @@ export async function listSubscriptionPayments(
   return list.data ?? []
 }
 
+/** Lista cobranças da assinatura (qualquer status), mais recentes primeiro. */
+export async function listAllSubscriptionPayments(
+  subscriptionId: string,
+  limit = "10"
+): Promise<AsaasPayment[]> {
+  const list = await asaasFetch<AsaasList<AsaasPayment>>(
+    `/subscriptions/${subscriptionId}/payments`,
+    { searchParams: { limit } }
+  )
+  return list.data ?? []
+}
+
 export async function getAsaasPayment(paymentId: string): Promise<AsaasPayment> {
   return asaasFetch<AsaasPayment>(`/payments/${paymentId}`)
 }
