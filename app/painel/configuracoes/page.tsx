@@ -3585,7 +3585,7 @@ export default function ConfiguracoesPage() {
                             asChild
                             onClick={(e) => e.stopPropagation()}
                           >
-                            <Link href="/painel/assinatura">Contratar plano</Link>
+                            <Link href={`/painel/assinatura?contract=1&plan=${planOption}`}>Contratar plano</Link>
                           </Button>
                         ) : (
                           <Button
@@ -3666,7 +3666,10 @@ export default function ConfiguracoesPage() {
                               className={cn("w-full mt-6", detailTheme.button)}
                               asChild
                             >
-                              <Link href="/painel/assinatura" onClick={() => setPlanDetailOpen(null)}>
+                              <Link
+                                href={`/painel/assinatura?contract=1&plan=${opt}`}
+                                onClick={() => setPlanDetailOpen(null)}
+                              >
                                 Contratar este plano
                               </Link>
                             </Button>

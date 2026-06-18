@@ -22,7 +22,7 @@ type Props = {
 export function SignupBillingFlow({ catalog, trialDays, onSuccess, onError }: Props) {
   const [step, setStep] = useState<"choose" | "card">("choose")
   const [mode, setMode] = useState<SignupBillingMode>("trial")
-  const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan>("pro")
+  const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan>("basic")
 
   const trialPlanName = catalog.plans[TRIAL_PLAN].name
   const trialPrice = catalog.plans[TRIAL_PLAN].price
@@ -145,7 +145,9 @@ export function SignupBillingFlow({ catalog, trialDays, onSuccess, onError }: Pr
 
           {mode === "immediate" ? (
             <div className="px-4 pb-4 pt-0 border-t border-primary/20 space-y-3">
-              <p className="text-sm font-medium pt-3">Escolha seu plano</p>
+              <p className="text-sm font-semibold pt-3 text-foreground">
+                Escolha Básico, Pro ou Premium (obrigatório)
+              </p>
               <PlanPicker catalog={catalog} value={selectedPlan} onChange={setSelectedPlan} />
             </div>
           ) : null}

@@ -12,6 +12,7 @@ import type { PlanCatalog } from "@/lib/plan-catalog"
 import { TrialBillingTrust } from "@/components/onboarding/trial-billing-trust"
 import { SignupBillingFlow } from "@/components/billing/signup-billing-flow"
 import { TrialCardForm } from "@/components/billing/trial-card-form"
+import { PlanPicker } from "@/components/billing/plan-picker"
 import { PixPaymentPanel } from "@/components/billing/pix-payment-panel"
 import { TRIAL_DAYS } from "@/lib/plans"
 
@@ -38,6 +39,12 @@ function AssinaturaContent() {
   const cardReturn = searchParams.get("card") === "1"
   const setupCard = searchParams.get("setup") === "card"
   const showDecision = searchParams.get("decision") === "1"
+  const contractFromUrl = searchParams.get("contract") === "1"
+  const planFromUrl = searchParams.get("plan")
+  const validPlanFromUrl =
+    planFromUrl && ["basic", "pro", "premium"].includes(planFromUrl)
+      ? (planFromUrl as SubscriptionPlan)
+      : null
 
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
@@ -53,7 +60,9 @@ function AssinaturaContent() {
   const [pixEnabled, setPixEnabled] = useState(false)
   const [billingExempt, setBillingExempt] = useState(false)
   const [trialActive, setTrialActive] = useState(false)
-  const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan>("pro")
+  const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan>(
+    validPlanFromUrl ?? "pro"
+  )
   const [billingType, setBillingType] = useState<"CREDIT_CARD" | "PIX">("CREDIT_CARD")
   const [checkoutLoading, setCheckoutLoading] = useState(false)
   const [cancelLoading, setCancelLoading] = useState(false)
@@ -88,13 +97,19 @@ function AssinaturaContent() {
       setPixEnabled(!!j.billing?.pix_enabled)
       setBillingExempt(!!j.billing_exempt)
       setTrialActive(!!j.trial_active)
-      if (j.subscription?.plan) setSelectedPlan(j.subscription.plan)
+      if (!validPlanFromUrl && j.subscription?.plan) {
+        setSelectedPlan(j.subscription.plan)
+      }
     } catch {
       setErr("Erro de rede")
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [validPlanFromUrl])
+
+  useEffect(() => {
+    if (validPlanFromUrl) setSelectedPlan(validPlanFromUrl)
+  }, [validPlanFromUrl])
 
   useEffect(() => {
     void load()
@@ -293,6 +308,16 @@ function AssinaturaContent() {
 
   const isOnboardingCheckout =
     !billingExempt && (setupCard || needsCard) && !cardComplete
+
+  const showPlanCheckout =
+    !billingExempt &&
+    !!catalog &&
+    billingEnabled &&
+    (needsPlan ||
+      status === "past_due" ||
+      status === "canceled" ||
+      contractFromUrl ||
+      (trialActive && cardComplete && subscription?.status === "trial"))
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
@@ -536,74 +561,61 @@ function AssinaturaContent() {
         </CardContent>
       </Card>
 
-      {(needsPlan || status === "past_due" || status === "canceled") && catalog && !billingExempt ? (
+      {showPlanCheckout ? (
         <Card className="border-primary/40">
           <CardHeader>
-            <CardTitle>Escolha seu plano</CardTitle>
+            <CardTitle>
+              {trialActive && subscription?.status === "trial"
+                ? "Contratar um plano"
+                : "Escolha seu plano"}
+            </CardTitle>
             <CardDescription>
-              {needsPlan
-                ? "Seu período de teste terminou ou a assinatura precisa ser ativada."
-                : "Regularize ou escolha um novo plano."}
+              {trialActive && subscription?.status === "trial"
+                ? `Você está no teste grátis do Pro (${trialDaysLeft} dia(s) restantes). Escolha Básico, Pro ou Premium para contratar agora — o valor é do plano selecionado, não só do teste.`
+                : needsPlan
+                  ? "Seu período de teste terminou ou a assinatura precisa ser ativada."
+                  : "Regularize ou escolha um novo plano."}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid gap-3">
-              {PLAN_ORDER.map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  onClick={() => setSelectedPlan(p)}
-                  className={`text-left rounded-lg border p-4 transition-colors ${
-                    selectedPlan === p
-                      ? "border-primary bg-primary/5"
-                      : "border-border hover:border-primary/50"
-                  }`}
-                >
-                  <div className="flex justify-between items-start gap-2">
-                    <span className="font-semibold">{catalog.plans[p].name}</span>
-                    <span className="text-primary font-bold">
-                      R$ {catalog.plans[p].price}/mês
-                    </span>
-                  </div>
-                  <ul className="mt-2 text-xs text-muted-foreground space-y-0.5">
-                    {catalog.plans[p].features.slice(0, 4).map((f) => (
-                      <li key={f}>• {f}</li>
-                    ))}
-                  </ul>
-                </button>
-              ))}
+            <div className="space-y-2">
+              <p className="text-sm font-medium">1. Escolha o plano</p>
+              <PlanPicker catalog={catalog!} value={selectedPlan} onChange={setSelectedPlan} />
             </div>
 
-            {pixEnabled ? (
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  variant={billingType === "CREDIT_CARD" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => {
-                    setBillingType("CREDIT_CARD")
-                    setPixPending(null)
-                  }}
-                >
-                  <CreditCard className="w-4 h-4 mr-1" />
-                  Cartão
-                </Button>
-                <Button
-                  type="button"
-                  variant={billingType === "PIX" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setBillingType("PIX")}
-                >
-                  <QrCode className="w-4 h-4 mr-1" />
-                  PIX
-                </Button>
-              </div>
-            ) : (
-              <p className="text-xs text-muted-foreground rounded-md border border-dashed p-3">
-                <strong className="text-foreground">Cartão de crédito</strong> — a mensalidade é cobrada
-                automaticamente todo mês no cartão cadastrado.
-              </p>
-            )}
+            <div className="space-y-2">
+              <p className="text-sm font-medium">2. Forma de pagamento</p>
+              {pixEnabled ? (
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant={billingType === "CREDIT_CARD" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => {
+                      setBillingType("CREDIT_CARD")
+                      setPixPending(null)
+                    }}
+                  >
+                    <CreditCard className="w-4 h-4 mr-1" />
+                    Cartão
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={billingType === "PIX" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setBillingType("PIX")}
+                  >
+                    <QrCode className="w-4 h-4 mr-1" />
+                    PIX
+                  </Button>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground rounded-md border border-dashed p-3">
+                  <strong className="text-foreground">Cartão de crédito</strong> — a mensalidade é cobrada
+                  automaticamente todo mês no cartão cadastrado.
+                </p>
+              )}
+            </div>
 
             {pixEnabled && billingType === "CREDIT_CARD" ? (
               <p className="text-xs text-muted-foreground rounded-md border border-dashed p-3">
@@ -621,7 +633,7 @@ function AssinaturaContent() {
                 <TrialCardForm
                   mode="immediate"
                   plan={selectedPlan}
-                  catalog={catalog}
+                  catalog={catalog!}
                   onSuccess={handleCardFormSuccess}
                   onError={setErr}
                 />
@@ -646,7 +658,8 @@ function AssinaturaContent() {
               }
             >
               {checkoutLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-              Contratar plano
+              Contratar {catalog?.plans[selectedPlan].name ?? "plano"} — R${" "}
+              {catalog?.plans[selectedPlan].price.toFixed(2)}/mês
             </Button>
             <p className="text-xs text-muted-foreground text-center">
               {billingEnabled
