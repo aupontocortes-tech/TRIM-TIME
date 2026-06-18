@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { isBillingEnabled } from "@/lib/asaas/billing-service"
 import { getAsaasEnvironment, isAsaasConfigured, isPixBillingEnabled } from "@/lib/asaas/config"
+import { syncBarbershopPendingPayments } from "@/lib/asaas/sandbox-payment-sync"
 import {
   daysLeftInTrial,
   getEffectivePlanForBarbershop,
@@ -62,6 +63,8 @@ export async function GET() {
     if (!barbershopId) {
       return NextResponse.json({ error: "Barbershop não identificada" }, { status: 401 })
     }
+
+    await syncBarbershopPendingPayments(barbershopId).catch(() => {})
 
     const [sub, bs, catalog, billingEnabled] = await Promise.all([
       prisma.subscription.findUnique({ where: { barbershopId } }),

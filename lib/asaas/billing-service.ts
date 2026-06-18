@@ -26,6 +26,7 @@ import { getAppBaseUrl, isAsaasConfigured } from "@/lib/asaas/config"
 import {
   autoConfirmAndSyncSubscriptionPayment,
   autoConfirmPendingSubscriptionPayments,
+  syncBarbershopPendingPayments,
   waitForSubscriptionPendingPayment,
 } from "@/lib/asaas/sandbox-payment-sync"
 import { getPlanCatalog, getPlanPrice } from "@/lib/plan-catalog"
@@ -180,6 +181,7 @@ export async function startSubscriptionCheckout(
         asaasSubscriptionId: asaasSubId,
         billingType,
       })
+      await syncBarbershopPendingPayments(barbershopId)
     }
   }
 
@@ -590,12 +592,19 @@ export async function registerCardInApp(
   await onBarbershopPlanChanged(barbershopId, plan)
 
   if (mode === "immediate") {
+    await updateAsaasSubscription(asaasSubId, {
+      value: catalog.plans[plan].price,
+      billingType: "CREDIT_CARD",
+      nextDueDate: formatDateYmd(new Date()),
+      updatePendingPayments: true,
+    })
     await autoConfirmPendingSubscriptionPayments({
       barbershopId,
       asaasSubscriptionId: asaasSubId,
       plan,
       billingType: "CREDIT_CARD",
     })
+    await syncBarbershopPendingPayments(barbershopId)
   }
 
   return {

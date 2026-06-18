@@ -11,6 +11,13 @@ export function getAsaasApiBaseUrl(): string {
     : "https://api-sandbox.asaas.com/v3"
 }
 
+/** API apontando para sandbox — confirmação automática de cartão fake. */
+export function isAsaasSandboxApi(): boolean {
+  if (getAsaasApiBaseUrl().includes("sandbox")) return true
+  const v = process.env.ASAAS_SANDBOX_AUTO_CONFIRM?.trim().toLowerCase()
+  return v === "1" || v === "true" || v === "yes"
+}
+
 export function getAsaasApiKey(): string | null {
   const key = process.env.ASAAS_API_KEY?.trim()
   return key || null

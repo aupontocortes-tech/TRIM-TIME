@@ -6,7 +6,7 @@ import {
   type AsaasBillingType,
   type AsaasPayment,
 } from "@/lib/asaas/client"
-import { getAsaasEnvironment } from "@/lib/asaas/config"
+import { isAsaasSandboxApi } from "@/lib/asaas/config"
 import type { SubscriptionPlan } from "@/lib/db/types"
 import { onBarbershopPlanChanged } from "@/lib/barbershop-units-plan"
 import { prisma } from "@/lib/prisma"
@@ -23,25 +23,44 @@ function isCardBilling(billingType?: AsaasBillingType | string | null): boolean 
   return bt === "CREDIT_CARD" || bt === "DEBIT_CARD"
 }
 
-/** Sandbox: confirma cobrança de cartão via API (sem abrir painel Asaas). */
+function isPendingAsaasStatus(status: string): boolean {
+  const s = status.trim().toUpperCase()
+  return s === "PENDING" || s === "AWAITING_RISK_ANALYSIS"
+}
+
+/** Sandbox: confirma pagamento via API (sem abrir painel Asaas). */
 export async function tryAutoConfirmSandboxCreditCardPayment(
   paymentId: string,
   billingType?: AsaasBillingType
 ): Promise<AsaasPayment | null> {
-  if (getAsaasEnvironment() !== "sandbox") return null
+  if (!isAsaasSandboxApi()) return null
   if (billingType && !isCardBilling(billingType)) return null
 
   try {
     let payment = await getAsaasPayment(paymentId)
-    if (!isCardBilling(payment.billingType)) return null
 
+    const isCard =
+      isCardBilling(billingType) ||
+      isCardBilling(payment.billingType) ||
+      !!payment.subscription
+
+    if (!isCard) return null
     if (isPaidAsaasStatus(payment.status)) return payment
+    if (!isPendingAsaasStatus(payment.status)) return null
 
-    const pending = payment.status.trim().toUpperCase()
-    if (pending !== "PENDING" && pending !== "AWAITING_RISK_ANALYSIS") return null
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        payment = await confirmSandboxAsaasPayment(paymentId)
+        if (isPaidAsaasStatus(payment.status)) return payment
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        console.warn("[sandbox] confirm attempt", attempt + 1, paymentId, msg)
+        if (attempt < 2) await new Promise((r) => setTimeout(r, 800))
+      }
+    }
 
-    payment = await confirmSandboxAsaasPayment(paymentId)
-    return payment
+    payment = await getAsaasPayment(paymentId)
+    return isPaidAsaasStatus(payment.status) ? payment : null
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     console.warn("[sandbox] auto-confirm payment failed", paymentId, msg)
@@ -51,17 +70,17 @@ export async function tryAutoConfirmSandboxCreditCardPayment(
 
 export async function waitForSubscriptionPendingPayment(
   subscriptionId: string,
-  attempts = 6
+  attempts = 10
 ): Promise<AsaasPayment | null> {
   for (let i = 0; i < attempts; i++) {
     const pending = await listSubscriptionPayments(subscriptionId, "PENDING")
     if (pending[0]) return pending[0]
     if (i < attempts - 1) {
-      await new Promise((r) => setTimeout(r, 600))
+      await new Promise((r) => setTimeout(r, 700))
     }
   }
-  const all = await listAllSubscriptionPayments(subscriptionId, "3")
-  return all.find((p) => p.status?.toUpperCase() === "PENDING") ?? null
+  const all = await listAllSubscriptionPayments(subscriptionId, "5")
+  return all.find((p) => isPendingAsaasStatus(p.status ?? "")) ?? null
 }
 
 function paymentMetadata(
@@ -112,10 +131,13 @@ export async function syncBarbershopPaymentFromAsaas(params: {
         amount: params.payment.value,
         status: localStatus,
         plan: params.plan,
-        metadata: paymentMetadata({
-          billingType: params.billingType,
-          subscriptionId: params.asaasSubscriptionId,
-        }, params.metadata),
+        metadata: paymentMetadata(
+          {
+            billingType: params.billingType,
+            subscriptionId: params.asaasSubscriptionId,
+          },
+          params.metadata
+        ),
       },
     })
   }
@@ -145,8 +167,7 @@ export async function autoConfirmAndSyncSubscriptionPayment(params: {
   billingType: AsaasBillingType
 }): Promise<AsaasPayment | null> {
   const confirmed = await tryAutoConfirmSandboxCreditCardPayment(params.paymentId, params.billingType)
-  const payment =
-    confirmed ?? (await getAsaasPayment(params.paymentId).catch(() => null))
+  const payment = confirmed ?? (await getAsaasPayment(params.paymentId).catch(() => null))
   if (!payment) return null
 
   await syncBarbershopPaymentFromAsaas({
@@ -166,7 +187,7 @@ export async function autoConfirmPendingSubscriptionPayments(params: {
   plan: SubscriptionPlan
   billingType: AsaasBillingType
 }): Promise<void> {
-  if (getAsaasEnvironment() !== "sandbox" || !isCardBilling(params.billingType)) return
+  if (!isAsaasSandboxApi() || !isCardBilling(params.billingType)) return
 
   const pending = await waitForSubscriptionPendingPayment(params.asaasSubscriptionId)
   if (!pending) return
@@ -180,9 +201,50 @@ export async function autoConfirmPendingSubscriptionPayments(params: {
   })
 }
 
-/** Atualiza cobranças antigas ainda PENDENTES no banco (sandbox + cartão). */
+/** Sincroniza cobranças pendentes de uma barbearia (checkout / cadastro de cartão). */
+export async function syncBarbershopPendingPayments(barbershopId: string): Promise<number> {
+  if (!isAsaasSandboxApi()) return 0
+
+  const rows = await prisma.payment.findMany({
+    where: {
+      barbershopId,
+      provider: "asaas",
+      externalId: { not: null },
+      status: { in: ["PENDING", "OVERDUE"] },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 10,
+  })
+
+  let synced = 0
+  for (const row of rows) {
+    if (!row.externalId || !row.plan) continue
+    const meta =
+      row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
+        ? (row.metadata as Record<string, unknown>)
+        : {}
+    const billingType = (meta.billingType as AsaasBillingType | undefined) ?? "CREDIT_CARD"
+    const subId = typeof meta.subscriptionId === "string" ? meta.subscriptionId : ""
+
+    try {
+      const result = await autoConfirmAndSyncSubscriptionPayment({
+        barbershopId,
+        paymentId: row.externalId,
+        plan: row.plan as SubscriptionPlan,
+        asaasSubscriptionId: subId,
+        billingType,
+      })
+      if (result && isPaidAsaasStatus(result.status)) synced++
+    } catch (e) {
+      console.warn("[sandbox] sync barbershop payment", row.id, e)
+    }
+  }
+  return synced
+}
+
+/** Atualiza cobranças pendentes no Financeiro (super admin). */
 export async function syncPendingSandboxPaymentsFromDb(limit = 50): Promise<number> {
-  if (getAsaasEnvironment() !== "sandbox") return 0
+  if (!isAsaasSandboxApi()) return 0
 
   const rows = await prisma.payment.findMany({
     where: {
@@ -222,16 +284,16 @@ export async function syncPendingSandboxPaymentsFromDb(limit = 50): Promise<numb
         continue
       }
 
-      if (!isCardBilling(billingType) && !isCardBilling(asaasPayment.billingType)) continue
+      if (!isCardBilling(billingType) && !isCardBilling(asaasPayment.billingType) && !asaasPayment.subscription) {
+        continue
+      }
 
       const confirmed = await autoConfirmAndSyncSubscriptionPayment({
         barbershopId: row.barbershopId,
         paymentId: row.externalId,
         plan: row.plan as SubscriptionPlan,
         asaasSubscriptionId: asaasSubId,
-        billingType: isCardBilling(asaasPayment.billingType)
-          ? asaasPayment.billingType
-          : billingType,
+        billingType: isCardBilling(asaasPayment.billingType) ? asaasPayment.billingType : billingType,
       })
       if (confirmed && isPaidAsaasStatus(confirmed.status)) synced++
     } catch (e) {
