@@ -20,6 +20,10 @@ import {
   type AsaasBillingType,
 } from "@/lib/asaas/client"
 import { getAppBaseUrl, isAsaasConfigured } from "@/lib/asaas/config"
+import {
+  autoConfirmAndSyncSubscriptionPayment,
+  autoConfirmPendingSubscriptionPayments,
+} from "@/lib/asaas/sandbox-payment-sync"
 import { getPlanCatalog, getPlanPrice } from "@/lib/plan-catalog"
 import { onBarbershopPlanChanged } from "@/lib/barbershop-units-plan"
 import { isPaymentApiActive } from "@/lib/platform-settings"
@@ -160,6 +164,15 @@ export async function startSubscriptionCheckout(
         metadata: { billingType, subscriptionId: asaasSubId },
       },
     })
+    if (billingType === "CREDIT_CARD") {
+      await autoConfirmAndSyncSubscriptionPayment({
+        barbershopId,
+        paymentId: payment.id,
+        plan,
+        asaasSubscriptionId: asaasSubId,
+        billingType,
+      })
+    }
   }
 
   return {
@@ -191,6 +204,15 @@ export async function changeSubscriptionPlan(
     await onBarbershopPlanChanged(barbershopId, newPlan)
     const payments = await listSubscriptionPayments(sub.asaasSubscriptionId, "PENDING")
     const payment = payments[0]
+    if (payment && sub.billingType === "CREDIT_CARD") {
+      await autoConfirmAndSyncSubscriptionPayment({
+        barbershopId,
+        paymentId: payment.id,
+        plan: newPlan,
+        asaasSubscriptionId: sub.asaasSubscriptionId,
+        billingType: "CREDIT_CARD",
+      })
+    }
     return {
       asaasSubscriptionId: sub.asaasSubscriptionId,
       paymentUrl: payment?.invoiceUrl || payment?.bankSlipUrl || null,
@@ -456,6 +478,15 @@ export async function registerCardInApp(
   })
   await onBarbershopPlanChanged(barbershopId, plan)
 
+  if (mode === "immediate") {
+    await autoConfirmPendingSubscriptionPayments({
+      barbershopId,
+      asaasSubscriptionId: asaasSubId,
+      plan,
+      billingType: "CREDIT_CARD",
+    })
+  }
+
   return {
     asaasSubscriptionId: asaasSubId,
     creditCardLast4: token.creditCardNumber ?? null,
@@ -562,6 +593,14 @@ async function subscribeAfterTrialDecision(
       },
     })
     await onBarbershopPlanChanged(barbershopId, plan)
+    if (chargeImmediately) {
+      await autoConfirmPendingSubscriptionPayments({
+        barbershopId,
+        asaasSubscriptionId: sub.asaasSubscriptionId,
+        plan,
+        billingType: "CREDIT_CARD",
+      })
+    }
     return {
       asaasSubscriptionId: sub.asaasSubscriptionId,
       paymentUrl: payment?.invoiceUrl || null,
