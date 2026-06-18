@@ -55,15 +55,25 @@ function asaasEnvLabel(): string {
 function refundBlockedMessage(payment: AsaasPayment, externalId: string): string {
   const status = payment.status
   const billing = billingTypeOf(payment) || "?"
+  const statusNorm = normalizePaymentStatus(status)
 
   if (
     (billing === "CREDIT_CARD" || billing === "DEBIT_CARD") &&
-    normalizePaymentStatus(status) === "RECEIVED_IN_CASH"
+    statusNorm === "RECEIVED_IN_CASH"
   ) {
     return (
       `A cobrança ${externalId} é de cartão, mas no Asaas está como "recebida em dinheiro" ` +
       `(RECEIVED_IN_CASH). Isso impede estorno pela API. O app tentou corrigir automaticamente; ` +
       "se ainda falhou, estorne pelo painel sandbox.asaas.com ou crie uma nova cobrança de teste."
+    )
+  }
+
+  if (statusNorm === "PENDING" && getAsaasEnvironment() === "sandbox") {
+    return (
+      `No Asaas sandbox a cobrança ${externalId} está PENDENTE (cartão de teste). ` +
+      "Não é que compra fake não estorna — no sandbox estorna sim, quando o pagamento está CONFIRMED. " +
+      "Esta cobrança ficou pendente (comum depois de 'receber pagamento' manual no painel Asaas). " +
+      "Recomendado: faça uma nova compra de teste com cartão fake e estorne pelo app sem mexer no Asaas."
     )
   }
 
@@ -181,7 +191,9 @@ export async function getAsaasPaymentRefundPreview(externalId: string | null): P
     const warning =
       (billing === "CREDIT_CARD" || billing === "DEBIT_CARD") && status === "RECEIVED_IN_CASH"
         ? "Cartão marcado como recebido em dinheiro no Asaas — o estorno vai tentar corrigir isso automaticamente."
-        : null
+        : status === "PENDING" && getAsaasEnvironment() === "sandbox"
+          ? "Pendente no Asaas — cobrança antiga de teste. Faça uma nova compra com cartão fake para testar estorno."
+          : null
 
     return {
       asaas_id: payment.id,
