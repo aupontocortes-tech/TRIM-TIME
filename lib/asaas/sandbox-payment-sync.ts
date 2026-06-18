@@ -9,6 +9,7 @@ import { getAsaasEnvironment } from "@/lib/asaas/config"
 import type { SubscriptionPlan } from "@/lib/db/types"
 import { onBarbershopPlanChanged } from "@/lib/barbershop-units-plan"
 import { prisma } from "@/lib/prisma"
+import type { Prisma } from "@prisma/client"
 
 const PAID_ASAAS_STATUSES = new Set(["CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH"])
 
@@ -46,6 +47,13 @@ export async function tryAutoConfirmSandboxCreditCardPayment(
   }
 }
 
+function paymentMetadata(
+  base: Record<string, unknown>,
+  extra?: Record<string, unknown>
+): Prisma.InputJsonValue {
+  return { ...base, ...extra } as Prisma.InputJsonValue
+}
+
 export async function syncBarbershopPaymentFromAsaas(params: {
   barbershopId: string
   payment: AsaasPayment
@@ -75,7 +83,7 @@ export async function syncBarbershopPaymentFromAsaas(params: {
         status: localStatus,
         amount: params.payment.value,
         plan: params.plan,
-        metadata: { ...prevMeta, ...params.metadata },
+        metadata: paymentMetadata(prevMeta, params.metadata),
       },
     })
   } else {
@@ -87,11 +95,10 @@ export async function syncBarbershopPaymentFromAsaas(params: {
         amount: params.payment.value,
         status: localStatus,
         plan: params.plan,
-        metadata: {
+        metadata: paymentMetadata({
           billingType: params.billingType,
           subscriptionId: params.asaasSubscriptionId,
-          ...params.metadata,
-        },
+        }, params.metadata),
       },
     })
   }
