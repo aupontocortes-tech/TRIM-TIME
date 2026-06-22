@@ -3,7 +3,7 @@ import { requireSuperAdmin } from "@/lib/admin-auth"
 import { resetBarbershopBillingForFreshStart } from "@/lib/billing/reset-barbershop-billing"
 
 export async function POST(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = await requireSuperAdmin()
@@ -11,7 +11,9 @@ export async function POST(
 
   try {
     const { id } = await params
-    const result = await resetBarbershopBillingForFreshStart(id)
+    const { searchParams } = new URL(request.url)
+    const keepCard = searchParams.get("keep_card") === "1"
+    const result = await resetBarbershopBillingForFreshStart(id, { keepCard })
     return NextResponse.json({ ok: true, ...result })
   } catch (e) {
     console.error("[admin/barbershops/reset-billing]", e)
