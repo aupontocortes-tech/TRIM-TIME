@@ -598,11 +598,15 @@ export async function registerCardInApp(
       nextDueDate: formatDateYmd(new Date()),
       updatePendingPayments: true,
     })
+    await new Promise((r) => setTimeout(r, 1200))
     await autoConfirmPendingSubscriptionPayments({
       barbershopId,
       asaasSubscriptionId: asaasSubId,
       plan,
       billingType: "CREDIT_CARD",
+      creditCardToken: token.creditCardToken,
+      remoteIp,
+      creditCardHolderInfo,
     })
     await syncBarbershopPendingPayments(barbershopId)
   }

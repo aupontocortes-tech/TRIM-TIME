@@ -203,6 +203,25 @@ export async function confirmSandboxAsaasPayment(paymentId: string): Promise<Asa
   })
 }
 
+/** Cobra cobrança pendente com token já tokenizado (assinatura / checkout). */
+export async function payAsaasPaymentWithCreditCard(
+  paymentId: string,
+  input: {
+    creditCardToken: string
+    remoteIp: string
+    creditCardHolderInfo: AsaasCreditCardHolderInput
+  }
+): Promise<AsaasPayment> {
+  return asaasFetch<AsaasPayment>(`/payments/${paymentId}/payWithCreditCard`, {
+    method: "POST",
+    body: JSON.stringify({
+      creditCardToken: input.creditCardToken,
+      remoteIp: input.remoteIp,
+      creditCardHolderInfo: input.creditCardHolderInfo,
+    }),
+  })
+}
+
 /** Desfaz confirmação manual "recebido em dinheiro" (ex.: cartão marcado errado no painel). */
 export async function undoAsaasReceivedInCash(paymentId: string): Promise<AsaasPayment> {
   return asaasFetch<AsaasPayment>(`/payments/${paymentId}/undoReceivedInCash`, {

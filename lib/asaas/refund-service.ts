@@ -1,13 +1,13 @@
 import {
   refundAsaasPayment,
   getAsaasPayment,
-  confirmSandboxAsaasPayment,
   undoAsaasReceivedInCash,
   AsaasApiError,
   type AsaasPayment,
 } from "@/lib/asaas/client"
-import { getAsaasEnvironment } from "@/lib/asaas/config"
+import { isAsaasSandboxApi } from "@/lib/asaas/config"
 import { isBillingEnabled } from "@/lib/asaas/billing-service"
+import { tryAutoConfirmSandboxCreditCardPayment } from "@/lib/asaas/sandbox-payment-sync"
 import { prisma } from "@/lib/prisma"
 
 /** Status no Trim Time (webhook / registro local). */
@@ -27,12 +27,18 @@ function billingTypeOf(payment: AsaasPayment): string {
   return (payment.billingType ?? "").trim().toUpperCase()
 }
 
+function isCardBilling(billingType?: string | null): boolean {
+  const bt = (billingType ?? "").trim().toUpperCase()
+  return bt === "CREDIT_CARD" || bt === "DEBIT_CARD"
+}
+
 /** Status que a API de estorno do Asaas aceita de fato (varia por forma de pagamento). */
-function isRefundableByAsaasApi(payment: AsaasPayment): boolean {
+export function canRefundAsaasPayment(payment: AsaasPayment): boolean {
   const status = normalizePaymentStatus(payment.status)
   const billing = billingTypeOf(payment)
+  const isCard = isCardBilling(billing) || !!payment.subscription
 
-  if (billing === "CREDIT_CARD" || billing === "DEBIT_CARD") {
+  if (isCard) {
     return status === "CONFIRMED" || status === "RECEIVED"
   }
 
@@ -43,13 +49,17 @@ function isRefundableByAsaasApi(payment: AsaasPayment): boolean {
   )
 }
 
+function isRefundableByAsaasApi(payment: AsaasPayment): boolean {
+  return canRefundAsaasPayment(payment)
+}
+
 function isRefundableStatusError(message: string): boolean {
   const m = message.toLowerCase()
   return m.includes("confirmadas ou recebidas") || m.includes("confirmed or received")
 }
 
 function asaasEnvLabel(): string {
-  return getAsaasEnvironment() === "production" ? "produção (api.asaas.com)" : "sandbox (sandbox.asaas.com)"
+  return isAsaasSandboxApi() ? "sandbox (sandbox.asaas.com)" : "produção (api.asaas.com)"
 }
 
 function refundBlockedMessage(payment: AsaasPayment, externalId: string): string {
@@ -58,7 +68,7 @@ function refundBlockedMessage(payment: AsaasPayment, externalId: string): string
   const statusNorm = normalizePaymentStatus(status)
 
   if (
-    (billing === "CREDIT_CARD" || billing === "DEBIT_CARD") &&
+    (isCardBilling(billing) || !!payment.subscription) &&
     statusNorm === "RECEIVED_IN_CASH"
   ) {
     return (
@@ -68,12 +78,12 @@ function refundBlockedMessage(payment: AsaasPayment, externalId: string): string
     )
   }
 
-  if (statusNorm === "PENDING" && getAsaasEnvironment() === "sandbox") {
+  if (statusNorm === "PENDING" && isAsaasSandboxApi()) {
     return (
-      `No Asaas sandbox a cobrança ${externalId} está PENDENTE (cartão de teste). ` +
-      "Não é que compra fake não estorna — no sandbox estorna sim, quando o pagamento está CONFIRMED. " +
-      "Esta cobrança ficou pendente (comum depois de 'receber pagamento' manual no painel Asaas). " +
-      "Recomendado: faça uma nova compra de teste com cartão fake e estorne pelo app sem mexer no Asaas."
+      `No Asaas sandbox a cobrança ${externalId} está PENDENTE. ` +
+      "Só dá para estornar cobrança PAGA (confirmada no Asaas). " +
+      "Esta ainda não foi paga — cancele no painel Asaas ou ignore. " +
+      "Para testar estorno, use a linha com status Pago (confirmada)."
     )
   }
 
@@ -85,13 +95,7 @@ function refundBlockedMessage(payment: AsaasPayment, externalId: string): string
 }
 
 async function tryConfirmSandboxPayment(externalId: string): Promise<AsaasPayment | null> {
-  if (getAsaasEnvironment() !== "sandbox") return null
-  try {
-    return await confirmSandboxAsaasPayment(externalId)
-  } catch (e) {
-    console.warn("[refund] sandbox confirm failed", externalId, e)
-    return null
-  }
+  return tryAutoConfirmSandboxCreditCardPayment(externalId, "CREDIT_CARD")
 }
 
 /** Cartão marcado como "recebido em dinheiro" no painel Asaas — normaliza antes do estorno. */
@@ -100,7 +104,7 @@ async function normalizePaymentForRefund(payment: AsaasPayment, externalId: stri
   const status = normalizePaymentStatus(payment.status)
 
   if (
-    (billing === "CREDIT_CARD" || billing === "DEBIT_CARD") &&
+    (isCardBilling(billing) || payment.subscription) &&
     status === "RECEIVED_IN_CASH"
   ) {
     try {
@@ -188,11 +192,12 @@ export async function getAsaasPaymentRefundPreview(externalId: string | null): P
     const payment = await getAsaasPayment(externalId)
     const billing = billingTypeOf(payment)
     const status = normalizePaymentStatus(payment.status)
+    const isCard = isCardBilling(billing) || !!payment.subscription
     const warning =
-      (billing === "CREDIT_CARD" || billing === "DEBIT_CARD") && status === "RECEIVED_IN_CASH"
+      isCard && status === "RECEIVED_IN_CASH"
         ? "Cartão marcado como recebido em dinheiro no Asaas — o estorno vai tentar corrigir isso automaticamente."
-        : status === "PENDING" && getAsaasEnvironment() === "sandbox"
-          ? "Pendente no Asaas — cobrança antiga de teste. Faça uma nova compra com cartão fake para testar estorno."
+        : status === "PENDING" && isAsaasSandboxApi()
+          ? "Pendente no Asaas — só dá para estornar cobrança confirmada. Use a linha com status Pago ou faça nova compra de teste."
           : null
 
     return {
