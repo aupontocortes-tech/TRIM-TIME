@@ -302,9 +302,48 @@ export async function autoConfirmPendingSubscriptionPayments(params: {
   })
 }
 
+/** Importa cobranças da assinatura Asaas que ainda não estão no banco local. */
+export async function importSubscriptionPaymentsFromAsaas(barbershopId: string): Promise<number> {
+  const sub = await prisma.subscription.findUnique({ where: { barbershopId } })
+  if (!sub?.asaasSubscriptionId || !sub.plan) return 0
+
+  const billingType = (sub.billingType ?? "CREDIT_CARD") as AsaasBillingType
+  const payments = await listAllSubscriptionPayments(sub.asaasSubscriptionId, "15")
+  let imported = 0
+
+  for (const payment of payments) {
+    const existing = await prisma.payment.findFirst({
+      where: { provider: "asaas", externalId: payment.id },
+    })
+    if (existing) continue
+
+    await prisma.payment.create({
+      data: {
+        barbershopId,
+        provider: "asaas",
+        externalId: payment.id,
+        amount: payment.value,
+        status: isPaidAsaasStatus(payment.status) ? "CONFIRMED" : payment.status,
+        plan: sub.plan as SubscriptionPlan,
+        metadata: paymentMetadata(
+          { billingType, subscriptionId: sub.asaasSubscriptionId },
+          { imported_from_asaas: true }
+        ),
+      },
+    })
+    imported++
+  }
+
+  return imported
+}
+
 /** Sincroniza cobranças pendentes de uma barbearia (checkout / cadastro de cartão). */
 export async function syncBarbershopPendingPayments(barbershopId: string): Promise<number> {
   if (!isAsaasSandboxApi()) return 0
+
+  await importSubscriptionPaymentsFromAsaas(barbershopId).catch((e) => {
+    console.warn("[sandbox] import subscription payments", barbershopId, e)
+  })
 
   const rows = await prisma.payment.findMany({
     where: {
@@ -340,6 +379,15 @@ export async function syncBarbershopPendingPayments(barbershopId: string): Promi
 
 /** Atualiza cobranças pendentes no Financeiro (super admin). */
 export async function syncPendingSandboxPaymentsFromDb(limit = 50): Promise<number> {
+  const subs = await prisma.subscription.findMany({
+    where: { asaasSubscriptionId: { not: null } },
+    select: { barbershopId: true },
+    take: 40,
+  })
+  for (const s of subs) {
+    await importSubscriptionPaymentsFromAsaas(s.barbershopId).catch(() => {})
+  }
+
   if (!isAsaasSandboxApi()) return 0
 
   const rows = await prisma.payment.findMany({

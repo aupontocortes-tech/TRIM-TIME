@@ -15,11 +15,13 @@ import {
   createAsaasSubscription,
   deleteAsaasPayment,
   findAsaasCustomerByReference,
+  listAllSubscriptionPayments,
   listSubscriptionPayments,
   tokenizeAsaasCreditCard,
   updateAsaasSubscription,
   updateAsaasSubscriptionCreditCard,
   type AsaasBillingType,
+  type AsaasPayment,
 } from "@/lib/asaas/client"
 import { computePlanChangeBilling } from "@/lib/billing/plan-change-proration"
 import { getAppBaseUrl, isAsaasConfigured } from "@/lib/asaas/config"
@@ -103,6 +105,95 @@ export type CheckoutResult = {
   proration?: { mode: string; amount: number }
 }
 
+async function upsertLocalAsaasPayment(params: {
+  barbershopId: string
+  payment: { id: string; value: number; status: string }
+  plan: SubscriptionPlan
+  billingType: AsaasBillingType
+  asaasSubscriptionId: string
+  metadata?: Record<string, unknown>
+}): Promise<void> {
+  const meta = {
+    billingType: params.billingType,
+    subscriptionId: params.asaasSubscriptionId,
+    ...params.metadata,
+  } as Prisma.InputJsonValue
+
+  const existing = await prisma.payment.findFirst({
+    where: { provider: "asaas", externalId: params.payment.id },
+  })
+
+  if (existing) {
+    await prisma.payment.update({
+      where: { id: existing.id },
+      data: {
+        status: params.payment.status,
+        amount: params.payment.value,
+        plan: params.plan,
+        metadata: meta,
+      },
+    })
+    return
+  }
+
+  await prisma.payment.create({
+    data: {
+      barbershopId: params.barbershopId,
+      provider: "asaas",
+      externalId: params.payment.id,
+      amount: params.payment.value,
+      status: params.payment.status,
+      plan: params.plan,
+      metadata: meta,
+    },
+  })
+}
+
+function isOpenAsaasChargeStatus(status: string): boolean {
+  const s = status.trim().toUpperCase()
+  return s === "PENDING" || s === "OVERDUE" || s === "AWAITING_RISK_ANALYSIS"
+}
+
+/** Garante cobrança aberta na assinatura (cria no Asaas se a API não gerar sozinha). */
+async function resolveOrCreateSubscriptionPayment(params: {
+  barbershopId: string
+  customerId: string
+  asaasSubId: string
+  plan: SubscriptionPlan
+  billingType: AsaasBillingType
+  price: number
+  description: string
+}): Promise<AsaasPayment> {
+  await new Promise((r) => setTimeout(r, 1200))
+
+  let payment: AsaasPayment | null =
+    (await waitForSubscriptionPendingPayment(params.asaasSubId, 15)) ??
+    (await listSubscriptionPayments(params.asaasSubId, "OVERDUE"))[0] ??
+    null
+
+  if (!payment) {
+    const recent = await listAllSubscriptionPayments(params.asaasSubId, "10")
+    payment =
+      recent.find((p) => isOpenAsaasChargeStatus(p.status ?? "")) ??
+      recent.find((p) => p.dueDate === formatDateYmd(new Date())) ??
+      null
+  }
+
+  if (!payment) {
+    payment = await createAsaasPayment({
+      customerId: params.customerId,
+      billingType: params.billingType,
+      value: params.price,
+      dueDate: formatDateYmd(new Date()),
+      description: params.description,
+      externalReference: `${params.barbershopId}:checkout:${params.plan}`,
+      subscriptionId: params.asaasSubId,
+    })
+  }
+
+  return payment
+}
+
 export async function startSubscriptionCheckout(
   barbershopId: string,
   plan: SubscriptionPlan,
@@ -157,39 +248,41 @@ export async function startSubscriptionCheckout(
     await onBarbershopPlanChanged(barbershopId, plan)
   }
 
-  const payments = await listSubscriptionPayments(asaasSubId, "PENDING")
-  const payment = payments[0] ?? (await waitForSubscriptionPendingPayment(asaasSubId))
-  const paymentUrl = payment?.invoiceUrl || payment?.bankSlipUrl || null
+  const payment = await resolveOrCreateSubscriptionPayment({
+    barbershopId,
+    customerId,
+    asaasSubId,
+    plan,
+    billingType,
+    price,
+    description,
+  })
+  const paymentUrl = payment.invoiceUrl || payment.bankSlipUrl || null
 
-  if (payment) {
-    await prisma.payment.create({
-      data: {
-        barbershopId,
-        provider: "asaas",
-        externalId: payment.id,
-        amount: payment.value,
-        status: payment.status,
-        plan,
-        metadata: { billingType, subscriptionId: asaasSubId },
-      },
+  await upsertLocalAsaasPayment({
+    barbershopId,
+    payment,
+    plan,
+    billingType,
+    asaasSubscriptionId: asaasSubId,
+  })
+
+  if (billingType === "CREDIT_CARD") {
+    await autoConfirmAndSyncSubscriptionPayment({
+      barbershopId,
+      paymentId: payment.id,
+      plan,
+      asaasSubscriptionId: asaasSubId,
+      billingType,
     })
-    if (billingType === "CREDIT_CARD") {
-      await autoConfirmAndSyncSubscriptionPayment({
-        barbershopId,
-        paymentId: payment.id,
-        plan,
-        asaasSubscriptionId: asaasSubId,
-        billingType,
-      })
-      await syncBarbershopPendingPayments(barbershopId)
-    }
+    await syncBarbershopPendingPayments(barbershopId)
   }
 
   return {
     asaasSubscriptionId: asaasSubId,
     paymentUrl,
-    pixQrCode: payment?.pixTransaction?.encodedImage ?? null,
-    pixCopyPaste: payment?.pixTransaction?.payload ?? null,
+    pixQrCode: payment.pixTransaction?.encodedImage ?? null,
+    pixCopyPaste: payment.pixTransaction?.payload ?? null,
   }
 }
 
