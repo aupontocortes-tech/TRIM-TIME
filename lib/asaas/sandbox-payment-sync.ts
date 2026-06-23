@@ -8,7 +8,7 @@ import {
   type AsaasBillingType,
   type AsaasPayment,
 } from "@/lib/asaas/client"
-import { isAsaasSandboxApi } from "@/lib/asaas/config"
+import { isAsaasSandboxApi, isAsaasConfigured } from "@/lib/asaas/config"
 import type { SubscriptionPlan } from "@/lib/db/types"
 import { onBarbershopPlanChanged } from "@/lib/barbershop-units-plan"
 import { prisma } from "@/lib/prisma"
@@ -379,10 +379,12 @@ export async function syncBarbershopPendingPayments(barbershopId: string): Promi
 
 /** Atualiza cobranças pendentes no Financeiro (super admin). */
 export async function syncPendingSandboxPaymentsFromDb(limit = 50): Promise<number> {
+  if (!isAsaasConfigured()) return 0
+
   const subs = await prisma.subscription.findMany({
     where: { asaasSubscriptionId: { not: null } },
     select: { barbershopId: true },
-    take: 40,
+    take: 15,
   })
   for (const s of subs) {
     await importSubscriptionPaymentsFromAsaas(s.barbershopId).catch(() => {})

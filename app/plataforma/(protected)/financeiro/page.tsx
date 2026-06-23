@@ -101,13 +101,14 @@ function FinanceiroContent() {
     }
   }, [])
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (options?: { sync?: boolean }) => {
     setLoading(true)
     setErr("")
     try {
       const params = new URLSearchParams()
       if (filterBarbershopId) params.set("barbershop_id", filterBarbershopId)
       if (q.trim()) params.set("q", q.trim())
+      if (options?.sync) params.set("sync", "1")
       const r = await fetch(`/api/admin/payments?${params.toString()}`)
       const j = await r.json()
       if (!r.ok) {
@@ -217,7 +218,7 @@ function FinanceiroContent() {
           type="button"
           variant="outline"
           className="border-[#D4AF37]/40 text-zinc-200 hover:bg-zinc-900"
-          onClick={() => void load()}
+          onClick={() => void load({ sync: true })}
           disabled={loading}
         >
           <RefreshCw className={`w-4 h-4 mr-2 ${loading ? "animate-spin" : ""}`} />
