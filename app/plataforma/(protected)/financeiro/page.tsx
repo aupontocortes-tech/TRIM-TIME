@@ -230,7 +230,8 @@ function FinanceiroContent() {
         <CardHeader>
           <CardTitle className="text-white text-lg">Cobranças</CardTitle>
           <CardDescription className="text-zinc-400">
-            Busque por nome, e-mail ou slug da barbearia. Estorno total — parcial pelo painel Asaas se necessário.
+            Busque por nome, e-mail ou slug (ex.: <strong className="text-zinc-300">teste</strong>). Estorno
+            total — parcial pelo painel Asaas se necessário.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

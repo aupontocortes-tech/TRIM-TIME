@@ -381,41 +381,49 @@ export async function changeSubscriptionPlan(
     }
 
     if (billing.chargeMode === "full") {
-      const payments = await listSubscriptionPayments(sub.asaasSubscriptionId, "PENDING")
-      const payment = payments[0]
-      if (payment) {
-        const existing = await prisma.payment.findFirst({
-          where: { provider: "asaas", externalId: payment.id },
+      const customerId = sub.asaasCustomerId ?? (await ensureAsaasCustomer(barbershopId))
+      await updateAsaasSubscription(sub.asaasSubscriptionId, {
+        value: billing.nextSubscriptionValue,
+        billingType,
+        nextDueDate: formatDateYmd(new Date()),
+        updatePendingPayments: true,
+      })
+
+      const payment = await resolveOrCreateSubscriptionPayment({
+        barbershopId,
+        customerId,
+        asaasSubId: sub.asaasSubscriptionId,
+        plan: newPlan,
+        billingType,
+        price: billing.chargeAmount,
+        description: `Trim Time — ${catalog.plans[newPlan].name}`,
+      })
+
+      await upsertLocalAsaasPayment({
+        barbershopId,
+        payment,
+        plan: newPlan,
+        billingType,
+        asaasSubscriptionId: sub.asaasSubscriptionId,
+        metadata: { chargeMode: billing.chargeMode },
+      })
+
+      if (billingType === "CREDIT_CARD") {
+        await autoConfirmAndSyncSubscriptionPayment({
+          barbershopId,
+          paymentId: payment.id,
+          plan: newPlan,
+          asaasSubscriptionId: sub.asaasSubscriptionId,
+          billingType,
         })
-        if (!existing) {
-          await prisma.payment.create({
-            data: {
-              barbershopId,
-              provider: "asaas",
-              externalId: payment.id,
-              amount: payment.value,
-              status: payment.status,
-              plan: newPlan,
-              metadata: { billingType, subscriptionId: sub.asaasSubscriptionId },
-            },
-          })
-        }
-        if (billingType === "CREDIT_CARD") {
-          await autoConfirmAndSyncSubscriptionPayment({
-            barbershopId,
-            paymentId: payment.id,
-            plan: newPlan,
-            asaasSubscriptionId: sub.asaasSubscriptionId,
-            billingType,
-          })
-        }
       }
-      paymentUrl = payment?.invoiceUrl || payment?.bankSlipUrl || null
+
+      paymentUrl = payment.invoiceUrl || payment.bankSlipUrl || null
       return {
         asaasSubscriptionId: sub.asaasSubscriptionId,
         paymentUrl,
-        pixQrCode: payment?.pixTransaction?.encodedImage ?? null,
-        pixCopyPaste: payment?.pixTransaction?.payload ?? null,
+        pixQrCode: payment.pixTransaction?.encodedImage ?? null,
+        pixCopyPaste: payment.pixTransaction?.payload ?? null,
         proration: { mode: billing.chargeMode, amount: billing.chargeAmount },
       }
     }

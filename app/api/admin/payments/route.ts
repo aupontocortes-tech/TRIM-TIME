@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server"
 import { requireSuperAdmin } from "@/lib/admin-auth"
-import { syncPendingSandboxPaymentsFromDb } from "@/lib/asaas/sandbox-payment-sync"
+import { findBarbershopIdByNameOrSlug } from "@/lib/billing/reset-barbershop-billing"
+import { isAsaasConfigured } from "@/lib/asaas/config"
+import {
+  importSubscriptionPaymentsFromAsaas,
+  syncPendingSandboxPaymentsFromDb,
+} from "@/lib/asaas/sandbox-payment-sync"
 import { prisma } from "@/lib/prisma"
 
 export const dynamic = "force-dynamic"
@@ -29,6 +34,18 @@ export async function GET(request: Request) {
     const barbershopId = searchParams.get("barbershop_id")?.trim() || undefined
     const q = searchParams.get("q")?.trim().toLowerCase() || ""
     const sync = searchParams.get("sync") === "1"
+
+    if (isAsaasConfigured()) {
+      let importId = barbershopId
+      if (!importId && q) {
+        importId = (await findBarbershopIdByNameOrSlug(q)) ?? undefined
+      }
+      if (importId) {
+        await importSubscriptionPaymentsFromAsaas(importId).catch((e) => {
+          console.warn("[admin/payments] import", importId, e)
+        })
+      }
+    }
 
     if (sync) {
       await syncPendingSandboxPaymentsFromDb(25).catch((e) => {

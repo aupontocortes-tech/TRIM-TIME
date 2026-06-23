@@ -312,10 +312,23 @@ export async function importSubscriptionPaymentsFromAsaas(barbershopId: string):
   let imported = 0
 
   for (const payment of payments) {
+    const paid = isPaidAsaasStatus(payment.status)
+    const localStatus = paid ? "CONFIRMED" : payment.status
     const existing = await prisma.payment.findFirst({
       where: { provider: "asaas", externalId: payment.id },
     })
-    if (existing) continue
+
+    if (existing) {
+      await prisma.payment.update({
+        where: { id: existing.id },
+        data: {
+          status: localStatus,
+          amount: payment.value,
+          plan: sub.plan as SubscriptionPlan,
+        },
+      })
+      continue
+    }
 
     await prisma.payment.create({
       data: {
@@ -323,7 +336,7 @@ export async function importSubscriptionPaymentsFromAsaas(barbershopId: string):
         provider: "asaas",
         externalId: payment.id,
         amount: payment.value,
-        status: isPaidAsaasStatus(payment.status) ? "CONFIRMED" : payment.status,
+        status: localStatus,
         plan: sub.plan as SubscriptionPlan,
         metadata: paymentMetadata(
           { billingType, subscriptionId: sub.asaasSubscriptionId },
