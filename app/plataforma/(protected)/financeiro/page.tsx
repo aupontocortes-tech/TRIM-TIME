@@ -182,6 +182,7 @@ function FinanceiroContent() {
       const j = await r.json()
       if (!r.ok) {
         setErr(typeof j.error === "string" ? j.error : "Erro ao estornar")
+        void load({ sync: true })
         return
       }
       setMsg(`Estorno solicitado para ${refundTarget.barbershop_name}. Status Asaas: ${j.refundStatus ?? "em processamento"}.`)
@@ -230,8 +231,9 @@ function FinanceiroContent() {
         <CardHeader>
           <CardTitle className="text-white text-lg">Cobranças</CardTitle>
           <CardDescription className="text-zinc-400">
-            Busque por nome, e-mail ou slug (ex.: <strong className="text-zinc-300">teste</strong>). Estorno
-            total — parcial pelo painel Asaas se necessário.
+            Busque por nome, e-mail ou slug (ex.: <strong className="text-zinc-300">teste</strong>). No sandbox,
+            clique <strong className="text-zinc-300">Atualizar</strong> para confirmar pendentes com cartão fake antes
+            de estornar.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

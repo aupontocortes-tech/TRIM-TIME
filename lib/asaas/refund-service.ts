@@ -7,7 +7,7 @@ import {
 } from "@/lib/asaas/client"
 import { isAsaasSandboxApi } from "@/lib/asaas/config"
 import { isBillingEnabled } from "@/lib/asaas/billing-service"
-import { tryAutoConfirmSandboxCreditCardPayment } from "@/lib/asaas/sandbox-payment-sync"
+import { tryConfirmSandboxBarbershopPayment } from "@/lib/asaas/sandbox-payment-sync"
 import { prisma } from "@/lib/prisma"
 
 /** Status no Trim Time (webhook / registro local). */
@@ -82,8 +82,15 @@ function refundBlockedMessage(payment: AsaasPayment, externalId: string): string
     return (
       `No Asaas sandbox a cobrança ${externalId} está PENDENTE. ` +
       "Só dá para estornar cobrança PAGA (confirmada no Asaas). " +
-      "Esta ainda não foi paga — cancele no painel Asaas ou ignore. " +
-      "Para testar estorno, use a linha com status Pago (confirmada)."
+      "Clique Atualizar no Financeiro para confirmar com cartão fake, ou cancele no painel Asaas."
+    )
+  }
+
+  if (statusNorm === "OVERDUE" && isAsaasSandboxApi()) {
+    return (
+      `No Asaas sandbox a cobrança ${externalId} está VENCIDA (não paga de fato). ` +
+      "O app mostrou Pago por engano antes — clique Atualizar no Financeiro para corrigir e confirmar, " +
+      "depois estorne apenas linhas realmente pagas."
     )
   }
 
@@ -94,12 +101,23 @@ function refundBlockedMessage(payment: AsaasPayment, externalId: string): string
   )
 }
 
-async function tryConfirmSandboxPayment(externalId: string): Promise<AsaasPayment | null> {
-  return tryAutoConfirmSandboxCreditCardPayment(externalId, "CREDIT_CARD")
+async function tryConfirmSandboxPayment(
+  externalId: string,
+  barbershopId: string
+): Promise<AsaasPayment | null> {
+  return tryConfirmSandboxBarbershopPayment({
+    barbershopId,
+    paymentId: externalId,
+    billingType: "CREDIT_CARD",
+  })
 }
 
 /** Cartão marcado como "recebido em dinheiro" no painel Asaas — normaliza antes do estorno. */
-async function normalizePaymentForRefund(payment: AsaasPayment, externalId: string): Promise<AsaasPayment> {
+async function normalizePaymentForRefund(
+  payment: AsaasPayment,
+  externalId: string,
+  barbershopId: string
+): Promise<AsaasPayment> {
   const billing = billingTypeOf(payment)
   const status = normalizePaymentStatus(payment.status)
 
@@ -113,7 +131,7 @@ async function normalizePaymentForRefund(payment: AsaasPayment, externalId: stri
       console.warn("[refund] undoReceivedInCash failed", externalId, e)
     }
 
-    const confirmed = await tryConfirmSandboxPayment(externalId)
+    const confirmed = await tryConfirmSandboxPayment(externalId, barbershopId)
     if (confirmed) return confirmed
 
     return await getAsaasPayment(externalId)
@@ -122,17 +140,20 @@ async function normalizePaymentForRefund(payment: AsaasPayment, externalId: stri
   return payment
 }
 
-async function resolveRefundableAsaasPayment(externalId: string): Promise<AsaasPayment> {
+async function resolveRefundableAsaasPayment(
+  externalId: string,
+  barbershopId: string
+): Promise<AsaasPayment> {
   let payment = await getAsaasPayment(externalId)
-  payment = await normalizePaymentForRefund(payment, externalId)
+  payment = await normalizePaymentForRefund(payment, externalId, barbershopId)
 
   if (isRefundableByAsaasApi(payment)) return payment
 
-  const confirmed = await tryConfirmSandboxPayment(externalId)
+  const confirmed = await tryConfirmSandboxPayment(externalId, barbershopId)
   if (confirmed && isRefundableByAsaasApi(confirmed)) return confirmed
 
   payment = await getAsaasPayment(externalId)
-  payment = await normalizePaymentForRefund(payment, externalId)
+  payment = await normalizePaymentForRefund(payment, externalId, barbershopId)
   if (isRefundableByAsaasApi(payment)) return payment
 
   throw new Error(refundBlockedMessage(payment, externalId))
@@ -140,6 +161,7 @@ async function resolveRefundableAsaasPayment(externalId: string): Promise<AsaasP
 
 async function requestAsaasRefund(
   externalId: string,
+  barbershopId: string,
   input: { value?: number; description?: string }
 ) {
   try {
@@ -149,13 +171,13 @@ async function requestAsaasRefund(
     if (!isRefundableStatusError(msg)) throw e
 
     let payment = await getAsaasPayment(externalId)
-    payment = await normalizePaymentForRefund(payment, externalId)
+    payment = await normalizePaymentForRefund(payment, externalId, barbershopId)
 
     if (isRefundableByAsaasApi(payment)) {
       return await refundAsaasPayment(externalId, input)
     }
 
-    const confirmed = await tryConfirmSandboxPayment(externalId)
+    const confirmed = await tryConfirmSandboxPayment(externalId, barbershopId)
     if (confirmed && isRefundableByAsaasApi(confirmed)) {
       return await refundAsaasPayment(externalId, input)
     }
@@ -197,8 +219,10 @@ export async function getAsaasPaymentRefundPreview(externalId: string | null): P
       isCard && status === "RECEIVED_IN_CASH"
         ? "Cartão marcado como recebido em dinheiro no Asaas — o estorno vai tentar corrigir isso automaticamente."
         : status === "PENDING" && isAsaasSandboxApi()
-          ? "Pendente no Asaas — só dá para estornar cobrança confirmada. Use a linha com status Pago ou faça nova compra de teste."
-          : null
+          ? "Pendente no Asaas — clique Atualizar no Financeiro para confirmar com cartão fake antes de estornar."
+          : status === "OVERDUE" && isAsaasSandboxApi()
+            ? "Vencida no Asaas (não paga de fato). Atualize o Financeiro para corrigir o status."
+            : null
 
     return {
       asaas_id: payment.id,
@@ -242,7 +266,7 @@ export async function refundBarbershopPayment(params: {
     throw new Error(`Status "${row.status}" não permite estorno pelo app.`)
   }
 
-  const asaasPayment = await resolveRefundableAsaasPayment(row.externalId)
+  const asaasPayment = await resolveRefundableAsaasPayment(row.externalId, row.barbershopId)
   const asaasStatus = normalizePaymentStatus(asaasPayment.status)
 
   if (normalizePaymentStatus(row.status) !== asaasStatus) {
@@ -267,7 +291,7 @@ export async function refundBarbershopPayment(params: {
     params.description?.trim() ||
     `Estorno Trim Time — ${row.barbershop.name}`
 
-  const refund = await requestAsaasRefund(row.externalId, {
+  const refund = await requestAsaasRefund(row.externalId, row.barbershopId, {
     value: params.value,
     description: reason,
   })

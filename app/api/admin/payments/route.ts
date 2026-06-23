@@ -4,6 +4,7 @@ import { findBarbershopIdByNameOrSlug } from "@/lib/billing/reset-barbershop-bil
 import { isAsaasConfigured } from "@/lib/asaas/config"
 import {
   importSubscriptionPaymentsFromAsaas,
+  syncBarbershopPendingPayments,
   syncPendingSandboxPaymentsFromDb,
 } from "@/lib/asaas/sandbox-payment-sync"
 import { prisma } from "@/lib/prisma"
@@ -43,6 +44,9 @@ export async function GET(request: Request) {
       if (importId) {
         await importSubscriptionPaymentsFromAsaas(importId).catch((e) => {
           console.warn("[admin/payments] import", importId, e)
+        })
+        await syncBarbershopPendingPayments(importId).catch((e) => {
+          console.warn("[admin/payments] sync barbershop", importId, e)
         })
       }
     }
