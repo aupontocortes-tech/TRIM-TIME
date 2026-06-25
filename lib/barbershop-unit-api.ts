@@ -13,6 +13,7 @@ export function barbershopUnitToApi(row: PrismaBarbershopUnit): BarbershopUnit {
     cep: row.cep,
     maps_url: row.mapsUrl,
     active: row.active,
+    archived_by_user: row.archivedByUser,
     created_at: row.createdAt.toISOString(),
     updated_at: row.updatedAt.toISOString(),
   }

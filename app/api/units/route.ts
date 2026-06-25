@@ -11,7 +11,7 @@ import {
 } from "@/lib/barbershop-units-seed"
 import { normalizeGoogleMapsUrl } from "@/lib/google-maps-url"
 import { barbershopUnitToApi } from "@/lib/barbershop-unit-api"
-import { applyMultiUnitPlanPolicy } from "@/lib/barbershop-units-plan"
+import { repairPolicyArchivedUnits } from "@/lib/barbershop-units-plan"
 
 function optStr(v: unknown): string | null {
   if (v === undefined || v === null) return null
@@ -28,7 +28,7 @@ export async function GET() {
 
     const effectivePlan = await resolveEffectivePlanForActiveSession(barbershopId)
     if (effectivePlan) {
-      await applyMultiUnitPlanPolicy(barbershopId, effectivePlan)
+      await repairPolicyArchivedUnits(barbershopId)
     }
 
     const rows = await prisma.barbershopUnit.findMany({

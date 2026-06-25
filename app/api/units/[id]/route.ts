@@ -60,6 +60,7 @@ export async function PATCH(
     const updates: {
       name?: string
       active?: boolean
+      archivedByUser?: boolean
       phone?: string | null
       address?: string | null
       city?: string | null
@@ -69,7 +70,10 @@ export async function PATCH(
     } = {}
 
     if (body.name !== undefined) updates.name = body.name.trim()
-    if (body.active !== undefined) updates.active = body.active
+    if (body.active !== undefined) {
+      updates.active = body.active
+      updates.archivedByUser = body.active === false
+    }
     if (body.phone !== undefined) updates.phone = optStr(body.phone)
     if (body.address !== undefined) updates.address = optStr(body.address)
     if (body.city !== undefined) updates.city = optStr(body.city)

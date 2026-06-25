@@ -125,6 +125,8 @@ export interface BarbershopUnit {
   cep?: string | null
   maps_url?: string | null
   active: boolean
+  /** Arquivamento explícito pelo dono; distinto de desativação legada por política de plano. */
+  archived_by_user?: boolean
   created_at: string
   updated_at: string
 }

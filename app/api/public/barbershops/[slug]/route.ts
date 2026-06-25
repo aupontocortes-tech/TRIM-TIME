@@ -9,6 +9,10 @@ import { getWaitlistAcceptDeadlineMinutes } from "@/lib/waitlist-service"
 import { normalizeGoogleMapsUrl } from "@/lib/google-maps-url"
 import { loadUnitMapsUrlByBarbershopId } from "@/lib/barbershop-unit-maps"
 import { isLoyaltyProgramActive, parseLoyaltyProgram } from "@/lib/loyalty-program"
+import {
+  filterUnitsForPublicBooking,
+  getPrincipalUnitId,
+} from "@/lib/barbershop-units-plan"
 
 /**
  * Dados públicos da barbearia (sem auth) — nome, contato/endereço da conta + unidades ativas.
@@ -43,6 +47,7 @@ export async function GET(
             city: true,
             state: true,
             cep: true,
+            active: true,
           },
           orderBy: { createdAt: "asc" },
         },
@@ -77,6 +82,9 @@ export async function GET(
     const waitlist_enabled = !!(plan && hasFeature(plan, "waiting_list"))
     const loyaltyConfig = parseLoyaltyProgram(settings)
     const loyalty_enabled = isLoyaltyProgramActive(settings, plan)
+    const principalUnitId = await getPrincipalUnitId(b.id)
+    const publicUnits = filterUnitsForPublicBooking(b.units, plan, principalUnitId)
+    const publicUnitIds = new Set(publicUnits.map((u) => u.id))
 
     const serviceRows = await fetchServicesForBarbershopRaw(b.id, {
       activeOnly: true,
@@ -111,7 +119,7 @@ export async function GET(
       loyalty_enabled,
       loyalty_reward_label: loyalty_enabled ? loyaltyConfig?.reward_label ?? null : null,
       loyalty_visits_required: loyalty_enabled ? loyaltyConfig?.visits_required ?? null : null,
-      units: b.units.map((u) => ({
+      units: publicUnits.map((u) => ({
         id: u.id,
         name: u.name,
         phone: u.phone,
@@ -131,7 +139,9 @@ export async function GET(
           duration: s.duration,
         }
       }),
-      barbers: b.barbers.map((barber) => ({
+      barbers: b.barbers
+        .filter((barber) => !barber.unitId || publicUnitIds.has(barber.unitId))
+        .map((barber) => ({
         id: barber.id,
         unit_id: barber.unitId,
         name: barber.name,

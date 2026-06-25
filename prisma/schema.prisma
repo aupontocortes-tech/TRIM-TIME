@@ -226,6 +226,8 @@ model BarbershopUnit {
   /// Link do Google Maps (localização exata / rota).
   mapsUrl      String?  @map("maps_url")
   active       Boolean  @default(true)
+  /// Arquivamento explícito pelo dono (Configurações). Política de plano não altera mais `active`.
+  archivedByUser Boolean @default(false) @map("archived_by_user")
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz
 

@@ -3836,9 +3836,9 @@ export default function ConfiguracoesPage() {
                 <div className="p-3 rounded-lg border border-amber-500/30 bg-amber-500/10 text-sm text-amber-700 dark:text-amber-400 space-y-1">
                   <p>Multiunidade ativa só no plano Premium.</p>
                   <p>
-                    Filiais extras ficam <strong>arquivadas</strong> ao mudar para Básico ou Pro — o nome,
-                    barbeiros e clientes continuam salvos. Ao voltar ao Premium, use <strong>Reativar</strong> em
-                    cada unidade.
+                    No Básico ou Pro, filiais extras ficam <strong>ocultas no app do cliente</strong> — o nome,
+                    barbeiros e clientes continuam salvos. Ao voltar ao Premium, elas voltam a aparecer
+                    automaticamente.
                   </p>
                 </div>
               )}
