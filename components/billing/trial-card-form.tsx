@@ -41,7 +41,7 @@ function formatCep(value: string): string {
 }
 
 function formatCardNumber(value: string): string {
-  const d = value.replace(/\D/g, "").slice(0, 16)
+  const d = value.replace(/\D/g, "").slice(0, 19)
   return d.replace(/(\d{4})(?=\d)/g, "$1 ").trim()
 }
 
@@ -56,6 +56,9 @@ export function TrialCardForm({
   const [loadingPrefill, setLoadingPrefill] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+  /** Evita autofill do navegador até o usuário focar no campo (cartões salvos bloqueavam digitação). */
+  const [cardInputsUnlocked, setCardInputsUnlocked] = useState(false)
+  const unlockCardInputs = () => setCardInputsUnlocked(true)
 
   const [holderName, setHolderName] = useState("")
   const [cardNumber, setCardNumber] = useState("")
@@ -159,18 +162,27 @@ export function TrialCardForm({
   }
 
   return (
-    <form onSubmit={(e) => void handleSubmit(e)} className="space-y-6">
+    <form onSubmit={(e) => void handleSubmit(e)} className="space-y-6" autoComplete="off">
       <div className="space-y-3">
         <p className="text-sm font-medium flex items-center gap-2">
           <CreditCard className="w-4 h-4" />
           Dados do cartão
+        </p>
+        <p className="text-xs text-muted-foreground">
+          Digite o número manualmente. Se o navegador mostrar cartões salvos e não deixar digitar, clique no campo
+          e apague o conteúdo, ou use uma janela anônima.
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="sm:col-span-2 space-y-1.5">
             <Label htmlFor="holderName">Nome no cartão</Label>
             <Input
               id="holderName"
-              autoComplete="cc-name"
+              name="trimtime_cc_name"
+              autoComplete="off"
+              autoCorrect="off"
+              spellCheck={false}
+              data-lpignore="true"
+              data-1p-ignore="true"
               value={holderName}
               onChange={(e) => setHolderName(e.target.value)}
               required
@@ -180,8 +192,17 @@ export function TrialCardForm({
             <Label htmlFor="cardNumber">Número do cartão</Label>
             <Input
               id="cardNumber"
+              name="trimtime_cc_number"
+              type="text"
               inputMode="numeric"
-              autoComplete="cc-number"
+              autoComplete="off"
+              autoCorrect="off"
+              spellCheck={false}
+              data-lpignore="true"
+              data-1p-ignore="true"
+              readOnly={!cardInputsUnlocked}
+              onFocus={unlockCardInputs}
+              onClick={unlockCardInputs}
               placeholder="0000 0000 0000 0000"
               value={cardNumber}
               onChange={(e) => setCardNumber(formatCardNumber(e.target.value))}
@@ -192,7 +213,15 @@ export function TrialCardForm({
             <Label htmlFor="expiryMonth">Mês</Label>
             <Input
               id="expiryMonth"
+              name="trimtime_cc_exp_month"
               inputMode="numeric"
+              autoComplete="off"
+              autoCorrect="off"
+              spellCheck={false}
+              data-lpignore="true"
+              data-1p-ignore="true"
+              readOnly={!cardInputsUnlocked}
+              onFocus={unlockCardInputs}
               placeholder="MM"
               maxLength={2}
               value={expiryMonth}
@@ -204,7 +233,15 @@ export function TrialCardForm({
             <Label htmlFor="expiryYear">Ano</Label>
             <Input
               id="expiryYear"
+              name="trimtime_cc_exp_year"
               inputMode="numeric"
+              autoComplete="off"
+              autoCorrect="off"
+              spellCheck={false}
+              data-lpignore="true"
+              data-1p-ignore="true"
+              readOnly={!cardInputsUnlocked}
+              onFocus={unlockCardInputs}
               placeholder="AAAA"
               maxLength={4}
               value={expiryYear}
@@ -216,8 +253,16 @@ export function TrialCardForm({
             <Label htmlFor="ccv">CVV</Label>
             <Input
               id="ccv"
+              name="trimtime_cc_cvv"
+              type="password"
               inputMode="numeric"
-              autoComplete="cc-csc"
+              autoComplete="new-password"
+              autoCorrect="off"
+              spellCheck={false}
+              data-lpignore="true"
+              data-1p-ignore="true"
+              readOnly={!cardInputsUnlocked}
+              onFocus={unlockCardInputs}
               maxLength={4}
               value={ccv}
               onChange={(e) => setCcv(e.target.value.replace(/\D/g, "").slice(0, 4))}
@@ -232,12 +277,20 @@ export function TrialCardForm({
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="sm:col-span-2 space-y-1.5">
             <Label htmlFor="holderFullName">Nome completo</Label>
-            <Input id="holderFullName" value={name} onChange={(e) => setName(e.target.value)} required />
+            <Input
+              id="holderFullName"
+              name="trimtime_holder_name"
+              autoComplete="name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+            />
           </div>
           <div className="sm:col-span-2 space-y-1.5">
             <Label htmlFor="holderEmail">E-mail</Label>
             <Input
               id="holderEmail"
+              name="trimtime_holder_email"
               type="email"
               autoComplete="email"
               value={email}
