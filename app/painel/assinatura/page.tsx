@@ -57,6 +57,7 @@ function AssinaturaContent() {
   const [needsDecision, setNeedsDecision] = useState(false)
   const [cardComplete, setCardComplete] = useState(false)
   const [billingEnabled, setBillingEnabled] = useState(false)
+  const [billingEnvironment, setBillingEnvironment] = useState<"sandbox" | "production" | "">("")
   const [pixEnabled, setPixEnabled] = useState(false)
   const [billingExempt, setBillingExempt] = useState(false)
   const [trialActive, setTrialActive] = useState(false)
@@ -94,6 +95,9 @@ function AssinaturaContent() {
       setNeedsDecision(!!j.needs_trial_decision)
       setCardComplete(!!j.card_setup_complete)
       setBillingEnabled(!!j.billing?.enabled)
+      setBillingEnvironment(
+        j.billing?.environment === "production" ? "production" : "sandbox"
+      )
       setPixEnabled(!!j.billing?.pix_enabled)
       setBillingExempt(!!j.billing_exempt)
       setTrialActive(!!j.trial_active)
@@ -338,6 +342,19 @@ function AssinaturaContent() {
                 ? "Plano mensal — cartão (débito automático) ou PIX."
                 : "Plano mensal — pagamento por cartão de crédito (débito automático)."}
           </p>
+          {billingEnabled && !billingExempt ? (
+            <p
+              className={`text-xs font-medium mt-1 ${
+                billingEnvironment === "production"
+                  ? "text-emerald-600 dark:text-emerald-400"
+                  : "text-amber-600 dark:text-amber-400"
+              }`}
+            >
+              {billingEnvironment === "production"
+                ? "Cobrança real (Asaas produção) — o cartão será debitado de verdade."
+                : "Modo teste (Asaas sandbox) — aprova no app, mas não debita no banco."}
+            </p>
+          ) : null}
         </div>
       </div>
 
