@@ -140,6 +140,26 @@ export async function listAsaasSubscriptionsByCustomer(
   return list.data ?? []
 }
 
+/** Cobranças abertas do cliente (pendente, vencida, etc.). */
+export async function listOpenAsaasPaymentsByCustomer(
+  customerId: string,
+  limit = "50"
+): Promise<AsaasPayment[]> {
+  const open: AsaasPayment[] = []
+  for (const status of ["PENDING", "OVERDUE", "AWAITING_RISK_ANALYSIS"] as const) {
+    const list = await asaasFetch<AsaasList<AsaasPayment>>("/payments", {
+      searchParams: { customer: customerId, status, limit },
+    })
+    open.push(...(list.data ?? []))
+  }
+  const seen = new Set<string>()
+  return open.filter((p) => {
+    if (!p.id || seen.has(p.id)) return false
+    seen.add(p.id)
+    return true
+  })
+}
+
 export async function createAsaasSubscription(input: {
   customerId: string
   billingType: AsaasBillingType

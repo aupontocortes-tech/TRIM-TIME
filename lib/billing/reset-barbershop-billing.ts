@@ -7,6 +7,7 @@ import {
   findAsaasCustomerByReference,
   listAllSubscriptionPayments,
   listAsaasSubscriptionsByCustomer,
+  listOpenAsaasPaymentsByCustomer,
   updateAsaasSubscription,
   type AsaasBillingType,
 } from "@/lib/asaas/client"
@@ -142,6 +143,40 @@ export async function resetBarbershopBillingForFreshStart(
           const result = await cancelSubscriptionAndOpenPayments(subscriptionId, warnings)
           asaasPaymentsDeleted += result.paymentsDeleted
           if (result.cancelled) asaasSubscriptionsCancelled++
+        }
+      }
+
+      if (customerId && !keepCard) {
+        try {
+          const openPayments = await listOpenAsaasPaymentsByCustomer(customerId)
+          for (const p of openPayments) {
+            try {
+              await deleteAsaasPayment(p.id)
+              asaasPaymentsDeleted++
+            } catch (e) {
+              warnings.push(
+                `Cobrança ${p.id} (R$ ${p.value}) não apagada no Asaas: ${e instanceof Error ? e.message : "erro"}`
+              )
+            }
+          }
+        } catch (e) {
+          warnings.push(
+            `Não foi possível listar cobranças abertas do cliente: ${e instanceof Error ? e.message : "erro"}`
+          )
+        }
+
+        try {
+          const remainingSubs = await listAsaasSubscriptionsByCustomer(customerId)
+          for (const s of remainingSubs) {
+            if (!s.id || subscriptionIds.has(s.id)) continue
+            const result = await cancelSubscriptionAndOpenPayments(s.id, warnings)
+            asaasPaymentsDeleted += result.paymentsDeleted
+            if (result.cancelled) asaasSubscriptionsCancelled++
+          }
+        } catch (e) {
+          warnings.push(
+            `Não foi possível verificar assinaturas restantes: ${e instanceof Error ? e.message : "erro"}`
+          )
         }
       }
 
