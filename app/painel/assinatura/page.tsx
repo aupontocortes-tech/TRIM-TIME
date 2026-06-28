@@ -337,7 +337,7 @@ function AssinaturaContent() {
           </h1>
           <p className="text-sm text-muted-foreground">
             {isOnboardingCheckout
-              ? "Teste grátis no Pro ou contrate agora — cadastre o cartão para liberar o painel."
+              ? "Escolha seu plano e cadastre o cartão para liberar o painel."
               : pixEnabled
                 ? "Plano mensal — cartão (débito automático) ou PIX."
                 : "Plano mensal — pagamento por cartão de crédito (débito automático)."}
@@ -394,7 +394,7 @@ function AssinaturaContent() {
             <CardHeader>
               <CardTitle>Cadastre seu cartão para começar</CardTitle>
               <CardDescription>
-                Último passo do cadastro. Escolha teste grátis ou contrate agora — pagamento seguro no Trim Time.
+                Último passo do cadastro — contrate direto ou experimente grátis por {trialLengthDays} dias.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
