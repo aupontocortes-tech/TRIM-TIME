@@ -17,6 +17,7 @@ import {
   findAsaasCustomerByReference,
   getAsaasPayment,
   listAllSubscriptionPayments,
+  listAsaasSubscriptionsByCustomer,
   listOpenAsaasPaymentsByCustomer,
   listSubscriptionPayments,
   tokenizeAsaasCreditCard,
@@ -173,6 +174,57 @@ async function deleteAllOpenSubscriptionPayments(asaasSubId: string): Promise<vo
   }
 }
 
+async function deleteOtherOpenCustomerPayments(
+  customerId: string,
+  keepPaymentId: string
+): Promise<void> {
+  try {
+    const open = await listOpenAsaasPaymentsByCustomer(customerId)
+    for (const p of open) {
+      if (!p.id || p.id === keepPaymentId || !isOpenAsaasChargeStatus(p.status ?? "")) continue
+      await deleteAsaasPayment(p.id).catch((e) => {
+        console.warn("[billing] delete duplicate open payment", p.id, e)
+      })
+    }
+  } catch (e) {
+    console.warn("[billing] cleanup duplicate customer payments", customerId, e)
+  }
+}
+
+/** Cancela assinaturas antigas e cobranças abertas antes de contratação imediata limpa. */
+async function resetAsaasCustomerForImmediateSignup(
+  customerId: string,
+  barbershopId: string
+): Promise<void> {
+  try {
+    const subs = await listAsaasSubscriptionsByCustomer(customerId)
+    for (const s of subs) {
+      if (!s.id) continue
+      await deleteAllOpenSubscriptionPayments(s.id)
+      await cancelAsaasSubscription(s.id).catch((e) => {
+        console.warn("[billing/immediate] cancel old subscription", s.id, e)
+      })
+    }
+  } catch (e) {
+    console.warn("[billing/immediate] list/cancel subscriptions", barbershopId, e)
+  }
+
+  try {
+    const open = await listOpenAsaasPaymentsByCustomer(customerId)
+    for (const p of open) {
+      if (!p.id || !isOpenAsaasChargeStatus(p.status ?? "")) continue
+      await deleteAsaasPayment(p.id).catch(() => {})
+    }
+  } catch (e) {
+    console.warn("[billing/immediate] delete open customer payments", barbershopId, e)
+  }
+
+  await prisma.subscription.update({
+    where: { barbershopId },
+    data: { asaasSubscriptionId: null },
+  })
+}
+
 /** Garante cobrança aberta na assinatura (cria no Asaas se a API não gerar sozinha). */
 async function resolveOrCreateSubscriptionPayment(params: {
   barbershopId: string
@@ -191,11 +243,17 @@ async function resolveOrCreateSubscriptionPayment(params: {
     await deleteAllOpenSubscriptionPayments(params.asaasSubId)
   }
 
-  await new Promise((r) => setTimeout(r, params.forceDueToday ? 500 : 1200))
+  await new Promise((r) => setTimeout(r, params.forceDueToday ? 1000 : 1200))
 
   let payment: AsaasPayment | null = null
 
-  if (!params.forceDueToday) {
+  if (params.forceDueToday) {
+    payment = await waitForSubscriptionPendingPayment(params.asaasSubId, 12)
+    if (payment && payment.dueDate !== today) {
+      await deleteAsaasPayment(payment.id).catch(() => {})
+      payment = null
+    }
+  } else {
     payment =
       (await waitForSubscriptionPendingPayment(params.asaasSubId, 15)) ??
       (await listSubscriptionPayments(params.asaasSubId, "OVERDUE"))[0] ??
@@ -212,10 +270,17 @@ async function resolveOrCreateSubscriptionPayment(params: {
       ) ?? null
   }
 
-  if (!payment || (params.forceDueToday && payment.dueDate !== today)) {
-    if (payment?.id && isOpenAsaasChargeStatus(payment.status ?? "")) {
-      await deleteAsaasPayment(payment.id).catch(() => {})
+  if (!payment) {
+    if (params.forceDueToday) {
+      payment = await waitForSubscriptionPendingPayment(params.asaasSubId, 8)
+      if (payment && payment.dueDate !== today) {
+        await deleteAsaasPayment(payment.id).catch(() => {})
+        payment = null
+      }
     }
+  }
+
+  if (!payment) {
     payment = await createAsaasPayment({
       customerId: params.customerId,
       billingType: params.billingType,
@@ -225,6 +290,14 @@ async function resolveOrCreateSubscriptionPayment(params: {
       externalReference: `${params.barbershopId}:checkout:${params.plan}`,
       subscriptionId: params.asaasSubId,
     })
+  }
+
+  if (params.forceDueToday && payment.id) {
+    const recent = await listAllSubscriptionPayments(params.asaasSubId, "15")
+    for (const p of recent) {
+      if (!p.id || p.id === payment!.id || !isOpenAsaasChargeStatus(p.status ?? "")) continue
+      await deleteAsaasPayment(p.id).catch(() => {})
+    }
   }
 
   return payment
@@ -570,7 +643,9 @@ async function ensureAsaasSubscriptionForSignup(
   const price = catalog.plans[opts.plan].price
   const customerId = await ensureAsaasCustomer(barbershopId)
 
-  if (sub.asaasSubscriptionId) {
+  if (opts.mode === "immediate") {
+    await resetAsaasCustomerForImmediateSignup(customerId, barbershopId)
+  } else if (sub.asaasSubscriptionId) {
     await updateAsaasSubscription(sub.asaasSubscriptionId, {
       value: price,
       billingType: "CREDIT_CARD",
@@ -728,17 +803,6 @@ export async function registerCardInApp(
     const price = catalog.plans[plan].price
     const description = `Trim Time — ${catalog.plans[plan].name}`
 
-    try {
-      const stale = await listOpenAsaasPaymentsByCustomer(customerId)
-      for (const p of stale) {
-        if (!p.id || !isOpenAsaasChargeStatus(p.status ?? "")) continue
-        if (p.dueDate === today && p.subscription === asaasSubId) continue
-        await deleteAsaasPayment(p.id).catch(() => {})
-      }
-    } catch (e) {
-      console.warn("[billing/immediate] cleanup customer payments", barbershopId, e)
-    }
-
     await updateAsaasSubscription(asaasSubId, {
       value: price,
       billingType: "CREDIT_CARD",
@@ -778,8 +842,27 @@ export async function registerCardInApp(
 
     await syncBarbershopPendingPayments(barbershopId)
 
-    const finalPayment =
+    let finalPayment =
       charged ?? (await getAsaasPayment(payment.id).catch(() => null))
+
+    for (let i = 0; i < 5 && finalPayment && !isPaidAsaasStatus(finalPayment.status); i++) {
+      await new Promise((r) => setTimeout(r, 1500))
+      finalPayment = await getAsaasPayment(payment.id).catch(() => finalPayment)
+      if (finalPayment && isPaidAsaasStatus(finalPayment.status)) {
+        await autoConfirmAndSyncSubscriptionPayment({
+          barbershopId,
+          paymentId: payment.id,
+          plan,
+          asaasSubscriptionId: asaasSubId,
+          billingType: "CREDIT_CARD",
+        })
+        break
+      }
+    }
+
+    if (finalPayment && isPaidAsaasStatus(finalPayment.status)) {
+      await deleteOtherOpenCustomerPayments(customerId, payment.id)
+    }
 
     if (!finalPayment || !isPaidAsaasStatus(finalPayment.status)) {
       const st = (finalPayment?.status ?? "PENDING").toUpperCase()

@@ -184,11 +184,18 @@ async function tryPayWithCreditCardToken(
 ): Promise<AsaasPayment | null> {
   if (!input?.creditCardToken) return null
   try {
-    const paid = await payAsaasPaymentWithCreditCard(paymentId, input)
+    let paid = await payAsaasPaymentWithCreditCard(paymentId, input)
+    if (isPaidAsaasStatus(paid.status)) return paid
+
+    for (let i = 0; i < 6; i++) {
+      await new Promise((r) => setTimeout(r, 1200))
+      paid = await getAsaasPayment(paymentId)
+      if (isPaidAsaasStatus(paid.status)) return paid
+    }
     return isPaidAsaasStatus(paid.status) ? paid : null
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
-    console.warn("[sandbox] payWithCreditCard failed", paymentId, msg)
+    console.warn("[billing] payWithCreditCard failed", paymentId, msg)
     return null
   }
 }
