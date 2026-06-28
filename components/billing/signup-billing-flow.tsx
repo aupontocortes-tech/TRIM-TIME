@@ -94,8 +94,62 @@ export function SignupBillingFlow({ catalog, trialDays, onSuccess, onError }: Pr
       <div className="text-center space-y-1 px-1">
         <p className="text-base font-semibold text-foreground">Quase lá — escolha como começar</p>
         <p className="text-sm text-muted-foreground">
-          Comece grátis ou contrate direto — você troca de plano quando quiser.
+          Contrate direto ou comece grátis — você troca de plano quando quiser.
         </p>
+      </div>
+
+      {/* Contratar agora — planos com cores da landing */}
+      <div
+        className={cn(
+          "rounded-2xl border-2 transition-all duration-300 overflow-hidden",
+          mode === "immediate"
+            ? cn("shadow-md", hireTheme.cardCurrent)
+            : "border-border/80 bg-card/40 hover:border-border"
+        )}
+      >
+        <button
+          type="button"
+          onClick={() => setMode("immediate")}
+          className="w-full text-left p-5 pb-3 hover:bg-muted/20 transition-colors"
+        >
+          <div className="flex items-start gap-3">
+            <div
+              className={cn(
+                "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border-2",
+                mode === "immediate"
+                  ? cn(hireTheme.border, "bg-background")
+                  : "border-border bg-muted/30"
+              )}
+            >
+              <Rocket
+                className={cn(
+                  "w-5 h-5",
+                  mode === "immediate" ? hireTheme.price : "text-muted-foreground"
+                )}
+              />
+            </div>
+            <div className="space-y-1 min-w-0">
+              <p className="text-base font-bold text-foreground">Contratar agora</p>
+              <p className="text-sm text-muted-foreground">
+                Escolha Básico, Pro ou Premium — painel liberado na hora
+              </p>
+            </div>
+          </div>
+        </button>
+
+        <div className="px-5 pb-5 space-y-3">
+          <PlanPicker
+            catalog={catalog}
+            value={selectedPlan}
+            onChange={pickPlan}
+            variant="sales"
+          />
+          <p className="text-xs text-muted-foreground rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
+            Cobrança de{" "}
+            <strong className={hireTheme.price}>R$ {selectedPlanPrice}/mês</strong> após validar o
+            cartão — sem período de teste.
+          </p>
+        </div>
       </div>
 
       {/* Teste grátis — padrão ativo, visual amigável */}
@@ -164,60 +218,6 @@ export function SignupBillingFlow({ catalog, trialDays, onSuccess, onError }: Pr
           </div>
         </div>
       </button>
-
-      {/* Contratar agora — planos com cores da landing */}
-      <div
-        className={cn(
-          "rounded-2xl border-2 transition-all duration-300 overflow-hidden",
-          mode === "immediate"
-            ? cn("shadow-md", hireTheme.cardCurrent)
-            : "border-border/80 bg-card/40 hover:border-border"
-        )}
-      >
-        <button
-          type="button"
-          onClick={() => setMode("immediate")}
-          className="w-full text-left p-5 pb-3 hover:bg-muted/20 transition-colors"
-        >
-          <div className="flex items-start gap-3">
-            <div
-              className={cn(
-                "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border-2",
-                mode === "immediate"
-                  ? cn(hireTheme.border, "bg-background")
-                  : "border-border bg-muted/30"
-              )}
-            >
-              <Rocket
-                className={cn(
-                  "w-5 h-5",
-                  mode === "immediate" ? hireTheme.price : "text-muted-foreground"
-                )}
-              />
-            </div>
-            <div className="space-y-1 min-w-0">
-              <p className="text-base font-bold text-foreground">Contratar agora</p>
-              <p className="text-sm text-muted-foreground">
-                Escolha Básico, Pro ou Premium — painel liberado na hora
-              </p>
-            </div>
-          </div>
-        </button>
-
-        <div className="px-5 pb-5 space-y-3">
-          <PlanPicker
-            catalog={catalog}
-            value={selectedPlan}
-            onChange={pickPlan}
-            variant="sales"
-          />
-          <p className="text-xs text-muted-foreground rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
-            Cobrança de{" "}
-            <strong className={hireTheme.price}>R$ {selectedPlanPrice}/mês</strong> após validar o
-            cartão — sem período de teste.
-          </p>
-        </div>
-      </div>
 
       {mode === "trial" ? (
         <Button
