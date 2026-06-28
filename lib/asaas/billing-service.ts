@@ -15,7 +15,9 @@ import {
   createAsaasSubscription,
   deleteAsaasPayment,
   findAsaasCustomerByReference,
+  getAsaasPayment,
   listAllSubscriptionPayments,
+  listOpenAsaasPaymentsByCustomer,
   listSubscriptionPayments,
   tokenizeAsaasCreditCard,
   updateAsaasSubscription,
@@ -154,6 +156,23 @@ function isOpenAsaasChargeStatus(status: string): boolean {
   return s === "PENDING" || s === "OVERDUE" || s === "AWAITING_RISK_ANALYSIS"
 }
 
+function isPaidAsaasStatus(status: string): boolean {
+  const s = status.trim().toUpperCase()
+  return s === "CONFIRMED" || s === "RECEIVED" || s === "RECEIVED_IN_CASH"
+}
+
+async function deleteAllOpenSubscriptionPayments(asaasSubId: string): Promise<void> {
+  const payments = await listAllSubscriptionPayments(asaasSubId, "30")
+  for (const p of payments) {
+    if (!p.id || !isOpenAsaasChargeStatus(p.status ?? "")) continue
+    try {
+      await deleteAsaasPayment(p.id)
+    } catch (e) {
+      console.warn("[billing] delete open subscription payment", p.id, e)
+    }
+  }
+}
+
 /** Garante cobrança aberta na assinatura (cria no Asaas se a API não gerar sozinha). */
 async function resolveOrCreateSubscriptionPayment(params: {
   barbershopId: string
@@ -163,28 +182,45 @@ async function resolveOrCreateSubscriptionPayment(params: {
   billingType: AsaasBillingType
   price: number
   description: string
+  /** Apaga cobranças abertas antigas e cria uma com vencimento hoje (contratação imediata). */
+  forceDueToday?: boolean
 }): Promise<AsaasPayment> {
-  await new Promise((r) => setTimeout(r, 1200))
+  const today = formatDateYmd(new Date())
 
-  let payment: AsaasPayment | null =
-    (await waitForSubscriptionPendingPayment(params.asaasSubId, 15)) ??
-    (await listSubscriptionPayments(params.asaasSubId, "OVERDUE"))[0] ??
-    null
+  if (params.forceDueToday) {
+    await deleteAllOpenSubscriptionPayments(params.asaasSubId)
+  }
 
-  if (!payment) {
-    const recent = await listAllSubscriptionPayments(params.asaasSubId, "10")
+  await new Promise((r) => setTimeout(r, params.forceDueToday ? 500 : 1200))
+
+  let payment: AsaasPayment | null = null
+
+  if (!params.forceDueToday) {
     payment =
-      recent.find((p) => isOpenAsaasChargeStatus(p.status ?? "")) ??
-      recent.find((p) => p.dueDate === formatDateYmd(new Date())) ??
+      (await waitForSubscriptionPendingPayment(params.asaasSubId, 15)) ??
+      (await listSubscriptionPayments(params.asaasSubId, "OVERDUE"))[0] ??
       null
   }
 
   if (!payment) {
+    const recent = await listAllSubscriptionPayments(params.asaasSubId, "10")
+    payment =
+      recent.find(
+        (p) =>
+          isOpenAsaasChargeStatus(p.status ?? "") &&
+          (!params.forceDueToday || p.dueDate === today)
+      ) ?? null
+  }
+
+  if (!payment || (params.forceDueToday && payment.dueDate !== today)) {
+    if (payment?.id && isOpenAsaasChargeStatus(payment.status ?? "")) {
+      await deleteAsaasPayment(payment.id).catch(() => {})
+    }
     payment = await createAsaasPayment({
       customerId: params.customerId,
       billingType: params.billingType,
       value: params.price,
-      dueDate: formatDateYmd(new Date()),
+      dueDate: today,
       description: params.description,
       externalReference: `${params.barbershopId}:checkout:${params.plan}`,
       subscriptionId: params.asaasSubId,
@@ -675,41 +711,100 @@ export async function registerCardInApp(
     remoteIp,
   })
 
-  await prisma.subscription.update({
-    where: { barbershopId },
-    data: {
-      cardSetupAt: new Date(),
-      postTrialChoice: "accepted",
-      plan,
-      ...(mode === "immediate"
-        ? {
-            status: "past_due",
-            trialEnd: null,
-            nextPayment: null,
-          }
-        : {}),
-    },
-  })
-  await onBarbershopPlanChanged(barbershopId, plan)
+  if (mode === "trial") {
+    await prisma.subscription.update({
+      where: { barbershopId },
+      data: {
+        cardSetupAt: new Date(),
+        postTrialChoice: "accepted",
+        plan,
+      },
+    })
+    await onBarbershopPlanChanged(barbershopId, plan)
+  }
 
   if (mode === "immediate") {
+    const today = formatDateYmd(new Date())
+    const price = catalog.plans[plan].price
+    const description = `Trim Time — ${catalog.plans[plan].name}`
+
+    try {
+      const stale = await listOpenAsaasPaymentsByCustomer(customerId)
+      for (const p of stale) {
+        if (!p.id || !isOpenAsaasChargeStatus(p.status ?? "")) continue
+        if (p.dueDate === today && p.subscription === asaasSubId) continue
+        await deleteAsaasPayment(p.id).catch(() => {})
+      }
+    } catch (e) {
+      console.warn("[billing/immediate] cleanup customer payments", barbershopId, e)
+    }
+
     await updateAsaasSubscription(asaasSubId, {
-      value: catalog.plans[plan].price,
+      value: price,
       billingType: "CREDIT_CARD",
-      nextDueDate: formatDateYmd(new Date()),
+      nextDueDate: today,
       updatePendingPayments: true,
     })
-    await new Promise((r) => setTimeout(r, 1200))
-    await autoConfirmPendingSubscriptionPayments({
+
+    const payment = await resolveOrCreateSubscriptionPayment({
       barbershopId,
-      asaasSubscriptionId: asaasSubId,
+      customerId,
+      asaasSubId,
       plan,
+      billingType: "CREDIT_CARD",
+      price,
+      description,
+      forceDueToday: true,
+    })
+
+    await upsertLocalAsaasPayment({
+      barbershopId,
+      payment,
+      plan,
+      billingType: "CREDIT_CARD",
+      asaasSubscriptionId: asaasSubId,
+    })
+
+    const charged = await autoConfirmAndSyncSubscriptionPayment({
+      barbershopId,
+      paymentId: payment.id,
+      plan,
+      asaasSubscriptionId: asaasSubId,
       billingType: "CREDIT_CARD",
       creditCardToken: token.creditCardToken,
       remoteIp,
       creditCardHolderInfo,
     })
+
     await syncBarbershopPendingPayments(barbershopId)
+
+    const finalPayment =
+      charged ?? (await getAsaasPayment(payment.id).catch(() => null))
+
+    if (!finalPayment || !isPaidAsaasStatus(finalPayment.status)) {
+      const st = (finalPayment?.status ?? "PENDING").toUpperCase()
+      if (st === "AWAITING_RISK_ANALYSIS") {
+        throw new Error(
+          "Cobrança em análise pelo operador do cartão. Cartões virtuais costumam ficar neste status — tente um cartão físico ou aguarde alguns minutos."
+        )
+      }
+      throw new Error(
+        `Cobrança de R$ ${price} não foi confirmada (status: ${finalPayment?.status ?? "PENDING"}). Verifique limite e dados do cartão, ou use cartão físico.`
+      )
+    }
+
+    await prisma.subscription.update({
+      where: { barbershopId },
+      data: {
+        cardSetupAt: new Date(),
+        postTrialChoice: "accepted",
+        plan,
+        status: "active",
+        trialEnd: null,
+        nextPayment: addMonths(new Date(), 1),
+      },
+    })
+    await onBarbershopPlanChanged(barbershopId, plan)
   }
 
   return {
