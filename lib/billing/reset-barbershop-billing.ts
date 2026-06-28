@@ -1,9 +1,12 @@
 import type { SubscriptionPlan } from "@/lib/db/types"
 import {
+  archiveAsaasCustomerReference,
   cancelAsaasSubscription,
   cancelPixAutomaticAuthorization,
   deleteAsaasPayment,
+  findAsaasCustomerByReference,
   listAllSubscriptionPayments,
+  listAsaasSubscriptionsByCustomer,
   updateAsaasSubscription,
   type AsaasBillingType,
 } from "@/lib/asaas/client"
@@ -17,7 +20,11 @@ export type ResetBarbershopBillingResult = {
   barbershopName: string
   paymentsDeleted: number
   cardKept: boolean
+  cardCleared: boolean
   asaasPaymentsDeleted: number
+  asaasSubscriptionsCancelled: number
+  asaasCustomerDetached: boolean
+  warnings: string[]
 }
 
 function formatDateYmd(d: Date): string {
@@ -29,12 +36,42 @@ function isOpenAsaasPaymentStatus(status: string): boolean {
   return s === "PENDING" || s === "OVERDUE" || s === "AWAITING_RISK_ANALYSIS"
 }
 
+async function cancelSubscriptionAndOpenPayments(
+  subscriptionId: string,
+  warnings: string[]
+): Promise<{ paymentsDeleted: number; cancelled: boolean }> {
+  let paymentsDeleted = 0
+  try {
+    const payments = await listAllSubscriptionPayments(subscriptionId, "30")
+    for (const p of payments) {
+      if (!isOpenAsaasPaymentStatus(p.status ?? "")) continue
+      try {
+        await deleteAsaasPayment(p.id)
+        paymentsDeleted++
+      } catch (e) {
+        warnings.push(
+          `Não foi possível apagar cobrança ${p.id} no Asaas: ${e instanceof Error ? e.message : "erro"}`
+        )
+      }
+    }
+    await cancelAsaasSubscription(subscriptionId)
+    return { paymentsDeleted, cancelled: true }
+  } catch (e) {
+    warnings.push(
+      `Não foi possível cancelar assinatura ${subscriptionId} no Asaas: ${e instanceof Error ? e.message : "erro"}`
+    )
+    return { paymentsDeleted, cancelled: false }
+  }
+}
+
 /** Apaga histórico de cobranças e reinicia assinatura para novo teste de contratação. */
 export async function resetBarbershopBillingForFreshStart(
   barbershopId: string,
   options?: { keepCard?: boolean }
 ): Promise<ResetBarbershopBillingResult> {
   const keepCard = options?.keepCard === true
+  const warnings: string[] = []
+
   const bs = await prisma.barbershop.findUnique({
     where: { id: barbershopId },
     select: { id: true, name: true },
@@ -49,33 +86,82 @@ export async function resetBarbershopBillingForFreshStart(
   trialEnd.setDate(trialEnd.getDate() + TRIAL_DAYS)
 
   let asaasPaymentsDeleted = 0
+  let asaasSubscriptionsCancelled = 0
+  let asaasCustomerDetached = false
+
   if (sub && (await isAsaasConfigured())) {
     try {
       if (sub.asaasPixAutomaticAuthId) {
         await cancelPixAutomaticAuthorization(sub.asaasPixAutomaticAuthId).catch(() => {})
       }
-      if (sub.asaasSubscriptionId) {
-        const payments = await listAllSubscriptionPayments(sub.asaasSubscriptionId, "30")
-        for (const p of payments) {
-          if (!isOpenAsaasPaymentStatus(p.status ?? "")) continue
-          await deleteAsaasPayment(p.id).catch(() => {})
-          asaasPaymentsDeleted++
+
+      const subscriptionIds = new Set<string>()
+      if (sub.asaasSubscriptionId) subscriptionIds.add(sub.asaasSubscriptionId)
+
+      let customerId = sub.asaasCustomerId
+      if (!customerId) {
+        const found = await findAsaasCustomerByReference(barbershopId)
+        customerId = found?.id ?? null
+      }
+
+      if (customerId && !keepCard) {
+        try {
+          const subs = await listAsaasSubscriptionsByCustomer(customerId)
+          for (const s of subs) {
+            if (s.id) subscriptionIds.add(s.id)
+          }
+        } catch (e) {
+          warnings.push(
+            `Não foi possível listar assinaturas do cliente Asaas: ${e instanceof Error ? e.message : "erro"}`
+          )
         }
+      }
+
+      for (const subscriptionId of subscriptionIds) {
         if (keepCard) {
-          const catalog = await getPlanCatalog()
-          await updateAsaasSubscription(sub.asaasSubscriptionId, {
-            value: catalog.plans[TRIAL_PLAN].price,
-            billingType: (sub.billingType ?? "CREDIT_CARD") as AsaasBillingType,
-            nextDueDate: formatDateYmd(trialEnd),
-            updatePendingPayments: true,
-          })
+          try {
+            const catalog = await getPlanCatalog()
+            const payments = await listAllSubscriptionPayments(subscriptionId, "30")
+            for (const p of payments) {
+              if (!isOpenAsaasPaymentStatus(p.status ?? "")) continue
+              await deleteAsaasPayment(p.id).catch(() => {})
+              asaasPaymentsDeleted++
+            }
+            await updateAsaasSubscription(subscriptionId, {
+              value: catalog.plans[TRIAL_PLAN].price,
+              billingType: (sub.billingType ?? "CREDIT_CARD") as AsaasBillingType,
+              nextDueDate: formatDateYmd(trialEnd),
+              updatePendingPayments: true,
+            })
+          } catch (e) {
+            warnings.push(
+              `Erro ao atualizar assinatura ${subscriptionId}: ${e instanceof Error ? e.message : "erro"}`
+            )
+          }
         } else {
-          await cancelAsaasSubscription(sub.asaasSubscriptionId).catch(() => {})
+          const result = await cancelSubscriptionAndOpenPayments(subscriptionId, warnings)
+          asaasPaymentsDeleted += result.paymentsDeleted
+          if (result.cancelled) asaasSubscriptionsCancelled++
+        }
+      }
+
+      if (customerId && !keepCard) {
+        try {
+          await archiveAsaasCustomerReference(customerId, barbershopId)
+          asaasCustomerDetached = true
+        } catch (e) {
+          warnings.push(
+            `Cliente Asaas não foi desvinculado (cartão pode reaparecer): ${e instanceof Error ? e.message : "erro"}`
+          )
         }
       }
     } catch (e) {
-      console.warn("[reset-billing] asaas cleanup", barbershopId, e)
+      warnings.push(`Limpeza Asaas incompleta: ${e instanceof Error ? e.message : "erro"}`)
     }
+  } else if (sub?.asaasSubscriptionId || sub?.asaasCustomerId || sub?.cardSetupAt) {
+    warnings.push(
+      "Asaas não configurado no servidor — só o banco foi resetado. Configure ASAAS_API_KEY na Vercel."
+    )
   }
 
   await prisma.subscription.upsert({
@@ -116,7 +202,11 @@ export async function resetBarbershopBillingForFreshStart(
     barbershopName: bs.name,
     paymentsDeleted: deleted.count,
     cardKept: keepCard && !!sub?.cardSetupAt,
+    cardCleared: !keepCard,
     asaasPaymentsDeleted,
+    asaasSubscriptionsCancelled: keepCard ? 0 : asaasSubscriptionsCancelled,
+    asaasCustomerDetached: keepCard ? false : asaasCustomerDetached,
+    warnings,
   }
 }
 

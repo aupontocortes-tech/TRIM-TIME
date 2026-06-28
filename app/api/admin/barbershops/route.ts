@@ -29,7 +29,12 @@ export async function GET() {
         created_at: b.createdAt.toISOString(),
         updated_at: b.updatedAt.toISOString(),
         subscription: sub
-          ? { plan: sub.plan, status: sub.status }
+          ? {
+              plan: sub.plan,
+              status: sub.status,
+              card_setup_at: sub.cardSetupAt?.toISOString() ?? null,
+              trial_end: sub.trialEnd?.toISOString() ?? null,
+            }
           : null,
       }
     })

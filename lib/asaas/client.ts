@@ -118,6 +118,28 @@ export async function findAsaasCustomerByReference(
   return list.data?.[0] ?? null
 }
 
+/** Desvincula cliente Asaas da barbearia para permitir cadastro limpo após reset. */
+export async function archiveAsaasCustomerReference(
+  customerId: string,
+  barbershopId: string
+): Promise<void> {
+  await asaasFetch<AsaasCustomer>(`/customers/${customerId}`, {
+    method: "PUT",
+    body: JSON.stringify({
+      externalReference: `archived:${barbershopId}:${Date.now()}`,
+    }),
+  })
+}
+
+export async function listAsaasSubscriptionsByCustomer(
+  customerId: string
+): Promise<AsaasSubscription[]> {
+  const list = await asaasFetch<AsaasList<AsaasSubscription>>("/subscriptions", {
+    searchParams: { customer: customerId, limit: "20" },
+  })
+  return list.data ?? []
+}
+
 export async function createAsaasSubscription(input: {
   customerId: string
   billingType: AsaasBillingType

@@ -23,7 +23,12 @@ import type { Barbershop, BarbershopRole } from "@/lib/db/types"
 import type { SubscriptionPlan } from "@/lib/db/types"
 
 type BarbershopWithSub = Barbershop & {
-  subscription?: { plan: SubscriptionPlan; status: string } | null
+  subscription?: {
+    plan: SubscriptionPlan
+    status: string
+    card_setup_at?: string | null
+    trial_end?: string | null
+  } | null
   is_test?: boolean
 }
 
@@ -116,13 +121,27 @@ export default function PlataformaBarbershopsPage() {
     setBusyResetId(barbershopId)
     setError("")
     setSuccess("")
-    const res = await fetch(`/api/admin/barbershops/${barbershopId}/reset-billing`, { method: "POST" })
+    const res = await fetch(`/api/admin/barbershops/${barbershopId}/reset-billing`, {
+      method: "POST",
+      credentials: "include",
+    })
     const data = await res.json().catch(() => ({}))
     if (res.ok) {
       load()
-      setSuccess(
-        `Cobrança reiniciada (${data.paymentsDeleted ?? 0} cobrança(s) apagada(s)). Cadastre o cartão de novo na Assinatura.`
-      )
+      const parts = [
+        `Barbearia "${barbershopName}" reiniciada.`,
+        data.cardCleared ? "Cartão removido." : data.cardKept ? "Cartão mantido." : "",
+        `${data.paymentsDeleted ?? 0} cobrança(s) local(is) apagada(s).`,
+        data.asaasSubscriptionsCancelled
+          ? `${data.asaasSubscriptionsCancelled} assinatura(s) cancelada(s) no Asaas.`
+          : "",
+        data.asaasCustomerDetached ? "Cliente Asaas desvinculado (cadastro limpo)." : "",
+      ].filter(Boolean)
+      const warn = Array.isArray(data.warnings) ? (data.warnings as string[]).filter(Boolean) : []
+      setSuccess(parts.join(" "))
+      if (warn.length) {
+        setError(`Avisos: ${warn.join(" | ")}`)
+      }
       if (editing?.id === barbershopId) setEditing(null)
     } else {
       setError(typeof data.error === "string" ? data.error : "Não foi possível reiniciar a cobrança.")
@@ -188,7 +207,9 @@ export default function PlataformaBarbershopsPage() {
                       <p className="text-sm text-zinc-400">{b.email}</p>
                       <p className="text-xs text-zinc-500">
                         /b/{b.slug} • {ROLE_LABELS[b.role as BarbershopRole] ?? b.role} • Plano:{" "}
-                        {b.subscription?.plan ?? "—"} • {b.suspended_at ? "Suspensa" : "Ativa"}
+                        {b.subscription?.plan ?? "—"} • {b.subscription?.status ?? "—"}
+                        {b.subscription?.card_setup_at ? " • Cartão cadastrado" : " • Sem cartão"}
+                        {b.suspended_at ? " • Suspensa" : " • Ativa"}
                       </p>
                     </div>
                   </div>
@@ -309,6 +330,18 @@ export default function PlataformaBarbershopsPage() {
                 Conta de teste (premium liberado, sem pagamento)
               </label>
             </div>
+            {editing?.subscription ? (
+              <div className="rounded-lg border border-zinc-700 bg-zinc-900/80 p-3 text-xs text-zinc-300 space-y-1">
+                <p>
+                  <strong className="text-zinc-100">Assinatura agora:</strong>{" "}
+                  {editing.subscription.status} / {editing.subscription.plan}
+                  {editing.subscription.card_setup_at ? " — com cartão" : " — sem cartão"}
+                </p>
+                <p className="text-zinc-500">
+                  Após reiniciar: trial Pro, sem cartão, cadastro do zero na Assinatura.
+                </p>
+              </div>
+            ) : null}
           </div>
           <DialogFooter className="flex-col sm:flex-row gap-2">
             {editing ? (
