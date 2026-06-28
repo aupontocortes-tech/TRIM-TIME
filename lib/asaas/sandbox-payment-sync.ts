@@ -281,15 +281,31 @@ export async function autoConfirmAndSyncSubscriptionPayment(params: {
   remoteIp?: string
   creditCardHolderInfo?: AsaasCreditCardHolderInput
 }): Promise<AsaasPayment | null> {
-  const confirmed = await tryConfirmSandboxBarbershopPayment({
-    barbershopId: params.barbershopId,
-    paymentId: params.paymentId,
-    billingType: params.billingType,
-    creditCardToken: params.creditCardToken,
-    remoteIp: params.remoteIp,
-    creditCardHolderInfo: params.creditCardHolderInfo,
-  })
-  const payment = confirmed ?? (await getAsaasPayment(params.paymentId).catch(() => null))
+  let charged: AsaasPayment | null = null
+
+  if (isAsaasSandboxApi()) {
+    charged = await tryConfirmSandboxBarbershopPayment({
+      barbershopId: params.barbershopId,
+      paymentId: params.paymentId,
+      billingType: params.billingType,
+      creditCardToken: params.creditCardToken,
+      remoteIp: params.remoteIp,
+      creditCardHolderInfo: params.creditCardHolderInfo,
+    })
+  } else if (
+    isCardBilling(params.billingType) &&
+    params.creditCardToken &&
+    params.remoteIp &&
+    params.creditCardHolderInfo
+  ) {
+    charged = await tryPayWithCreditCardToken(params.paymentId, {
+      creditCardToken: params.creditCardToken,
+      remoteIp: params.remoteIp,
+      creditCardHolderInfo: params.creditCardHolderInfo,
+    })
+  }
+
+  const payment = charged ?? (await getAsaasPayment(params.paymentId).catch(() => null))
   if (!payment) return null
 
   await syncBarbershopPaymentFromAsaas({
@@ -298,7 +314,10 @@ export async function autoConfirmAndSyncSubscriptionPayment(params: {
     plan: params.plan,
     asaasSubscriptionId: params.asaasSubscriptionId,
     billingType: params.billingType,
-    metadata: { sandbox_auto_confirm: !!confirmed },
+    metadata: {
+      sandbox_auto_confirm: !!charged && isAsaasSandboxApi(),
+      production_card_charge: !!charged && !isAsaasSandboxApi(),
+    },
   })
   return payment
 }
@@ -348,7 +367,7 @@ export async function autoConfirmPendingSubscriptionPayments(params: {
   remoteIp?: string
   creditCardHolderInfo?: AsaasCreditCardHolderInput
 }): Promise<void> {
-  if (!isAsaasSandboxApi() || !isCardBilling(params.billingType)) return
+  if (!isCardBilling(params.billingType)) return
 
   const pending = await waitForSubscriptionPendingPayment(params.asaasSubscriptionId)
   if (!pending) return
@@ -415,11 +434,44 @@ export async function importSubscriptionPaymentsFromAsaas(barbershopId: string):
 
 /** Sincroniza cobranças pendentes de uma barbearia (checkout / cadastro de cartão). */
 export async function syncBarbershopPendingPayments(barbershopId: string): Promise<number> {
-  if (!isAsaasSandboxApi()) return 0
-
   await importSubscriptionPaymentsFromAsaas(barbershopId).catch((e) => {
-    console.warn("[sandbox] import subscription payments", barbershopId, e)
+    console.warn("[billing] import subscription payments", barbershopId, e)
   })
+
+  if (!isAsaasSandboxApi()) {
+    const rows = await prisma.payment.findMany({
+      where: {
+        barbershopId,
+        provider: "asaas",
+        externalId: { not: null },
+        status: { in: ["PENDING", "OVERDUE"] },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 10,
+    })
+
+    let synced = 0
+    for (const row of rows) {
+      if (!row.externalId || !row.plan) continue
+      try {
+        const payment = await getAsaasPayment(row.externalId)
+        if (!isPaidAsaasStatus(payment.status)) continue
+        const ctx = await resolvePaymentSyncContext(row, payment)
+        await syncBarbershopPaymentFromAsaas({
+          barbershopId,
+          payment,
+          plan: row.plan as SubscriptionPlan,
+          asaasSubscriptionId: ctx.asaasSubscriptionId,
+          billingType: ctx.billingType,
+          metadata: { synced_from_asaas: true },
+        })
+        synced++
+      } catch (e) {
+        console.warn("[billing] sync production payment", row.id, e)
+      }
+    }
+    return synced
+  }
 
   const rows = await prisma.payment.findMany({
     where: {
