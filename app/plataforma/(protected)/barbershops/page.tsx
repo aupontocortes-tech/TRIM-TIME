@@ -37,6 +37,7 @@ export default function PlataformaBarbershopsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [busyImpersonateId, setBusyImpersonateId] = useState<string | null>(null)
+  const [busyResetId, setBusyResetId] = useState<string | null>(null)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
   const [editing, setEditing] = useState<BarbershopWithSub | null>(null)
@@ -102,6 +103,31 @@ export default function PlataformaBarbershopsPage() {
       setError(typeof data.error === "string" ? data.error : "Não foi possível salvar a barbearia.")
     }
     setSaving(false)
+  }
+
+  const resetBilling = async (barbershopId: string, barbershopName: string) => {
+    if (
+      !confirm(
+        `Reiniciar cobrança de "${barbershopName}"?\n\nApaga cobranças locais, cancela assinatura no Asaas e remove cartão cadastrado.`
+      )
+    ) {
+      return
+    }
+    setBusyResetId(barbershopId)
+    setError("")
+    setSuccess("")
+    const res = await fetch(`/api/admin/barbershops/${barbershopId}/reset-billing`, { method: "POST" })
+    const data = await res.json().catch(() => ({}))
+    if (res.ok) {
+      load()
+      setSuccess(
+        `Cobrança reiniciada (${data.paymentsDeleted ?? 0} cobrança(s) apagada(s)). Cadastre o cartão de novo na Assinatura.`
+      )
+      if (editing?.id === barbershopId) setEditing(null)
+    } else {
+      setError(typeof data.error === "string" ? data.error : "Não foi possível reiniciar a cobrança.")
+    }
+    setBusyResetId(null)
   }
 
   const impersonate = async (barbershopId: string) => {
@@ -284,7 +310,18 @@ export default function PlataformaBarbershopsPage() {
               </label>
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            {editing ? (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={busyResetId === editing.id}
+                onClick={() => void resetBilling(editing.id, editing.name)}
+                className="border-red-500/40 text-red-300 hover:bg-red-950/40 sm:mr-auto"
+              >
+                {busyResetId === editing.id ? "Reiniciando..." : "Reiniciar cobrança e cartão"}
+              </Button>
+            ) : null}
             <Button variant="outline" onClick={() => setEditing(null)} className="border-zinc-600 text-zinc-200">
               Cancelar
             </Button>

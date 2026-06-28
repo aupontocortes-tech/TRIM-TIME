@@ -99,7 +99,7 @@ async function asaasFetch(path, init) {
 }
 
 let asaasPaymentsDeleted = 0
-if (keepCard && sub?.asaasSubscriptionId && process.env.ASAAS_API_KEY?.trim()) {
+if (sub?.asaasSubscriptionId && process.env.ASAAS_API_KEY?.trim()) {
   try {
     const list = await asaasFetch(`/subscriptions/${sub.asaasSubscriptionId}/payments`, {
       searchParams: { limit: "30" },
@@ -109,19 +109,23 @@ if (keepCard && sub?.asaasSubscriptionId && process.env.ASAAS_API_KEY?.trim()) {
       await asaasFetch(`/payments/${p.id}`, { method: "DELETE" }).catch(() => {})
       asaasPaymentsDeleted++
     }
-    await asaasFetch(`/subscriptions/${sub.asaasSubscriptionId}`, {
-      method: "PUT",
-      body: JSON.stringify({
-        value: 39,
-        billingType: sub.billingType ?? "CREDIT_CARD",
-        nextDueDate: trialEndYmd,
-        updatePendingPayments: true,
-      }),
-    })
+    if (keepCard) {
+      await asaasFetch(`/subscriptions/${sub.asaasSubscriptionId}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          value: 39,
+          billingType: sub.billingType ?? "CREDIT_CARD",
+          nextDueDate: trialEndYmd,
+          updatePendingPayments: true,
+        }),
+      })
+    } else {
+      await asaasFetch(`/subscriptions/${sub.asaasSubscriptionId}`, { method: "DELETE" }).catch(() => {})
+    }
   } catch (e) {
     console.warn("[reset] limpeza Asaas:", e instanceof Error ? e.message : e)
   }
-} else if (keepCard && sub?.asaasSubscriptionId && !process.env.ASAAS_API_KEY?.trim()) {
+} else if (sub?.asaasSubscriptionId && !process.env.ASAAS_API_KEY?.trim()) {
   console.warn(
     "\nAVISO: ASAAS_API_KEY ausente no .env.local — só o banco foi resetado.\n" +
       "Ao abrir Assinatura no site, cobranças pendentes do Asaas podem voltar.\n" +

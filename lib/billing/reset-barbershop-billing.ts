@@ -1,5 +1,7 @@
 import type { SubscriptionPlan } from "@/lib/db/types"
 import {
+  cancelAsaasSubscription,
+  cancelPixAutomaticAuthorization,
   deleteAsaasPayment,
   listAllSubscriptionPayments,
   updateAsaasSubscription,
@@ -47,21 +49,30 @@ export async function resetBarbershopBillingForFreshStart(
   trialEnd.setDate(trialEnd.getDate() + TRIAL_DAYS)
 
   let asaasPaymentsDeleted = 0
-  if (keepCard && sub?.asaasSubscriptionId && (await isAsaasConfigured())) {
+  if (sub && (await isAsaasConfigured())) {
     try {
-      const catalog = await getPlanCatalog()
-      const payments = await listAllSubscriptionPayments(sub.asaasSubscriptionId, "30")
-      for (const p of payments) {
-        if (!isOpenAsaasPaymentStatus(p.status ?? "")) continue
-        await deleteAsaasPayment(p.id).catch(() => {})
-        asaasPaymentsDeleted++
+      if (sub.asaasPixAutomaticAuthId) {
+        await cancelPixAutomaticAuthorization(sub.asaasPixAutomaticAuthId).catch(() => {})
       }
-      await updateAsaasSubscription(sub.asaasSubscriptionId, {
-        value: catalog.plans[TRIAL_PLAN].price,
-        billingType: (sub.billingType ?? "CREDIT_CARD") as AsaasBillingType,
-        nextDueDate: formatDateYmd(trialEnd),
-        updatePendingPayments: true,
-      })
+      if (sub.asaasSubscriptionId) {
+        const payments = await listAllSubscriptionPayments(sub.asaasSubscriptionId, "30")
+        for (const p of payments) {
+          if (!isOpenAsaasPaymentStatus(p.status ?? "")) continue
+          await deleteAsaasPayment(p.id).catch(() => {})
+          asaasPaymentsDeleted++
+        }
+        if (keepCard) {
+          const catalog = await getPlanCatalog()
+          await updateAsaasSubscription(sub.asaasSubscriptionId, {
+            value: catalog.plans[TRIAL_PLAN].price,
+            billingType: (sub.billingType ?? "CREDIT_CARD") as AsaasBillingType,
+            nextDueDate: formatDateYmd(trialEnd),
+            updatePendingPayments: true,
+          })
+        } else {
+          await cancelAsaasSubscription(sub.asaasSubscriptionId).catch(() => {})
+        }
+      }
     } catch (e) {
       console.warn("[reset-billing] asaas cleanup", barbershopId, e)
     }
@@ -92,6 +103,10 @@ export async function resetBarbershopBillingForFreshStart(
         ? {}
         : {
             cardSetupAt: null,
+            asaasCustomerId: null,
+            asaasSubscriptionId: null,
+            asaasPixAutomaticAuthId: null,
+            billingType: null,
           }),
     },
   })
