@@ -5,7 +5,8 @@ import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { useBarbershop } from "@/hooks/use-barbershop"
 import { useUnits } from "@/hooks/use-units"
-import { hasFeature, PLAN_FEATURES, PLAN_LABELS, PLAN_PRICES } from "@/lib/plans"
+import { usePlanCatalog } from "@/hooks/use-plan-catalog"
+import { hasFeature, PLAN_FEATURES, PLAN_LABELS } from "@/lib/plans"
 import type {
   Barber,
   Service,
@@ -244,6 +245,7 @@ export default function ConfiguracoesPage() {
     error: barbershopError,
     refetch,
   } = useBarbershop()
+  const { prices: planPrices } = usePlanCatalog()
   const {
     units,
     selectedUnitId,
@@ -3567,7 +3569,7 @@ export default function ConfiguracoesPage() {
                       >
                         <p className="font-semibold text-foreground">{PLAN_LABELS[planOption]}</p>
                         <p className={cn("text-lg font-bold mt-1", theme.price)}>
-                          R$ {PLAN_PRICES[planOption]}/mês
+                          R$ {planPrices[planOption]}/mês
                         </p>
                         <ul className="mt-3 space-y-1 text-xs text-muted-foreground">
                           {featuresPreview.map((feature) => (
@@ -3629,7 +3631,7 @@ export default function ConfiguracoesPage() {
                                 planSalesTheme(planDetailOpen).price
                               )}
                             >
-                              R$ {PLAN_PRICES[planDetailOpen]}/mês
+                              R$ {planPrices[planDetailOpen]}/mês
                             </span>
                             <span className="block mt-2">
                               Tudo que está incluso neste plano para você comparar com tranquilidade.

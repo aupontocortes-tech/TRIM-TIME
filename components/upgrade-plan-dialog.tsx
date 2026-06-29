@@ -8,7 +8,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { PLAN_LABELS, PLAN_PRICES } from "@/lib/plans"
+import { usePlanCatalog } from "@/hooks/use-plan-catalog"
+import { PLAN_LABELS } from "@/lib/plans"
 import type { SubscriptionPlan } from "@/lib/db/types"
 import { Zap } from "lucide-react"
 
@@ -25,6 +26,8 @@ export function UpgradePlanDialog({
   message = "Este recurso não está disponível no seu plano. Faça upgrade para desbloquear.",
   suggestedPlan = "pro",
 }: UpgradePlanDialogProps) {
+  const { prices } = usePlanCatalog()
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="bg-card border-border max-w-md">
@@ -57,7 +60,7 @@ export function UpgradePlanDialog({
               >
                 <span className="font-medium">{PLAN_LABELS[plan]}</span>
                 <span className="text-muted-foreground ml-1">
-                  R${PLAN_PRICES[plan]}/mês
+                  R${prices[plan]}/mês
                 </span>
               </div>
             ))}
