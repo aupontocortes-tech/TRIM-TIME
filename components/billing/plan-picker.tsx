@@ -5,6 +5,7 @@ import type { PlanCatalog } from "@/lib/plan-catalog"
 import { landingPlanCardClass, planSalesTheme } from "@/lib/plan-sales-theme"
 import { PLAN_LABELS } from "@/lib/plans"
 import { cn } from "@/lib/utils"
+import { formatPlanPrice, formatPlanPricePerMonth } from "@/lib/format-plan-price"
 import { Check } from "lucide-react"
 
 const PLAN_ORDER: SubscriptionPlan[] = ["basic", "pro", "premium"]
@@ -61,7 +62,7 @@ export function PlanPicker({
               <span className="text-sm font-semibold text-foreground">{label}</span>
               <span className="text-[10px] text-muted-foreground mt-0.5">{PLAN_TAGLINE[p]}</span>
               <div className="mt-2 flex items-baseline gap-0.5">
-                <span className={cn("text-xl font-bold", theme.price)}>R${price}</span>
+                <span className={cn("text-xl font-bold", theme.price)}>{formatPlanPrice(price)}</span>
                 <span className="text-[10px] text-muted-foreground">/mês</span>
               </div>
               {selected ? (
@@ -111,7 +112,7 @@ export function PlanPicker({
               ) : null}
             </div>
             <span className={cn("font-semibold shrink-0 ml-2", selected ? theme.price : "")}>
-              R$ {price}/mês
+              {formatPlanPricePerMonth(price)}
             </span>
           </button>
         )

@@ -15,6 +15,7 @@ import { TrialCardForm } from "@/components/billing/trial-card-form"
 import { PlanPicker } from "@/components/billing/plan-picker"
 import { PixPaymentPanel } from "@/components/billing/pix-payment-panel"
 import { TRIAL_DAYS } from "@/lib/plans"
+import { formatPlanPrice, formatPlanPricePerMonth } from "@/lib/format-plan-price"
 
 type BillingSubscription = {
   plan: SubscriptionPlan
@@ -446,7 +447,7 @@ function AssinaturaContent() {
           <CardHeader>
             <CardTitle className="text-base">Teste grátis ativo</CardTitle>
             <CardDescription>
-              Cobrança automática de R$ {catalog.plans.pro.price}/mês ({catalog.plans.pro.name}) em{" "}
+              Cobrança automática de {formatPlanPricePerMonth(catalog.plans.pro.price)} ({catalog.plans.pro.name}) em{" "}
               {trialDaysLeft} dia(s), se você não cancelar antes.
             </CardDescription>
           </CardHeader>
@@ -486,7 +487,7 @@ function AssinaturaContent() {
                   }`}
                 >
                   <span className="font-medium">{catalog.plans[p].name}</span>
-                  <span className="text-primary ml-2">R$ {catalog.plans[p].price}/mês</span>
+                  <span className="text-primary ml-2">{formatPlanPricePerMonth(catalog.plans[p].price)}</span>
                 </button>
               ))}
             </div>
@@ -553,7 +554,7 @@ function AssinaturaContent() {
               <dt className="text-muted-foreground">Valor mensal</dt>
               <dd className="font-semibold">
                 {effectivePlan && catalog
-                  ? `R$ ${catalog.plans[effectivePlan].price.toFixed(2)}`
+                  ? formatPlanPrice(catalog.plans[effectivePlan].price)
                   : "—"}
               </dd>
             </div>
@@ -675,8 +676,8 @@ function AssinaturaContent() {
               }
             >
               {checkoutLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-              Contratar {catalog?.plans[selectedPlan].name ?? "plano"} — R${" "}
-              {catalog?.plans[selectedPlan].price.toFixed(2)}/mês
+              Contratar {catalog?.plans[selectedPlan].name ?? "plano"} —{" "}
+              {formatPlanPricePerMonth(catalog?.plans[selectedPlan].price ?? 0)}
             </Button>
             <p className="text-xs text-muted-foreground text-center">
               {billingEnabled
@@ -703,7 +704,7 @@ function AssinaturaContent() {
                 disabled={checkoutLoading}
                 onClick={() => void handleChangePlan(p)}
               >
-                {catalog.plans[p].name} — R$ {catalog.plans[p].price}
+                {catalog.plans[p].name} — {formatPlanPrice(catalog.plans[p].price)}
               </Button>
             ))}
           </CardContent>

@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { usePlanCatalog } from "@/hooks/use-plan-catalog"
+import { formatPlanPricePerMonth } from "@/lib/format-plan-price"
 import { PLAN_LABELS } from "@/lib/plans"
 import type { SubscriptionPlan } from "@/lib/db/types"
 import { Zap } from "lucide-react"
@@ -60,7 +61,7 @@ export function UpgradePlanDialog({
               >
                 <span className="font-medium">{PLAN_LABELS[plan]}</span>
                 <span className="text-muted-foreground ml-1">
-                  R${prices[plan]}/mês
+                  {formatPlanPricePerMonth(prices[plan])}
                 </span>
               </div>
             ))}

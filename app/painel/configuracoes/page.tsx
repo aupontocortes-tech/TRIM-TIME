@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation"
 import { useBarbershop } from "@/hooks/use-barbershop"
 import { useUnits } from "@/hooks/use-units"
 import { usePlanCatalog } from "@/hooks/use-plan-catalog"
+import { formatPlanPricePerMonth } from "@/lib/format-plan-price"
 import { hasFeature, PLAN_FEATURES, PLAN_LABELS } from "@/lib/plans"
 import type {
   Barber,
@@ -3569,7 +3570,7 @@ export default function ConfiguracoesPage() {
                       >
                         <p className="font-semibold text-foreground">{PLAN_LABELS[planOption]}</p>
                         <p className={cn("text-lg font-bold mt-1", theme.price)}>
-                          R$ {planPrices[planOption]}/mês
+                          {formatPlanPricePerMonth(planPrices[planOption])}
                         </p>
                         <ul className="mt-3 space-y-1 text-xs text-muted-foreground">
                           {featuresPreview.map((feature) => (
@@ -3631,7 +3632,7 @@ export default function ConfiguracoesPage() {
                                 planSalesTheme(planDetailOpen).price
                               )}
                             >
-                              R$ {planPrices[planDetailOpen]}/mês
+                              {formatPlanPricePerMonth(planPrices[planDetailOpen])}
                             </span>
                             <span className="block mt-2">
                               Tudo que está incluso neste plano para você comparar com tranquilidade.

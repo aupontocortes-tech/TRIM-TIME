@@ -16,6 +16,7 @@ import { ChevronDown, ChevronRight, CreditCard, Loader2, MessageCircle, Gauge } 
 import { ChangePasswordForm } from "@/components/account/change-password-form"
 import type { SubscriptionPlan } from "@/lib/db/types"
 import { PLAN_LABELS, PLAN_PRICES, TRIAL_DAYS } from "@/lib/plans"
+import { formatPlanPrice } from "@/lib/format-plan-price"
 
 const GOLD = "#D4AF37"
 
@@ -278,7 +279,7 @@ export default function PlataformaConfiguracoesPage() {
     ? `Atual: ${formatPhoneSummary(savedPhone)}`
     : "Nenhum número — botões de WhatsApp ocultos na landing"
 
-  const plansSummary = `Trial ${trialDays}d ${PLAN_LABELS[trialPlan]} · Básico R$ ${prices.basic} · Pro R$ ${prices.pro} · Premium R$ ${prices.premium}`
+  const plansSummary = `Trial ${trialDays}d ${PLAN_LABELS[trialPlan]} · Básico ${formatPlanPrice(prices.basic)} · Pro ${formatPlanPrice(prices.pro)} · Premium ${formatPlanPrice(prices.premium)}`
 
   const infraSummary = "Uso dos planos FREE — Resend, Supabase e barbearias no mês"
 

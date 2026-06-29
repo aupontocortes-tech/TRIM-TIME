@@ -18,6 +18,7 @@ import { TrimTimeWordmark } from "@/components/trim-time-wordmark"
 import { LandingFeaturesCarousel } from "@/components/landing/landing-features-carousel"
 import { LANDING_FEATURES } from "@/lib/landing-features"
 import { landingPlanButtonClass, landingPlanCardClass, planSalesTheme } from "@/lib/plan-sales-theme"
+import { formatPlanPrice, formatPlanPricePerMonth } from "@/lib/format-plan-price"
 import { cn } from "@/lib/utils"
 
 function WhatsappIcon({ className }: { className?: string }) {
@@ -381,7 +382,7 @@ function LandingPageContent({
                 </div>
                 <div className="mb-6">
                   <span className={cn("text-4xl font-bold", planSalesTheme("basic").price)}>
-                    R${planPrices.basic}
+                    {formatPlanPrice(planPrices.basic)}
                   </span>
                   <span className="text-muted-foreground">/mês</span>
                 </div>
@@ -415,7 +416,7 @@ function LandingPageContent({
                 </div>
                 <div className="mb-6">
                   <span className={cn("text-4xl font-bold", planSalesTheme("pro").price)}>
-                    R${planPrices.pro}
+                    {formatPlanPrice(planPrices.pro)}
                   </span>
                   <span className="text-muted-foreground">/mês</span>
                 </div>
@@ -444,7 +445,7 @@ function LandingPageContent({
                 </div>
                 <div className="mb-6">
                   <span className={cn("text-4xl font-bold", planSalesTheme("premium").price)}>
-                    R${planPrices.premium}
+                    {formatPlanPrice(planPrices.premium)}
                   </span>
                   <span className="text-muted-foreground">/mês</span>
                 </div>

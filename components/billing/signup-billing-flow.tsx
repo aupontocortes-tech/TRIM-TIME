@@ -9,6 +9,7 @@ import type { SignupBillingMode } from "@/lib/billing/signup-mode"
 import type { SubscriptionPlan } from "@/lib/db/types"
 import type { PlanCatalog } from "@/lib/plan-catalog"
 import { landingPlanButtonClass, planSalesTheme } from "@/lib/plan-sales-theme"
+import { formatPlanPricePerMonth } from "@/lib/format-plan-price"
 import { TRIAL_PLAN } from "@/lib/plans"
 import { cn } from "@/lib/utils"
 import { ArrowLeft, Gift, PartyPopper, Rocket, Sparkles } from "lucide-react"
@@ -64,7 +65,7 @@ export function SignupBillingFlow({ catalog, trialDays, onSuccess, onError }: Pr
               <div>
                 <p className="font-semibold text-foreground">Plano {selectedPlanName}</p>
                 <p className="text-sm text-muted-foreground">
-                  R$ {selectedPlanPrice}/mês — ativa assim que o cartão for validado
+                  {formatPlanPricePerMonth(selectedPlanPrice)} — ativa assim que o cartão for validado
                 </p>
               </div>
             </div>
@@ -146,7 +147,7 @@ export function SignupBillingFlow({ catalog, trialDays, onSuccess, onError }: Pr
           />
           <p className="text-xs text-muted-foreground rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
             Cobrança de{" "}
-            <strong className={hireTheme.price}>R$ {selectedPlanPrice}/mês</strong> após validar o
+            <strong className={hireTheme.price}>{formatPlanPricePerMonth(selectedPlanPrice)}</strong> após validar o
             cartão — sem período de teste.
           </p>
         </div>
@@ -212,7 +213,7 @@ export function SignupBillingFlow({ catalog, trialDays, onSuccess, onError }: Pr
               </li>
               <li className="flex items-center gap-2">
                 <span className="text-emerald-500">✓</span>
-                Depois R$ {trialPrice}/mês se continuar · cancele antes e pague nada
+                Depois {formatPlanPricePerMonth(trialPrice)} se continuar · cancele antes e pague nada
               </li>
             </ul>
           </div>
@@ -242,7 +243,7 @@ export function SignupBillingFlow({ catalog, trialDays, onSuccess, onError }: Pr
           onClick={() => setStep("card")}
         >
           <Rocket className="w-4 h-4 mr-2" />
-          Contratar {selectedPlanName} — R$ {selectedPlanPrice}/mês
+          Contratar {selectedPlanName} — {formatPlanPricePerMonth(selectedPlanPrice)}
         </Button>
       )}
 
