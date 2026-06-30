@@ -3776,11 +3776,7 @@ export default function ConfiguracoesPage() {
               description="E-mail e senha com que você entra no painel (Google ou senha). Isso é o seu login pessoal — não é o plano nem os dados da barbearia na aba Barbearia."
             />
 
-            <DeleteAccountSection
-              barbershopName={barbershop?.name ?? ""}
-              role={barbershop?.role}
-              isTest={barbershop?.is_test}
-            />
+            <DeleteAccountSection barbershopName={barbershop?.name ?? ""} />
 
             {showInternalAccountHints ? (
               <Card className="bg-card border-border">
