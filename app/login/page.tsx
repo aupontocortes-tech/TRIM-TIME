@@ -37,6 +37,7 @@ function LoginPageContent() {
     password: ""
   })
   const [error, setError] = useState("")
+  const [success, setSuccess] = useState("")
 
   useEffect(() => {
     const oauthErr = searchParams.get("error")
@@ -44,6 +45,12 @@ function LoginPageContent() {
       setError(OAUTH_ERRORS[oauthErr])
     }
   }, [searchParams])
+
+  useEffect(() => {
+    if (searchParams.get("deleted") !== "1") return
+    setSuccess("Sua conta foi excluída permanentemente. Obrigado por ter usado o Trim Time.")
+    router.replace("/login")
+  }, [searchParams, router])
 
   useEffect(() => {
     try {
@@ -144,6 +151,11 @@ function LoginPageContent() {
           <CardContent className="pt-6">
             <PainelOAuthButtons flow="login" disabled={isLoading} />
             <form onSubmit={handleSubmit} className="space-y-4">
+              {success ? (
+                <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/30 text-green-700 dark:text-green-400 text-sm">
+                  {success}
+                </div>
+              ) : null}
               {error && (
                 <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
                   {error}

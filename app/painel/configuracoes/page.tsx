@@ -95,6 +95,7 @@ import { planSalesButtonVariant, planSalesTheme } from "@/lib/plan-sales-theme"
 import { BarberPhotoAdjust } from "@/components/barber-photo-adjust"
 import { WhatsAppConnectWizard } from "@/components/painel/whatsapp-connect-wizard"
 import { ChangePasswordForm } from "@/components/account/change-password-form"
+import { DeleteAccountSection } from "@/components/account/delete-account-section"
 import {
   barbeariaContactFormFromScope,
   isPrincipalBarbershopUnit,
@@ -3773,6 +3774,12 @@ export default function ConfiguracoesPage() {
           <div className="space-y-4 max-w-2xl">
             <ChangePasswordForm
               description="E-mail e senha com que você entra no painel (Google ou senha). Isso é o seu login pessoal — não é o plano nem os dados da barbearia na aba Barbearia."
+            />
+
+            <DeleteAccountSection
+              barbershopName={barbershop?.name ?? ""}
+              role={barbershop?.role}
+              isTest={barbershop?.is_test}
             />
 
             {showInternalAccountHints ? (
