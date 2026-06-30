@@ -9,7 +9,7 @@ const BARBERSHOP_ID_COOKIE = "trimtime_barbershop_id"
 export const BARBERSHOP_UNIT_COOKIE = "trimtime_barbershop_unit_id"
 export const IMPERSONATE_COOKIE = "trimtime_impersonate_id"
 
-async function clearPainelSessionCookies(): Promise<void> {
+export async function clearPainelSessionCookies(): Promise<void> {
   const cookieStore = await cookies()
   cookieStore.delete(BARBERSHOP_ID_COOKIE)
   cookieStore.delete(BARBERSHOP_UNIT_COOKIE)

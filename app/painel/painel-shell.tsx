@@ -23,6 +23,7 @@ import {
   Lock,
   MessageCircle,
   Building2,
+  Trash2,
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -33,6 +34,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { BrandLogo } from "@/components/brand-logo"
+import { DeleteAccountDialog } from "@/components/delete-account-dialog"
 import { SubscriptionGate } from "@/components/subscription-gate"
 import { PLAN_SIMULATION_COOKIE_NAME } from "@/lib/plan-simulation-constants"
 
@@ -61,9 +63,14 @@ function PainelLayoutInner({ children }: { children: React.ReactNode }) {
   const { barbershop } = useBarbershop()
   const { units, selectedUnitId, changeUnit, loading: unitsLoading } = useUnits()
   const [impersonating, setImpersonating] = useState(false)
+  const [deleteAccountOpen, setDeleteAccountOpen] = useState(false)
   /** Role para menu: hoje sempre da barbearia; quando houver login de barbeiro, usar barber.role (user = só agenda/clientes). */
   const menuRole: MenuRole = (barbershop?.role ?? "admin_barbershop") as MenuRole
   const visibleMenuItems = menuItems.filter((item) => !item.roles || item.roles.includes(menuRole))
+  const canDeleteAccount =
+    !impersonating &&
+    barbershop?.role !== "super_admin" &&
+    !barbershop?.is_test
 
   useEffect(() => {
     fetch("/api/admin/impersonate")
@@ -218,6 +225,18 @@ function PainelLayoutInner({ children }: { children: React.ReactNode }) {
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
+                {canDeleteAccount ? (
+                  <>
+                    <DropdownMenuItem
+                      className="text-destructive cursor-pointer focus:text-destructive"
+                      onClick={() => setDeleteAccountOpen(true)}
+                    >
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Excluir conta
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                  </>
+                ) : null}
                 <DropdownMenuItem className="text-destructive cursor-pointer" onClick={handleSair}>
                   <LogOut className="w-4 h-4 mr-2" />
                   Sair
@@ -304,6 +323,14 @@ function PainelLayoutInner({ children }: { children: React.ReactNode }) {
           <SubscriptionGate>{children}</SubscriptionGate>
         </main>
       </div>
+
+      {canDeleteAccount && barbershop?.name ? (
+        <DeleteAccountDialog
+          open={deleteAccountOpen}
+          onOpenChange={setDeleteAccountOpen}
+          barbershopName={barbershop.name}
+        />
+      ) : null}
     </div>
   )
 }
