@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { findBarbershopByLoginEmail } from "@/lib/barbershop-login"
 import { prisma } from "@/lib/prisma"
 import { BARBERSHOP_ID_COOKIE } from "@/lib/tenant"
 import { conflictForBarbershopSignup } from "@/lib/barbershop-signup-conflicts"
@@ -38,10 +39,10 @@ export async function handlePainelOAuthCallback(
   const emailCanon = canonicalSignupEmail(normalizeSignupEmail(user.email))
   const emailDisplay = user.email.trim()
 
-  const barbershop = await prisma.barbershop.findFirst({
-    where: { email: emailCanon },
-    select: { id: true, suspendedAt: true },
-  })
+  const barbershopRow = await findBarbershopByLoginEmail(user.email)
+  const barbershop = barbershopRow
+    ? { id: barbershopRow.id, suspendedAt: barbershopRow.suspendedAt }
+    : null
 
   if (flow === "login") {
     if (!barbershop) {

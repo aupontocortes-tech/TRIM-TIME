@@ -549,6 +549,41 @@ export async function changeSubscriptionPlan(
   )
 }
 
+export async function cancelSubscriptionKeepingCard(barbershopId: string): Promise<void> {
+  const sub = await prisma.subscription.findUnique({ where: { barbershopId } })
+  if (!sub) return
+
+  if (await isBillingEnabled()) {
+    if (sub.asaasPixAutomaticAuthId) {
+      try {
+        await cancelPixAutomaticAuthorization(sub.asaasPixAutomaticAuthId)
+      } catch (e) {
+        console.warn("[billing] cancel pix auth after refund:", e)
+      }
+    }
+    if (sub.asaasSubscriptionId) {
+      try {
+        await cancelAsaasSubscription(sub.asaasSubscriptionId)
+      } catch (e) {
+        console.warn("[billing] cancel asaas sub after refund:", e)
+      }
+    }
+  }
+
+  await prisma.subscription.update({
+    where: { barbershopId },
+    data: {
+      status: "canceled",
+      nextPayment: null,
+      asaasSubscriptionId: null,
+      asaasPixAutomaticAuthId: null,
+      postTrialChoice: null,
+      graceAccessUntil: null,
+      trialEnd: null,
+    },
+  })
+}
+
 export async function cancelBarbershopSubscription(barbershopId: string): Promise<void> {
   const sub = await prisma.subscription.findUnique({ where: { barbershopId } })
   if (!sub) throw new Error("Assinatura não encontrada")
@@ -706,6 +741,76 @@ export type InAppCardSetupResult = {
 export type RegisterCardOptions = {
   mode: SignupBillingMode
   plan?: SubscriptionPlan
+}
+
+function buildCardTokenInput(
+  payload: TrialCardSetupPayload,
+  customerId: string,
+  remoteIp: string
+) {
+  const holder = payload.creditCardHolderInfo
+  const phone =
+    digitsOnly(holder.mobilePhone || "") ||
+    digitsOnly(holder.phone || "") ||
+    "11999999999"
+
+  const creditCard = {
+    holderName: payload.creditCard.holderName.trim(),
+    number: normalizeCardNumber(payload.creditCard.number),
+    expiryMonth: normalizeExpiryMonth(payload.creditCard.expiryMonth),
+    expiryYear: normalizeExpiryYear(payload.creditCard.expiryYear),
+    ccv: digitsOnly(payload.creditCard.ccv),
+  }
+  const creditCardHolderInfo = {
+    name: holder.name.trim(),
+    email: holder.email.trim(),
+    cpfCnpj: digitsOnly(holder.cpfCnpj),
+    postalCode: digitsOnly(holder.postalCode),
+    addressNumber: holder.addressNumber.trim() || "S/N",
+    addressComplement: holder.addressComplement?.trim() || undefined,
+    phone,
+    mobilePhone: holder.mobilePhone ? digitsOnly(holder.mobilePhone) : undefined,
+  }
+
+  return { creditCard, creditCardHolderInfo, tokenize: () =>
+    tokenizeAsaasCreditCard({ customerId, creditCard, creditCardHolderInfo, remoteIp })
+  }
+}
+
+/** Atualiza cartão sem nova cobrança — mantém cadastro para recontratar depois. */
+export async function changeSubscriptionCardInApp(
+  barbershopId: string,
+  payload: TrialCardSetupPayload,
+  remoteIp: string
+): Promise<InAppCardSetupResult> {
+  const sub = await prisma.subscription.findUnique({ where: { barbershopId } })
+  if (!sub) throw new Error("Assinatura não encontrada")
+
+  const customerId = sub.asaasCustomerId ?? (await ensureAsaasCustomer(barbershopId))
+  const { tokenize } = buildCardTokenInput(payload, customerId, remoteIp)
+  const token = await tokenize()
+
+  if (sub.asaasSubscriptionId) {
+    await updateAsaasSubscriptionCreditCard(sub.asaasSubscriptionId, {
+      creditCardToken: token.creditCardToken,
+      remoteIp,
+    })
+  }
+
+  await prisma.subscription.update({
+    where: { barbershopId },
+    data: {
+      cardSetupAt: new Date(),
+      asaasCustomerId: customerId,
+      billingType: sub.billingType ?? "CREDIT_CARD",
+    },
+  })
+
+  return {
+    asaasSubscriptionId: sub.asaasSubscriptionId ?? "",
+    creditCardLast4: token.creditCardNumber ?? null,
+    creditCardBrand: token.creditCardBrand ?? null,
+  }
 }
 
 /**

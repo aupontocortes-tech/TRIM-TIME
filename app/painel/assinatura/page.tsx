@@ -74,6 +74,7 @@ function AssinaturaContent() {
     pixCopyPaste: string | null
     pixQrCode: string | null
   } | null>(null)
+  const [showChangeCard, setShowChangeCard] = useState(false)
 
   const trialLengthDays = catalog?.trialDays ?? TRIAL_DAYS
 
@@ -136,6 +137,7 @@ function AssinaturaContent() {
   const handleCardFormSuccess = () => {
     setCardComplete(true)
     setNeedsCard(false)
+    setShowChangeCard(false)
     setMsg(null)
     setErr(null)
     void load()
@@ -377,9 +379,11 @@ function AssinaturaContent() {
         <div className="space-y-3">
           <div className="flex items-center gap-2 text-sm text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 border rounded-lg p-3">
             <CheckCircle2 className="w-5 h-5 shrink-0" />
-            {subscription?.status === "past_due"
-              ? "Cartão cadastrado. Aguardando confirmação do pagamento para liberar o plano contratado."
-              : `Cartão cadastrado. Teste grátis no plano Pro por ${trialLengthDays} dias — cobrança automática após o teste, salvo se você cancelar antes.`}
+            {status === "canceled"
+              ? "Cartão cadastrado. Escolha um plano abaixo para contratar de novo."
+              : subscription?.status === "past_due"
+                ? "Cartão cadastrado. Aguardando confirmação do pagamento para liberar o plano contratado."
+                : `Cartão cadastrado. Teste grátis no plano Pro por ${trialLengthDays} dias — cobrança automática após o teste, salvo se você cancelar antes.`}
           </div>
           {(setupCard || isOnboardingCheckout) && (
             <Button asChild className="w-full">
@@ -579,6 +583,42 @@ function AssinaturaContent() {
         </CardContent>
       </Card>
 
+      {cardComplete && !billingExempt && billingEnabled && catalog ? (
+        <Card className="border-muted">
+          <CardHeader>
+            <CardTitle className="text-base">Cartão de pagamento</CardTitle>
+            <CardDescription>
+              {status === "canceled"
+                ? "Seu plano foi cancelado, mas o cartão continua salvo. Troque aqui se quiser usar outro cartão ao recontratar."
+                : "Troque o cartão usado na mensalidade automática, se precisar."}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {showChangeCard ? (
+              <>
+                <TrialCardForm
+                  mode="change"
+                  catalog={catalog}
+                  onSuccess={() => {
+                    setMsg("Cartão atualizado com sucesso.")
+                    handleCardFormSuccess()
+                  }}
+                  onError={setErr}
+                />
+                <Button variant="ghost" className="w-full" onClick={() => setShowChangeCard(false)}>
+                  Cancelar
+                </Button>
+              </>
+            ) : (
+              <Button variant="outline" className="w-full" onClick={() => setShowChangeCard(true)}>
+                <CreditCard className="w-4 h-4 mr-2" />
+                Trocar cartão
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      ) : null}
+
       {showPlanCheckout ? (
         <Card className="border-primary/40">
           <CardHeader>
@@ -588,11 +628,13 @@ function AssinaturaContent() {
                 : "Escolha seu plano"}
             </CardTitle>
             <CardDescription>
-              {trialActive && subscription?.status === "trial"
-                ? `Você está no teste grátis do Pro (${trialDaysLeft} dia(s) restantes). Escolha Básico, Pro ou Premium para contratar agora — o valor é do plano selecionado, não só do teste.`
-                : needsPlan
-                  ? "Seu período de teste terminou ou a assinatura precisa ser ativada."
-                  : "Regularize ou escolha um novo plano."}
+              {status === "canceled"
+                ? "Seu plano foi cancelado. Escolha um plano para contratar de novo com o cartão cadastrado."
+                : trialActive && subscription?.status === "trial"
+                  ? `Você está no teste grátis do Pro (${trialDaysLeft} dia(s) restantes). Escolha Básico, Pro ou Premium para contratar agora — o valor é do plano selecionado, não só do teste.`
+                  : needsPlan
+                    ? "Seu período de teste terminou ou a assinatura precisa ser ativada."
+                    : "Regularize ou escolha um novo plano."}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">

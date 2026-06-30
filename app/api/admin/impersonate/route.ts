@@ -1,37 +1,26 @@
 import { NextResponse } from "next/server"
 import { cookies } from "next/headers"
-import { createServiceRoleClient } from "@/lib/supabase/server"
-import { getRealBarbershopIdFromRequest, IMPERSONATE_COOKIE } from "@/lib/tenant"
+import { requireSuperAdmin } from "@/lib/admin-auth"
+import { IMPERSONATE_COOKIE } from "@/lib/tenant"
 
 /** Verifica se o usuário é super_admin e se está impersonando. */
 export async function GET() {
   try {
-    const barbershopId = await getRealBarbershopIdFromRequest()
-    if (!barbershopId) return NextResponse.json({ impersonating: false, isAdmin: false })
-    const supabase = createServiceRoleClient()
-    const { data: me } = await supabase.from("barbershops").select("role").eq("id", barbershopId).single()
-    const isAdmin = me?.role === "super_admin"
+    const auth = await requireSuperAdmin()
+    if (!auth.ok) return NextResponse.json({ impersonating: false, isAdmin: false })
     const cookieStore = await cookies()
-    const impersonating = isAdmin && !!cookieStore.get(IMPERSONATE_COOKIE)?.value
-    return NextResponse.json({ impersonating, isAdmin })
+    const impersonating = !!cookieStore.get(IMPERSONATE_COOKIE)?.value
+    return NextResponse.json({ impersonating, isAdmin: true })
   } catch {
     return NextResponse.json({ impersonating: false, isAdmin: false })
   }
 }
 
-/** Definir ou limpar impersonação. Apenas role=admin. */
+/** Definir ou limpar impersonação. Apenas super_admin. */
 export async function POST(request: Request) {
   try {
-    const barbershopId = await getRealBarbershopIdFromRequest()
-    if (!barbershopId) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
-
-    const supabase = createServiceRoleClient()
-    const { data: me } = await supabase
-      .from("barbershops")
-      .select("role")
-      .eq("id", barbershopId)
-      .single()
-    if (me?.role !== "super_admin") return NextResponse.json({ error: "Acesso negado" }, { status: 403 })
+    const auth = await requireSuperAdmin()
+    if (!auth.ok) return auth.response
 
     const body = await request.json() as { barbershop_id?: string }
     const cookieStore = await cookies()

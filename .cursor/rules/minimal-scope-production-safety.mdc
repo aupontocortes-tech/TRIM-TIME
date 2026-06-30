@@ -1,0 +1,35 @@
+---
+description: Só executar o pedido explícito do usuário; nunca apagar/resetar dados de produção além do alvo nomeado
+alwaysApply: true
+---
+
+# Escopo mínimo e segurança de dados (Trim Time)
+
+## Regra principal
+
+Quando o usuário pedir **uma coisa**, fazer **somente essa coisa**. Não “melhorar”, resetar, apagar ou alterar outras contas, barbearias, unidades ou dados relacionados.
+
+## Contas e barbearias protegidas (nunca tocar sem pedido explícito por nome/slug)
+
+- **ADM1** (`slug: adm`, `bsbthiagolins@gmail.com`, `super_admin`)
+- **ADM2** (unidade da ADM1 — não é barbearia separada)
+- Qualquer conta `super_admin` ou `is_test` configurada pelo dono
+
+## Operações destrutivas
+
+Antes de **reset de cobrança**, **apagar barbearia**, **apagar unidade**, **apagar barbeiro** ou **script no banco**:
+
+1. Confirmar o **nome ou slug exato** do alvo (ex.: só `teste` quando pedirem “barbearia teste”).
+2. **Não** rodar em outras barbearias “por precaução” ou “para corrigir”.
+3. **Não** apagar duplicatas de e-mail sem o usuário dizer qual registro remover.
+4. Preferir **ler/inspecionar** antes de escrever no banco de produção.
+
+## Reset de cobrança
+
+- Só na barbearia **nomeada** no pedido (ex.: `node scripts/reset-barbershop-billing.mjs teste`).
+- Contas `super_admin` e `is_test`: **bloqueadas** — não resetar.
+
+## Código
+
+- Alterar só os arquivos necessários ao pedido atual.
+- Não refatorar telas ou fluxos que já funcionam “de brinde”.

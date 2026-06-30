@@ -185,7 +185,11 @@ function FinanceiroContent() {
         void load({ sync: true })
         return
       }
-      setMsg(`Estorno solicitado para ${refundTarget.barbershop_name}. Status Asaas: ${j.refundStatus ?? "em processamento"}.`)
+      setMsg(
+        `Estorno solicitado para ${refundTarget.barbershop_name}. Status Asaas: ${j.refundStatus ?? "em processamento"}.${
+          j.subscriptionCanceled ? " O plano da barbearia foi cancelado (cartão mantido para recontratar)." : ""
+        }`
+      )
       setRefundTarget(null)
       void load()
     } catch {
@@ -350,7 +354,7 @@ function FinanceiroContent() {
             <DialogTitle>Estornar cobrança</DialogTitle>
             <DialogDescription className="text-zinc-400">
               {refundTarget
-                ? `${formatBrl(refundTarget.amount)} — ${refundTarget.barbershop_name}. O valor será devolvido pelo Asaas.`
+                ? `${formatBrl(refundTarget.amount)} — ${refundTarget.barbershop_name}. O valor será devolvido pelo Asaas e o plano da barbearia será cancelado (o cartão permanece cadastrado).`
                 : null}
             </DialogDescription>
           </DialogHeader>

@@ -75,9 +75,14 @@ export async function resetBarbershopBillingForFreshStart(
 
   const bs = await prisma.barbershop.findUnique({
     where: { id: barbershopId },
-    select: { id: true, name: true },
+    select: { id: true, name: true, role: true, isTest: true },
   })
   if (!bs) throw new Error("Barbearia não encontrada.")
+  if (bs.role === "super_admin" || bs.isTest) {
+    throw new Error(
+      `Conta protegida (${bs.name}): super_admin e contas is_test não podem ter cobrança resetada pela API.`
+    )
+  }
 
   const sub = await prisma.subscription.findUnique({ where: { barbershopId } })
 

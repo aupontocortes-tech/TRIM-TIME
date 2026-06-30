@@ -3,10 +3,18 @@
  */
 
 import { cookies } from "next/headers"
+import { prisma } from "@/lib/prisma"
 
 const BARBERSHOP_ID_COOKIE = "trimtime_barbershop_id"
 export const BARBERSHOP_UNIT_COOKIE = "trimtime_barbershop_unit_id"
 export const IMPERSONATE_COOKIE = "trimtime_impersonate_id"
+
+async function clearPainelSessionCookies(): Promise<void> {
+  const cookieStore = await cookies()
+  cookieStore.delete(BARBERSHOP_ID_COOKIE)
+  cookieStore.delete(BARBERSHOP_UNIT_COOKIE)
+  cookieStore.delete(IMPERSONATE_COOKIE)
+}
 
 /** Usado em API routes e Server Components para obter o barbershop do request. Se impersonação ativa, retorna o id impersonado. */
 export async function getBarbershopIdFromRequest(): Promise<string | null> {
@@ -28,10 +36,18 @@ export async function getBarbershopUnitIdFromRequest(): Promise<string | null> {
   return cookieStore.get(BARBERSHOP_UNIT_COOKIE)?.value ?? null
 }
 
-/** Exige barbershop_id; lança se não houver (para usar em API que requer tenant) */
+/** Exige barbershop_id válido no banco; limpa cookies se a conta foi removida. */
 export async function requireBarbershopId(): Promise<string> {
   const id = await getBarbershopIdFromRequest()
   if (!id) throw new Error("Barbershop não identificada. Faça login.")
+  const shop = await prisma.barbershop.findUnique({
+    where: { id },
+    select: { id: true },
+  })
+  if (!shop) {
+    await clearPainelSessionCookies()
+    throw new Error("Sessão inválida. Faça login novamente.")
+  }
   return id
 }
 

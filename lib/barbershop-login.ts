@@ -10,6 +10,21 @@ export type BarbershopLoginRow = {
   email: string
 }
 
+/** Quando o mesmo e-mail tem várias barbearias, prioriza super_admin (ex.: ADM1). */
+export function pickPreferredBarbershopForLogin<
+  T extends { role: string; createdAt?: Date },
+>(rows: T[]): T | null {
+  if (rows.length === 0) return null
+  const superAdmin = rows.find((r) => r.role === "super_admin")
+  if (superAdmin) return superAdmin
+  if (rows.some((r) => r.createdAt)) {
+    return [...rows].sort(
+      (a, b) => (a.createdAt?.getTime() ?? 0) - (b.createdAt?.getTime() ?? 0)
+    )[0]
+  }
+  return rows[0]
+}
+
 /** Busca barbearia pelo e-mail digitado (inclui equivalência Gmail: pontos e +alias). */
 export async function findBarbershopByLoginEmail(
   emailInput: string
@@ -18,8 +33,18 @@ export async function findBarbershopByLoginEmail(
   const emailCanon = canonicalSignupEmail(emailNorm)
   const emails = emailNorm === emailCanon ? [emailNorm] : [emailNorm, emailCanon]
 
-  return prisma.barbershop.findFirst({
+  const rows = await prisma.barbershop.findMany({
     where: { email: { in: emails } },
-    select: { id: true, role: true, settings: true, suspendedAt: true, email: true },
+    select: {
+      id: true,
+      role: true,
+      settings: true,
+      suspendedAt: true,
+      email: true,
+      createdAt: true,
+    },
+    orderBy: { createdAt: "asc" },
   })
+
+  return pickPreferredBarbershopForLogin(rows)
 }

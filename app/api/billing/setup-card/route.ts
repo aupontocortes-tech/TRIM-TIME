@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import {
+  changeSubscriptionCardInApp,
   getTrialCardSetupPrefill,
   isBillingEnabled,
   registerCardInApp,
@@ -103,12 +104,23 @@ export async function POST(req: Request) {
     }
 
     const b = body as Record<string, unknown>
+    const remoteIp = getClientIpFromRequest(req)
+
+    if (b.mode === "change") {
+      const result = await changeSubscriptionCardInApp(barbershopId, parsed, remoteIp)
+      return NextResponse.json({
+        ok: true,
+        in_app: true,
+        card_setup_complete: true,
+        ...result,
+      })
+    }
+
     const modeParsed = parseSignupBillingMode(b.mode, b.plan)
     if (typeof modeParsed === "string") {
       return NextResponse.json({ error: modeParsed }, { status: 400 })
     }
 
-    const remoteIp = getClientIpFromRequest(req)
     const result = await registerCardInApp(barbershopId, parsed, remoteIp, {
       mode: modeParsed.mode,
       plan: (modeParsed.plan ?? undefined) as SubscriptionPlan | undefined,

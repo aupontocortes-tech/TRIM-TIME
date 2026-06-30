@@ -18,7 +18,7 @@ type Prefill = {
 }
 
 type TrialCardFormProps = {
-  mode?: SignupBillingMode
+  mode?: SignupBillingMode | "change"
   plan?: SubscriptionPlan
   trialDays?: number
   catalog?: PlanCatalog | null
@@ -359,9 +359,11 @@ export function TrialCardForm({
 
       <Button type="submit" className="w-full" disabled={submitting}>
         {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CreditCard className="w-4 h-4 mr-2" />}
-        {mode === "immediate"
-          ? `Cadastrar cartão e ativar ${catalog?.plans[plan]?.name ?? "plano"}`
-          : `Cadastrar cartão e iniciar teste grátis (${trialDays} dias)`}
+        {mode === "change"
+          ? "Salvar novo cartão"
+          : mode === "immediate"
+            ? `Cadastrar cartão e ativar ${catalog?.plans[plan]?.name ?? "plano"}`
+            : `Cadastrar cartão e iniciar teste grátis (${trialDays} dias)`}
       </Button>
     </form>
   )

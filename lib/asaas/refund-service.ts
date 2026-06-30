@@ -6,7 +6,7 @@ import {
   type AsaasPayment,
 } from "@/lib/asaas/client"
 import { isAsaasSandboxApi } from "@/lib/asaas/config"
-import { isBillingEnabled } from "@/lib/asaas/billing-service"
+import { isBillingEnabled, cancelSubscriptionKeepingCard } from "@/lib/asaas/billing-service"
 import { tryConfirmSandboxBarbershopPayment } from "@/lib/asaas/sandbox-payment-sync"
 import { prisma } from "@/lib/prisma"
 
@@ -250,7 +250,7 @@ export async function refundBarbershopPayment(params: {
   adminBarbershopId: string
   description?: string
   value?: number
-}): Promise<{ ok: true; refundStatus: string; asaasStatus: string }> {
+}): Promise<{ ok: true; refundStatus: string; asaasStatus: string; subscriptionCanceled: boolean }> {
   if (!(await isBillingEnabled())) {
     throw new Error("Cobrança online não está ativa.")
   }
@@ -316,5 +316,11 @@ export async function refundBarbershopPayment(params: {
     },
   })
 
-  return { ok: true, refundStatus: refund.status, asaasStatus: asaasPayment.status }
+  let subscriptionCanceled = false
+  if (row.plan) {
+    await cancelSubscriptionKeepingCard(row.barbershopId)
+    subscriptionCanceled = true
+  }
+
+  return { ok: true, refundStatus: refund.status, asaasStatus: asaasPayment.status, subscriptionCanceled }
 }

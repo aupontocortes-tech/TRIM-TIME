@@ -16,6 +16,7 @@ dotenv.config({ path: path.join(root, ".env.local") })
 const args = process.argv.slice(2)
 const query = args.find((a) => !a.startsWith("--"))?.trim()
 const keepCard = args.includes("--keep-card")
+const force = args.includes("--force")
 
 if (!query) {
   console.error("Uso: node scripts/reset-barbershop-billing.mjs <nome-ou-slug> [--keep-card]")
@@ -37,13 +38,27 @@ const bs = await prisma.barbershop.findFirst({
       { slug: { equals: query, mode: "insensitive" } },
     ],
   },
-  select: { id: true, name: true, email: true, slug: true },
+  select: { id: true, name: true, email: true, slug: true, role: true, isTest: true },
 })
 
 if (!bs) {
   console.error(`Barbearia não encontrada: "${query}"`)
   process.exit(1)
 }
+
+if (!force && (bs.role === "super_admin" || bs.isTest)) {
+  console.error(
+    `Bloqueado: "${bs.name}" (${bs.slug}) é conta protegida (super_admin ou is_test).\n` +
+      `Só barbearias de teste de cobrança devem ser resetadas. Use --force se tiver certeza.`
+  )
+  process.exit(1)
+}
+
+console.log("\nAlvo do reset:")
+console.log(`  Nome: ${bs.name}`)
+console.log(`  Slug: ${bs.slug}`)
+console.log(`  E-mail: ${bs.email}`)
+console.log(`  ID: ${bs.id}\n`)
 
 const sub = await prisma.subscription.findUnique({
   where: { barbershopId: bs.id },

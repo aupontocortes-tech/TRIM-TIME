@@ -1,5 +1,5 @@
 import type { SubscriptionPlan, SubscriptionStatus } from "@/lib/db/types"
-import { markCardSetupComplete } from "@/lib/asaas/billing-service"
+import { cancelSubscriptionKeepingCard, markCardSetupComplete } from "@/lib/asaas/billing-service"
 import { getAsaasPayment } from "@/lib/asaas/client"
 import { prisma } from "@/lib/prisma"
 
@@ -273,6 +273,7 @@ export async function handleAsaasWebhook(payload: WebhookPayload): Promise<void>
         },
       }).catch(() => {})
     }
+    await cancelSubscriptionKeepingCard(sub.barbershopId)
     return
   }
 

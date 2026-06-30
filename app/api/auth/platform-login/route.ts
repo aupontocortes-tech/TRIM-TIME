@@ -3,6 +3,7 @@ import { cookies } from "next/headers"
 import { BARBERSHOP_ID_COOKIE } from "@/lib/tenant"
 import { getBarbershopPasswordHash, withBarbershopPasswordHash } from "@/lib/barbershop-auth-settings"
 import { hashPassword, verifyPassword } from "@/lib/auth/password"
+import { findBarbershopByLoginEmail } from "@/lib/barbershop-login"
 import { prisma } from "@/lib/prisma"
 
 /**
@@ -23,10 +24,7 @@ export async function POST(request: Request) {
     const superAdminEmail = process.env.SUPER_ADMIN_EMAIL?.trim()?.toLowerCase()
     const envMatch = !!superAdminEmail && email === superAdminEmail
 
-    let barbershop = await prisma.barbershop.findFirst({
-      where: { email },
-      select: { id: true, role: true, settings: true, suspendedAt: true },
-    })
+    let barbershop = await findBarbershopByLoginEmail(email)
     if (!barbershop) {
       return NextResponse.json(
         { error: "Email não cadastrado. Crie a conta barbearia antes." },
