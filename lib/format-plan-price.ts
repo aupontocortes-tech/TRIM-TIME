@@ -1,3 +1,6 @@
+import type { SubscriptionPlan } from "@/lib/db/types"
+import type { PlanPricesMap } from "@/lib/plan-prices"
+
 /** Valor mensal do plano no padrão brasileiro (ex.: 1,00 · 59,90). */
 export function formatPlanPriceAmount(value: number): string {
   const n = Number(value)
@@ -16,4 +19,17 @@ export function formatPlanPrice(value: number): string {
 /** Ex.: R$ 59,90/mês */
 export function formatPlanPricePerMonth(value: number): string {
   return `${formatPlanPrice(value)}/mês`
+}
+
+export function formatPlanPricesMap(prices: PlanPricesMap): Record<SubscriptionPlan, string> {
+  return {
+    basic: formatPlanPrice(prices.basic),
+    pro: formatPlanPrice(prices.pro),
+    premium: formatPlanPrice(prices.premium),
+  }
+}
+
+/** Texto para campo do Super ADM (ex.: 59,90). */
+export function formatPlanPriceFieldValue(value: number): string {
+  return formatPlanPriceAmount(value)
 }

@@ -18,8 +18,9 @@ import { TrimTimeWordmark } from "@/components/trim-time-wordmark"
 import { LandingFeaturesCarousel } from "@/components/landing/landing-features-carousel"
 import { LANDING_FEATURES } from "@/lib/landing-features"
 import { landingPlanButtonClass, landingPlanCardClass, planSalesTheme } from "@/lib/plan-sales-theme"
-import { formatPlanPrice, formatPlanPricePerMonth } from "@/lib/format-plan-price"
+import { formatPlanPricesMap } from "@/lib/format-plan-price"
 import { cn } from "@/lib/utils"
+import type { SubscriptionPlan } from "@/lib/db/types"
 
 function WhatsappIcon({ className }: { className?: string }) {
   return (
@@ -71,16 +72,17 @@ function LandingWhatsappHeaderButton({
 export type LandingPageClientProps = {
   initialWhatsappUrl?: string | null
   initialPlanPrices?: typeof PLAN_PRICES
+  initialPlanPriceLabels?: Record<SubscriptionPlan, string>
 }
 
 function LandingPageContent({
   initialWhatsappUrl = null,
-  initialPlanPrices = PLAN_PRICES,
+  initialPlanPriceLabels = formatPlanPricesMap(PLAN_PRICES),
 }: LandingPageClientProps) {
   const searchParams = useSearchParams()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [whatsappUrl, setWhatsappUrl] = useState<string | null>(initialWhatsappUrl)
-  const [planPrices, setPlanPrices] = useState(initialPlanPrices)
+  const [planPriceLabels, setPlanPriceLabels] = useState(initialPlanPriceLabels)
 
   const oauthBookingMsg =
     searchParams.get("error") === "oauth_slug"
@@ -96,16 +98,15 @@ function LandingPageContent({
           j: {
             whatsapp_url?: string | null
             plan_prices?: typeof PLAN_PRICES
+            plan_price_labels?: Record<SubscriptionPlan, string>
           } | null
         ) => {
           if (!j) return
           if (j.whatsapp_url) setWhatsappUrl(j.whatsapp_url)
           if (j.plan_prices) {
-            setPlanPrices({
-              basic: j.plan_prices.basic ?? PLAN_PRICES.basic,
-              pro: j.plan_prices.pro ?? PLAN_PRICES.pro,
-              premium: j.plan_prices.premium ?? PLAN_PRICES.premium,
-            })
+            setPlanPriceLabels(
+              j.plan_price_labels ?? formatPlanPricesMap(j.plan_prices)
+            )
           }
         }
       )
@@ -382,7 +383,7 @@ function LandingPageContent({
                 </div>
                 <div className="mb-6">
                   <span className={cn("text-4xl font-bold", planSalesTheme("basic").price)}>
-                    {formatPlanPrice(planPrices.basic)}
+                    {planPriceLabels.basic}
                   </span>
                   <span className="text-muted-foreground">/mês</span>
                 </div>
@@ -416,7 +417,7 @@ function LandingPageContent({
                 </div>
                 <div className="mb-6">
                   <span className={cn("text-4xl font-bold", planSalesTheme("pro").price)}>
-                    {formatPlanPrice(planPrices.pro)}
+                    {planPriceLabels.pro}
                   </span>
                   <span className="text-muted-foreground">/mês</span>
                 </div>
@@ -445,7 +446,7 @@ function LandingPageContent({
                 </div>
                 <div className="mb-6">
                   <span className={cn("text-4xl font-bold", planSalesTheme("premium").price)}>
-                    {formatPlanPrice(planPrices.premium)}
+                    {planPriceLabels.premium}
                   </span>
                   <span className="text-muted-foreground">/mês</span>
                 </div>

@@ -16,7 +16,8 @@ import { ChevronDown, ChevronRight, CreditCard, Loader2, MessageCircle, Gauge } 
 import { ChangePasswordForm } from "@/components/account/change-password-form"
 import type { SubscriptionPlan } from "@/lib/db/types"
 import { PLAN_LABELS, PLAN_PRICES, TRIAL_DAYS } from "@/lib/plans"
-import { formatPlanPrice } from "@/lib/format-plan-price"
+import { formatPlanPrice, formatPlanPriceFieldValue } from "@/lib/format-plan-price"
+import { parsePlanPriceInput } from "@/lib/plan-prices"
 
 const GOLD = "#D4AF37"
 
@@ -168,6 +169,11 @@ export default function PlataformaConfiguracoesPage() {
   const [waErr, setWaErr] = useState<string | null>(null)
 
   const [prices, setPrices] = useState({ ...PLAN_PRICES })
+  const [priceFields, setPriceFields] = useState({
+    basic: formatPlanPriceFieldValue(PLAN_PRICES.basic),
+    pro: formatPlanPriceFieldValue(PLAN_PRICES.pro),
+    premium: formatPlanPriceFieldValue(PLAN_PRICES.premium),
+  })
   const [trialDays, setTrialDays] = useState(TRIAL_DAYS)
   const [trialPlan, setTrialPlan] = useState<SubscriptionPlan>("pro")
   const [paymentApiEnabled, setPaymentApiEnabled] = useState(false)
@@ -194,6 +200,11 @@ export default function PlataformaConfiguracoesPage() {
           basic: j.plan_prices.basic ?? PLAN_PRICES.basic,
           pro: j.plan_prices.pro ?? PLAN_PRICES.pro,
           premium: j.plan_prices.premium ?? PLAN_PRICES.premium,
+        })
+        setPriceFields({
+          basic: formatPlanPriceFieldValue(j.plan_prices.basic ?? PLAN_PRICES.basic),
+          pro: formatPlanPriceFieldValue(j.plan_prices.pro ?? PLAN_PRICES.pro),
+          premium: formatPlanPriceFieldValue(j.plan_prices.premium ?? PLAN_PRICES.premium),
         })
       }
       if (typeof j.default_trial_days === "number") setTrialDays(j.default_trial_days)
@@ -246,14 +257,22 @@ export default function PlataformaConfiguracoesPage() {
     setPlansMsg(null)
     setPlansErr(null)
     try {
+      const parsedBasic = parsePlanPriceInput(priceFields.basic)
+      const parsedPro = parsePlanPriceInput(priceFields.pro)
+      const parsedPremium = parsePlanPriceInput(priceFields.premium)
+      if (parsedBasic == null || parsedPro == null || parsedPremium == null) {
+        setPlansErr("Informe valores válidos (ex.: 5,00 ou 59,90).")
+        return
+      }
+
       const r = await fetch("/api/admin/platform-settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
-          price_basic: prices.basic,
-          price_pro: prices.pro,
-          price_premium: prices.premium,
+          price_basic: parsedBasic,
+          price_pro: parsedPro,
+          price_premium: parsedPremium,
           default_trial_days: trialDays,
           default_trial_plan: trialPlan,
           payment_api_enabled: paymentApiEnabled,
@@ -264,7 +283,14 @@ export default function PlataformaConfiguracoesPage() {
         setPlansErr(j.error || "Não foi possível salvar")
         return
       }
-      if (j.plan_prices) setPrices(j.plan_prices)
+      if (j.plan_prices) {
+        setPrices(j.plan_prices)
+        setPriceFields({
+          basic: formatPlanPriceFieldValue(j.plan_prices.basic),
+          pro: formatPlanPriceFieldValue(j.plan_prices.pro),
+          premium: formatPlanPriceFieldValue(j.plan_prices.premium),
+        })
+      }
       setPaymentApiActive(!!j.payment_api_active)
       setPlansMsg("Valores dos planos salvos.")
       setPlansOpen(false)
@@ -416,16 +442,23 @@ export default function PlataformaConfiguracoesPage() {
                     <span className="text-zinc-500 text-sm">R$</span>
                     <Input
                       id={`price-${plan}`}
-                      type="number"
-                      min={1}
-                      step={0.01}
+                      type="text"
+                      inputMode="decimal"
                       className="bg-zinc-950 border-zinc-700 text-white"
-                      value={prices[plan]}
+                      value={priceFields[plan]}
                       onChange={(e) =>
-                        setPrices((prev) => ({
+                        setPriceFields((prev) => ({
                           ...prev,
-                          [plan]: Number(e.target.value) || 0,
+                          [plan]: e.target.value.replace(/[^\d,]/g, ""),
                         }))
+                      }
+                      onBlur={() =>
+                        setPriceFields((prev) => {
+                          const parsed = parsePlanPriceInput(prev[plan])
+                          return parsed == null
+                            ? prev
+                            : { ...prev, [plan]: formatPlanPriceFieldValue(parsed) }
+                        })
                       }
                     />
                     <span className="text-zinc-500 text-sm whitespace-nowrap">/mês</span>
