@@ -1,8 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
   MessageSquare,
@@ -17,6 +18,9 @@ import {
   Settings2,
   ExternalLink,
   Smartphone,
+  Pencil,
+  Check,
+  X,
 } from "lucide-react"
 
 const STEPS = ["Conheça", "Prepare-se", "Conectar", "Pronto"] as const
@@ -58,7 +62,7 @@ const REQUIRED_APPS = [
 const PREP_STEPS = [
   "Baixe os apps abaixo no celular da barbearia (ou acesse a versão web da Meta).",
   "Instale o WhatsApp Business no aparelho que usa o número que você vai conectar.",
-  "Confira se o número da barbearia está correto no card abaixo.",
+  "Confira se o número da barbearia está correto (toque em Trocar se precisar).",
   "Marque os três itens e clique em Continuar.",
 ] as const
 
@@ -83,6 +87,123 @@ export type WhatsAppConnectWizardProps = {
   onReload: () => Promise<void>
   onScrollToSettings: () => void
   onDisconnect?: () => void
+  /** Salva o telefone da barbearia (WhatsApp) sem sair desta tela. */
+  onSaveShopPhone?: (phone: string) => Promise<void>
+}
+
+function ShopPhoneEditor({
+  shopName,
+  displayPhone,
+  onSaveShopPhone,
+  onSaved,
+}: {
+  shopName: string
+  displayPhone: string
+  onSaveShopPhone?: (phone: string) => Promise<void>
+  onSaved?: () => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(displayPhone)
+  const [saving, setSaving] = useState(false)
+  const [localError, setLocalError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!editing) setDraft(displayPhone)
+  }, [displayPhone, editing])
+
+  const startEdit = () => {
+    setDraft(displayPhone)
+    setLocalError(null)
+    setEditing(true)
+  }
+
+  const cancelEdit = () => {
+    setDraft(displayPhone)
+    setLocalError(null)
+    setEditing(false)
+  }
+
+  const save = async () => {
+    if (!onSaveShopPhone) return
+    const trimmed = draft.trim()
+    if (trimmed.replace(/\D/g, "").length < 10) {
+      setLocalError("Informe um número válido com DDD.")
+      return
+    }
+    setSaving(true)
+    setLocalError(null)
+    try {
+      await onSaveShopPhone(trimmed)
+      setEditing(false)
+      onSaved?.()
+    } catch (e) {
+      setLocalError(e instanceof Error ? e.message : "Não foi possível salvar o número")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <section className="rounded-xl border border-primary/25 bg-primary/5 p-5 space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-bold">
+            1
+          </span>
+          <p className="text-base font-semibold text-foreground">Número da barbearia</p>
+        </div>
+        {!editing && onSaveShopPhone ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="shrink-0 border-primary/30 text-primary hover:bg-primary/10"
+            onClick={startEdit}
+            title="Trocar número"
+            aria-label="Trocar número da barbearia"
+          >
+            <Pencil className="w-4 h-4 mr-1.5" />
+            Trocar
+          </Button>
+        ) : null}
+      </div>
+      {shopName.trim() ? <p className="text-base text-foreground font-medium pl-9">{shopName.trim()}</p> : null}
+      {editing ? (
+        <div className="pl-9 space-y-3">
+          <Input
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder="(61) 99999-9999"
+            className="bg-input border-border text-foreground text-lg font-semibold"
+            autoFocus
+          />
+          <p className="text-sm text-muted-foreground">
+            Use o número que vai conectar no WhatsApp Business (de preferência um que não esteja no WhatsApp comum).
+          </p>
+          {localError ? <p className="text-sm text-destructive">{localError}</p> : null}
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" size="sm" disabled={saving} onClick={() => void save()}>
+              <Check className="w-4 h-4 mr-1" />
+              {saving ? "Salvando…" : "Salvar número"}
+            </Button>
+            <Button type="button" size="sm" variant="outline" disabled={saving} onClick={cancelEdit}>
+              <X className="w-4 h-4 mr-1" />
+              Cancelar
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <p className="text-xl font-bold text-foreground tracking-wide pl-9">{displayPhone || "—"}</p>
+          <p className="text-base text-muted-foreground leading-relaxed pl-9">
+            {shopName.trim()
+              ? "Use este número no WhatsApp Business ao conectar. Toque em Trocar se for outro celular."
+              : "Cadastre o telefone aqui ou toque em Trocar."}
+          </p>
+        </>
+      )}
+    </section>
+  )
 }
 
 export function WhatsAppConnectWizard({
@@ -99,6 +220,7 @@ export function WhatsAppConnectWizard({
   onReload,
   onScrollToSettings,
   onDisconnect,
+  onSaveShopPhone,
 }: WhatsAppConnectWizardProps) {
   const [step, setStep] = useState(1)
   const [checkFb, setCheckFb] = useState(false)
@@ -349,25 +471,12 @@ export function WhatsAppConnectWizard({
 
           {step === 2 && (
             <div className="w-full text-left space-y-5">
-              <section className="rounded-xl border border-primary/25 bg-primary/5 p-5 space-y-3">
-                <div className="flex items-center gap-2">
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-bold">
-                    1
-                  </span>
-                  <p className="text-base font-semibold text-foreground">Número da barbearia</p>
-                </div>
-                {shopName.trim() ? (
-                  <p className="text-base text-foreground font-medium pl-9">{shopName.trim()}</p>
-                ) : null}
-                <p className="text-xl font-bold text-foreground tracking-wide pl-9">
-                  {displayShopPhone || "—"}
-                </p>
-                <p className="text-base text-muted-foreground leading-relaxed pl-9">
-                  {shopName.trim()
-                    ? "Use este número no WhatsApp Business ao conectar."
-                    : "Cadastre o telefone em Configurações → Barbearia se ainda não aparecer aqui."}
-                </p>
-              </section>
+              <ShopPhoneEditor
+                shopName={shopName}
+                displayPhone={displayShopPhone}
+                onSaveShopPhone={onSaveShopPhone}
+                onSaved={() => setCheckNumber(false)}
+              />
 
               <section className="rounded-xl border border-border bg-muted/20 p-5 space-y-4">
                 <div className="flex items-center gap-2">
@@ -476,6 +585,17 @@ export function WhatsAppConnectWizard({
                   )}
                   . Sem token manual, sem complicação.
                 </p>
+                {onSaveShopPhone ? (
+                  <Button
+                    type="button"
+                    variant="link"
+                    className="h-auto p-0 text-primary text-sm"
+                    onClick={() => goTo(2)}
+                  >
+                    <Pencil className="w-3.5 h-3.5 mr-1 inline" />
+                    Trocar número da barbearia
+                  </Button>
+                ) : null}
               </section>
 
               <section className="rounded-xl border border-border bg-muted/20 p-5 space-y-4">

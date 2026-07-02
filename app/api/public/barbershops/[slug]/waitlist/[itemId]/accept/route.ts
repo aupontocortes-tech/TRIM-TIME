@@ -20,6 +20,7 @@ import { expireStaleAppointmentsForBarbershop } from "@/lib/appointment-expiry"
 import { clientHasBlockingAppointmentOnDay } from "@/lib/client-same-day-appointment"
 import { normalizeAppointmentTime } from "@/lib/scheduling"
 import { trySendWhatsAppAppointmentConfirmation } from "@/lib/whatsapp-appointment-events"
+import { trySendEmailAppointmentConfirmation } from "@/lib/email-appointment-events"
 
 function addMinutesClock(time: string, minutes: number): string {
   const raw = normalizeAppointmentTime(time)
@@ -189,6 +190,7 @@ export async function POST(
 
     if (created.length > 0) {
       void trySendWhatsAppAppointmentConfirmation(shop.id, created[0]!.id)
+      void trySendEmailAppointmentConfirmation(shop.id, created[0]!.id)
     }
 
     return NextResponse.json({

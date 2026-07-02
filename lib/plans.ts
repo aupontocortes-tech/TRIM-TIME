@@ -75,7 +75,6 @@ export const PLAN_FEATURES = {
     "Marketing para clientes inativos",
     "Integração WhatsApp Business API",
     "Lembretes e confirmações automáticas",
-    "Remover 'Powered by Trim Time'",
   ],
 } as const
 
@@ -96,7 +95,6 @@ const FEATURE_KEYS: Record<string, SubscriptionPlan[]> = {
   marketing_inactive: ["premium"],
   whatsapp_integration: ["premium"],
   whatsapp_reminders: ["premium"],
-  remove_branding: ["premium"],
 }
 
 export function getBarberLimit(plan: SubscriptionPlan): number | null {

@@ -6,6 +6,11 @@ import type { Appointment, BarbershopSettings } from "@/lib/db/types"
 import { parseAppointmentDate } from "@/lib/appointment-prisma-helpers"
 import type { Prisma } from "@prisma/client"
 import { sendWebPushToClient } from "@/lib/web-push-send"
+import { sendClientNotificationEmail } from "@/lib/client-notification-email"
+import { sendWhatsAppByProvider } from "@/lib/whatsapp-send-unified"
+import { hasFeature } from "@/lib/plans"
+import { resolveEffectivePlanForBarbershop } from "@/lib/barbershop-effective-plan-server"
+import type { BarbershopNotificationSettings } from "@/lib/db/types"
 import {
   expireOldWaitingItemsWithoutDate,
   expirePastDesiredDateWaitlistItems,
@@ -147,22 +152,65 @@ export async function notifyNextWaitingForFreedSlot(
 
   const client = await prisma.client.findUnique({
     where: { id: row.clientId },
-    select: { pushSubscription: true, name: true },
+    select: { pushSubscription: true, name: true, email: true, phone: true },
   })
 
   const barbershop = await prisma.barbershop.findUnique({
     where: { id: barbershopId },
-    select: { name: true, slug: true },
+    select: { name: true, slug: true, settings: true },
   })
+
+  const timeStr = normalizeWaitlistTime(freed.time)
+  const openUrl = barbershop?.slug ? `/b/${barbershop.slug}` : "/"
+  const waitlistBody = `Olá ${client?.name ?? ""}! Uma vaga abriu para ${timeStr} em ${freed.date}. Confirme em até 30 min!`
 
   let pushResult: { ok: boolean; error?: string; skipped?: string } = { ok: false, skipped: "no_subscription" }
   if (client?.pushSubscription) {
-    const timeStr = normalizeWaitlistTime(freed.time)
     pushResult = await sendWebPushToClient(client.pushSubscription, {
       title: "Vaga disponível! 🎉",
       body: `Uma vaga abriu para ${timeStr} em ${freed.date}. Confirme em até 30 min!`,
-      url: barbershop?.slug ? `/b/${barbershop.slug}` : "/",
+      url: openUrl,
     })
+  }
+
+  const plan = await resolveEffectivePlanForBarbershop(barbershopId)
+  const ns = (barbershop?.settings as { notification_settings?: BarbershopNotificationSettings } | null)
+    ?.notification_settings
+
+  let emailResult: { ok: boolean; error?: string; skipped?: string } = {
+    ok: false,
+    skipped: "notify_email_off",
+  }
+  if (
+    plan &&
+    hasFeature(plan, "email_notifications") &&
+    ns?.notify_email === true &&
+    client?.email?.trim()
+  ) {
+    emailResult = await sendClientNotificationEmail({
+      to: client.email.trim(),
+      subject: `Vaga disponível — ${barbershop?.name ?? "Barbearia"}`,
+      bodyText: waitlistBody,
+      barbershopName: barbershop?.name,
+    })
+  }
+
+  let whatsappResult: { ok: boolean; error?: string; skipped?: string } = {
+    ok: false,
+    skipped: "notify_whatsapp_off",
+  }
+  if (plan && hasFeature(plan, "whatsapp_integration") && ns?.notify_whatsapp === true) {
+    const integration = await prisma.whatsAppIntegration.findUnique({ where: { barbershopId } })
+    const digits = (client?.phone ?? "").replace(/\D/g, "")
+    if (digits.length >= 10) {
+      whatsappResult = await sendWhatsAppByProvider({
+        integration,
+        toDigits: digits,
+        body: waitlistBody,
+      })
+    } else {
+      whatsappResult = { ok: false, skipped: "client_no_phone" }
+    }
   }
 
   await prisma.notificationLog.create({
@@ -170,15 +218,17 @@ export async function notifyNextWaitingForFreedSlot(
       barbershopId,
       clientId: row.clientId,
       appointmentId: freed.sourceAppointmentId,
-      type: "push",
+      type: pushResult.ok ? "push" : whatsappResult.ok ? "whatsapp" : emailResult.ok ? "email" : "push",
       event: "waiting_list_slot_available",
       payload: {
         date: freed.date,
-        time: normalizeWaitlistTime(freed.time),
+        time: timeStr,
         service_id: freed.serviceId,
         barber_id: freed.barberId,
         waiting_list_item_id: next.id,
         push_result: pushResult,
+        email: emailResult,
+        whatsapp: whatsappResult,
       },
     },
   })

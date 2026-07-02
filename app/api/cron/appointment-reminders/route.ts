@@ -14,9 +14,8 @@ function authorizeCron(request: Request): boolean {
 }
 
 /**
- * Lembretes: chame manualmente ou via serviço externo com CRON_SECRET.
- * Para agendar na Vercel, adicione "crons" em vercel.json quando for produção
- * (Hobby: no máximo 1x/dia; Pro: intervalos menores).
+ * Lembretes: chame manualmente ou via cron na Vercel (CRON_SECRET).
+ * Hobby: no máximo 1x/dia; Pro: horário em vercel.json (padrão a cada hora).
  */
 export async function GET(request: Request) {
   if (!authorizeCron(request)) {

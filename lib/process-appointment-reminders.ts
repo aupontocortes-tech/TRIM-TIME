@@ -5,6 +5,9 @@ import { appointmentStartUtcMs } from "@/lib/appointment-reminder-time"
 import { renderNotificationTemplate, type NotificationTemplateVars } from "@/lib/notification-template"
 import { sendWebPushToClient } from "@/lib/web-push-send"
 import { sendWhatsAppByProvider, type WhatsAppSendResult } from "@/lib/whatsapp-send-unified"
+import { sendClientNotificationEmail, type ClientEmailSendResult } from "@/lib/client-notification-email"
+import { hasFeature } from "@/lib/plans"
+import { resolveEffectivePlanForBarbershop } from "@/lib/barbershop-effective-plan-server"
 import { expireStaleAppointmentsWhere } from "@/lib/appointment-expiry"
 
 const PRESET_REMINDER_OFFSETS = new Set([30, 60, 120, 1440])
@@ -24,6 +27,8 @@ const WINDOW_MS = 25 * 60 * 60 * 1000
 const DEFAULT_APP =
   "Olá {{nome_cliente}}! 📅 Lembrete: seu {{servico}} na {{barbearia}} é em {{data}} às {{horario}}. Não se atrase!"
 const DEFAULT_WA = "Olá {{nome}}, lembrando do seu horário amanhã às {{hora}}."
+const DEFAULT_EMAIL =
+  "Olá {{nome_cliente}}! Lembrete: você tem {{servico}} na {{barbearia}} em {{data}} às {{horario}}."
 
 function formatDatePt(isoDate: string): string {
   const [y, m, d] = isoDate.split("-").map(Number)
@@ -55,6 +60,8 @@ export type ReminderRunStats = {
   push_ok: number
   whatsapp_attempts: number
   whatsapp_ok: number
+  email_attempts: number
+  email_ok: number
 }
 
 /**
@@ -71,6 +78,8 @@ export async function processAppointmentReminders(): Promise<ReminderRunStats> {
     push_ok: 0,
     whatsapp_attempts: 0,
     whatsapp_ok: 0,
+    email_attempts: 0,
+    email_ok: 0,
   }
 
   const now = Date.now()
@@ -99,10 +108,16 @@ export async function processAppointmentReminders(): Promise<ReminderRunStats> {
       reminder_offsets_minutes: [60],
       notify_app: true,
       notify_whatsapp: false,
+      notify_email: false,
       app_reminder_template: DEFAULT_APP,
       whatsapp_reminder_template: DEFAULT_WA,
+      email_reminder_template: DEFAULT_EMAIL,
       ...settings,
     }
+
+    const effectivePlan = await resolveEffectivePlanForBarbershop(appt.barbershopId)
+    const emailEnabled =
+      ns.notify_email === true && !!(effectivePlan && hasFeature(effectivePlan, "email_notifications"))
 
     const offsets = reminderOffsetsMinutes(ns)
     if (offsets.length === 0) continue
@@ -126,6 +141,7 @@ export async function processAppointmentReminders(): Promise<ReminderRunStats> {
     const vars = templateVars(appt)
     const appBody = renderNotificationTemplate(ns.app_reminder_template || DEFAULT_APP, vars)
     const waBody = renderNotificationTemplate(ns.whatsapp_reminder_template || DEFAULT_WA, vars)
+    const emailBody = renderNotificationTemplate(ns.email_reminder_template || DEFAULT_EMAIL, vars)
     const openUrl = `${baseUrl}/b/${appt.barbershop.slug}`
 
     const waIntegration =
@@ -176,12 +192,34 @@ export async function processAppointmentReminders(): Promise<ReminderRunStats> {
         if (waResult.ok) stats.whatsapp_ok++
       }
 
+      let emailResult: ClientEmailSendResult = {
+        ok: false,
+        error: "notify_email_off",
+        skipped: "notify_email_off",
+      }
+      if (emailEnabled) {
+        stats.email_attempts++
+        const clientEmail = appt.client.email?.trim()
+        if (clientEmail) {
+          emailResult = await sendClientNotificationEmail({
+            to: clientEmail,
+            subject: `Lembrete — ${appt.barbershop.name}`,
+            bodyText: emailBody,
+            barbershopName: appt.barbershop.name,
+          })
+        } else {
+          emailResult = { ok: false, error: "client_no_email", skipped: "client_no_email" }
+        }
+        payload.email = emailResult
+        if (emailResult.ok) stats.email_ok++
+      }
+
       await prisma.notificationLog.create({
         data: {
           barbershopId: appt.barbershopId,
           clientId: appt.clientId,
           appointmentId: appt.id,
-          type: pushResult.ok ? "push" : waResult.ok ? "whatsapp" : "push",
+          type: pushResult.ok ? "push" : waResult.ok ? "whatsapp" : emailResult.ok ? "email" : "push",
           event: "appointment_reminder",
           payload: payload as Prisma.InputJsonValue,
         },

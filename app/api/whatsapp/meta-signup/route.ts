@@ -2,6 +2,11 @@ import { NextResponse } from "next/server"
 import { requireBarbershopId } from "@/lib/tenant"
 import { hasFeature, getUpgradeMessage } from "@/lib/plans"
 import { resolveEffectivePlanForActiveSession } from "@/lib/barbershop-effective-plan-server"
+import { prisma } from "@/lib/prisma"
+import {
+  exchangeMetaLongLivedToken,
+  resolveWhatsAppAssetsFromToken,
+} from "@/lib/whatsapp-meta-resolver"
 
 /**
  * Recebe o código do Embedded Signup da Meta e persiste a integração.
@@ -30,7 +35,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Código de autorização inválido" }, { status: 400 })
     }
 
-    // Troca code por access token (fluxo Embedded Signup)
     const tokenUrl = new URL("https://graph.facebook.com/v21.0/oauth/access_token")
     tokenUrl.searchParams.set("client_id", appId)
     tokenUrl.searchParams.set("client_secret", appSecret)
@@ -49,14 +53,48 @@ export async function POST(request: Request) {
       )
     }
 
-    // TODO: buscar WABA ID, phone_number_id e número via Graph API e salvar com prisma
-    return NextResponse.json(
-      {
-        error:
-          "Token recebido. Finalize a configuração dos endpoints Graph (WABA e Phone Number ID) no servidor.",
+    let accessToken = tokenJson.access_token
+    try {
+      accessToken = await exchangeMetaLongLivedToken(accessToken, appId, appSecret)
+    } catch (e) {
+      console.warn("[whatsapp/meta-signup] long-lived token fallback to short-lived", e)
+    }
+
+    const assets = await resolveWhatsAppAssetsFromToken(accessToken)
+    if (!assets) {
+      return NextResponse.json(
+        {
+          error:
+            "Token recebido, mas não encontramos número WhatsApp na conta Meta. Conclua o cadastro na Meta ou use a configuração manual abaixo.",
+        },
+        { status: 422 }
+      )
+    }
+
+    const phoneNumber = assets.displayPhone || "WhatsApp conectado"
+
+    await prisma.whatsAppIntegration.upsert({
+      where: { barbershopId },
+      create: {
+        barbershopId,
+        phoneNumber,
+        apiProvider: "meta",
+        apiToken: accessToken,
+        graphPhoneNumberId: assets.phoneNumberId,
       },
-      { status: 501 }
-    )
+      update: {
+        phoneNumber,
+        apiToken: accessToken,
+        graphPhoneNumberId: assets.phoneNumberId,
+      },
+    })
+
+    return NextResponse.json({
+      ok: true,
+      phone_number: phoneNumber,
+      graph_phone_number_id: assets.phoneNumberId,
+      connected: true,
+    })
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Erro ao conectar"
     return NextResponse.json(

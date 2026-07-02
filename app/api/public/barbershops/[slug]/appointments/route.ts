@@ -10,6 +10,7 @@ import {
 import { assertValidProfilePhotoDataUrl } from "@/lib/photo-data-url"
 import { cpfDigits } from "@/lib/cpf"
 import { trySendWhatsAppAppointmentConfirmation } from "@/lib/whatsapp-appointment-events"
+import { trySendEmailAppointmentConfirmation } from "@/lib/email-appointment-events"
 import { parseAppointmentDate, utcDayRangeForYmd } from "@/lib/appointment-prisma-helpers"
 import { expireStaleAppointmentsForBarbershop } from "@/lib/appointment-expiry"
 import { clientHasBlockingAppointmentOnDay } from "@/lib/client-same-day-appointment"
@@ -477,6 +478,7 @@ export async function POST(
 
     if (created.length > 0) {
       void trySendWhatsAppAppointmentConfirmation(shop.id, created[0].id)
+      void trySendEmailAppointmentConfirmation(shop.id, created[0].id)
     }
 
     cookieStore.set(

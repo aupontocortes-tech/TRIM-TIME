@@ -14,6 +14,7 @@ import {
 import { withServiceDescriptionsFromDb } from "@/lib/service-queries"
 import { normalizeAppointmentTime } from "@/lib/scheduling"
 import { trySendWhatsAppAppointmentPostService } from "@/lib/whatsapp-appointment-events"
+import { trySendEmailAppointmentPostService } from "@/lib/email-appointment-events"
 import { expireStaleAppointmentsForBarbershop } from "@/lib/appointment-expiry"
 import { resolveEffectivePlanForActiveSession } from "@/lib/barbershop-effective-plan-server"
 import { hasFeature } from "@/lib/plans"
@@ -385,6 +386,7 @@ export async function PATCH(
     }
     if (body.status === "completed" && beforeApi.status !== "completed") {
       void trySendWhatsAppAppointmentPostService(barbershopId, id)
+      void trySendEmailAppointmentPostService(barbershopId, id)
       const shopRow = await prisma.barbershop.findUnique({
         where: { id: barbershopId },
         select: { settings: true },

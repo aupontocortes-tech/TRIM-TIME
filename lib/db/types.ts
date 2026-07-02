@@ -33,6 +33,12 @@ export type BarbershopNotificationSettings = {
   notify_app?: boolean
   /** Envio por WhatsApp quando a integração estiver ativa (lembretes agendados). */
   notify_whatsapp?: boolean
+  /** Envio por e-mail (planos Pro/Premium). */
+  notify_email?: boolean
+  /** Confirmação automática por e-mail ao criar agendamento (padrão: ativo se não definido). */
+  email_send_confirmation?: boolean
+  /** Mensagem pós-atendimento por e-mail (padrão: ativo se não definido). */
+  email_send_post_service?: boolean
   /** Confirmação automática por API ao criar agendamento (padrão: ativo se não definido). */
   whatsapp_send_confirmation?: boolean
   /** Mensagem pós-atendimento ao marcar como concluído (padrão: ativo se não definido). */
@@ -44,6 +50,10 @@ export type BarbershopNotificationSettings = {
   whatsapp_confirmation_template?: string
   /** Pós-atendimento (API). */
   whatsapp_post_service_template?: string
+  /** Lembrete por e-mail. */
+  email_reminder_template?: string
+  email_confirmation_template?: string
+  email_post_service_template?: string
   /**
    * Nome da template oficial Meta (opcional). Quando preenchido, o backend pode priorizar
    * envio por template aprovado em vez de texto livre (evolução futura).
