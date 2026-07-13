@@ -89,6 +89,13 @@ export type WhatsAppConnectWizardProps = {
   onDisconnect?: () => void
   /** Salva o telefone da barbearia (WhatsApp) sem sair desta tela. */
   onSaveShopPhone?: (phone: string) => Promise<void>
+  /** Credenciais manuais da Meta Cloud API (Phone Number ID + token). */
+  graphPhoneId?: string
+  accessToken?: string
+  onPhoneChange?: (value: string) => void
+  onGraphPhoneIdChange?: (value: string) => void
+  onAccessTokenChange?: (value: string) => void
+  onSaveCredentials?: () => void | Promise<void>
 }
 
 function ShopPhoneEditor({
@@ -206,6 +213,80 @@ function ShopPhoneEditor({
   )
 }
 
+function MetaCredentialsForm({
+  phone,
+  graphPhoneId,
+  accessToken,
+  busy,
+  onPhoneChange,
+  onGraphPhoneIdChange,
+  onAccessTokenChange,
+  onSaveCredentials,
+}: {
+  phone: string
+  graphPhoneId: string
+  accessToken: string
+  busy: boolean
+  onPhoneChange?: (value: string) => void
+  onGraphPhoneIdChange?: (value: string) => void
+  onAccessTokenChange?: (value: string) => void
+  onSaveCredentials?: () => void | Promise<void>
+}) {
+  if (!onPhoneChange || !onGraphPhoneIdChange || !onAccessTokenChange || !onSaveCredentials) {
+    return null
+  }
+  return (
+    <section className="w-full rounded-xl border border-primary/30 bg-primary/5 p-5 text-left space-y-4">
+      <div className="space-y-1">
+        <p className="text-base font-semibold text-foreground">Colar dados da Meta (teste)</p>
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          Na Meta: WhatsApp → Etapa 1 → copie <strong className="text-foreground">Phone Number ID</strong> e{" "}
+          <strong className="text-foreground">Token</strong> e cole aqui.
+        </p>
+      </div>
+      <div className="space-y-3">
+        <div>
+          <label className="text-sm font-medium text-foreground">Número WhatsApp (exibição)</label>
+          <Input
+            className="mt-1 bg-input border-border text-foreground"
+            value={phone}
+            onChange={(e) => onPhoneChange(e.target.value)}
+            placeholder="5561993465193"
+          />
+        </div>
+        <div>
+          <label className="text-sm font-medium text-foreground">Phone Number ID</label>
+          <Input
+            className="mt-1 bg-input border-border text-foreground font-mono text-sm"
+            value={graphPhoneId}
+            onChange={(e) => onGraphPhoneIdChange(e.target.value)}
+            placeholder="1260723217113545"
+          />
+        </div>
+        <div>
+          <label className="text-sm font-medium text-foreground">Token de acesso</label>
+          <Input
+            type="password"
+            className="mt-1 bg-input border-border text-foreground font-mono text-sm"
+            value={accessToken}
+            onChange={(e) => onAccessTokenChange(e.target.value)}
+            placeholder="EAA..."
+            autoComplete="off"
+          />
+        </div>
+        <Button
+          type="button"
+          className="bg-primary text-primary-foreground w-full sm:w-auto"
+          disabled={busy}
+          onClick={() => void onSaveCredentials()}
+        >
+          {busy ? "Salvando…" : "Salvar Phone Number ID e token"}
+        </Button>
+      </div>
+    </section>
+  )
+}
+
 export function WhatsAppConnectWizard({
   premium,
   loading,
@@ -221,6 +302,12 @@ export function WhatsAppConnectWizard({
   onScrollToSettings,
   onDisconnect,
   onSaveShopPhone,
+  graphPhoneId = "",
+  accessToken = "",
+  onPhoneChange,
+  onGraphPhoneIdChange,
+  onAccessTokenChange,
+  onSaveCredentials,
 }: WhatsAppConnectWizardProps) {
   const [step, setStep] = useState(1)
   const [checkFb, setCheckFb] = useState(false)
@@ -614,12 +701,39 @@ export function WhatsAppConnectWizard({
             </div>
           )}
 
+          {step === 3 && premium ? (
+            <MetaCredentialsForm
+              phone={phone}
+              graphPhoneId={graphPhoneId}
+              accessToken={accessToken}
+              busy={busy}
+              onPhoneChange={onPhoneChange}
+              onGraphPhoneIdChange={onGraphPhoneIdChange}
+              onAccessTokenChange={onAccessTokenChange}
+              onSaveCredentials={onSaveCredentials}
+            />
+          ) : null}
+
           {step === 4 && (
-            <div className="w-full rounded-xl border border-green-500/30 bg-green-500/5 p-5 text-left">
-              <p className="text-base text-foreground leading-relaxed">
-                Use a seção <strong>Lembretes automáticos</strong> e <strong>Textos das mensagens</strong> abaixo para
-                personalizar o que seus clientes recebem.
-              </p>
+            <div className="w-full space-y-4">
+              {premium ? (
+                <MetaCredentialsForm
+                  phone={phone}
+                  graphPhoneId={graphPhoneId}
+                  accessToken={accessToken}
+                  busy={busy}
+                  onPhoneChange={onPhoneChange}
+                  onGraphPhoneIdChange={onGraphPhoneIdChange}
+                  onAccessTokenChange={onAccessTokenChange}
+                  onSaveCredentials={onSaveCredentials}
+                />
+              ) : null}
+              <div className="rounded-xl border border-green-500/30 bg-green-500/5 p-5 text-left">
+                <p className="text-base text-foreground leading-relaxed">
+                  Depois de salvar o token acima, use <strong>Lembretes automáticos</strong> e{" "}
+                  <strong>Textos das mensagens</strong> mais abaixo na página.
+                </p>
+              </div>
             </div>
           )}
 
@@ -653,22 +767,28 @@ export function WhatsAppConnectWizard({
             )}
 
             {step === 3 && (
-              <Button
-                type="button"
-                size="lg"
-                className="bg-green-600 hover:bg-green-700 text-white px-8"
-                disabled={busy || connecting}
-                onClick={() => void handleConnectMeta()}
-              >
-                {connecting ? "Conectando…" : "Conectar WhatsApp"}
-                {!connecting && <Zap className="w-4 h-4 ml-2" />}
-              </Button>
+              <>
+                <Button
+                  type="button"
+                  size="lg"
+                  className="bg-green-600 hover:bg-green-700 text-white px-8"
+                  disabled={busy || connecting}
+                  onClick={() => void handleConnectMeta()}
+                >
+                  {connecting ? "Conectando…" : "Conectar WhatsApp"}
+                  {!connecting && <Zap className="w-4 h-4 ml-2" />}
+                </Button>
+                <Button type="button" size="lg" variant="outline" disabled={busy || connecting} onClick={() => goTo(4)}>
+                  Já tenho token — colar agora
+                  <ArrowRight className="w-4 h-4 ml-2" />
+                </Button>
+              </>
             )}
 
             {step === 4 && (
               <Button type="button" size="lg" className="bg-primary text-primary-foreground px-8" onClick={onScrollToSettings}>
                 <Settings2 className="w-4 h-4 mr-2" />
-                Ir para configurações
+                Ir para lembretes
               </Button>
             )}
           </div>

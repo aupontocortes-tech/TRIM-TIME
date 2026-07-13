@@ -715,7 +715,9 @@ export default function ConfiguracoesPage() {
 
   const waApiConnected = Boolean(whatsappIntegrationFeature) && waConnected
   const scrollToWaSettings = useCallback(() => {
-    document.getElementById("wa-settings-section")?.scrollIntoView({ behavior: "smooth", block: "start" })
+    const el =
+      document.getElementById("wa-manual-credentials") ?? document.getElementById("wa-settings-section")
+    el?.scrollIntoView({ behavior: "smooth", block: "start" })
   }, [])
   const waDigitsOnly = waPhone.replace(/\D/g, "")
   const fallbackWaMessage = renderNotificationTemplate(
@@ -4414,6 +4416,12 @@ export default function ConfiguracoesPage() {
             onScrollToSettings={scrollToWaSettings}
             onDisconnect={() => void handleWaDisconnect()}
             onSaveShopPhone={handleSaveShopPhoneForWhatsApp}
+            graphPhoneId={waGraphPhoneId}
+            accessToken={waManualToken}
+            onPhoneChange={setWaPhone}
+            onGraphPhoneIdChange={setWaGraphPhoneId}
+            onAccessTokenChange={setWaManualToken}
+            onSaveCredentials={handleSaveWaCredentials}
           />
 
           {(waError || notifError) && waApiConnected ? (
