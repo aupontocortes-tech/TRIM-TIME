@@ -89,7 +89,17 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { renderNotificationTemplate } from "@/lib/notification-template"
+import { renderNotificationTemplate, NOTIFICATION_TEMPLATE_VARIABLE_HELP } from "@/lib/notification-template"
+import { sampleNotificationTemplateVars } from "@/lib/appointment-notification-vars"
+import {
+  DEFAULT_APP_REMINDER,
+  DEFAULT_EMAIL_CONFIRMATION,
+  DEFAULT_EMAIL_POST_SERVICE,
+  DEFAULT_EMAIL_REMINDER,
+  DEFAULT_WHATSAPP_CONFIRMATION,
+  DEFAULT_WHATSAPP_POST_SERVICE,
+  DEFAULT_WHATSAPP_REMINDER,
+} from "@/lib/notification-default-templates"
 import { barbersListUrl } from "@/lib/barbers-list-url"
 import { cn } from "@/lib/utils"
 import { planSalesButtonVariant, planSalesTheme } from "@/lib/plan-sales-theme"
@@ -141,24 +151,6 @@ const REMINDER_OFFSET_OPTIONS = [
   { minutes: 120, label: "2 horas antes" },
   { minutes: 1440, label: "1 dia antes" },
 ] as const
-
-const DEFAULT_APP_REMINDER =
-  "Olá {{nome_cliente}}! Lembrete: você tem {{servico}} na {{barbearia}} em {{data}} às {{horario}}."
-
-const DEFAULT_WA_REMINDER = "Olá {{nome}}, lembrando do seu horário amanhã às {{hora}}."
-
-const DEFAULT_WA_CONFIRM =
-  "Olá {{nome}}, seu horário está confirmado para {{data}} às {{hora}}."
-
-const DEFAULT_WA_POST = "Obrigado pela preferência! Esperamos você novamente."
-
-const DEFAULT_EMAIL_REMINDER =
-  "Olá {{nome_cliente}}! Lembrete: você tem {{servico}} na {{barbearia}} em {{data}} às {{horario}}."
-
-const DEFAULT_EMAIL_CONFIRM =
-  "Olá {{nome_cliente}}, seu horário está confirmado para {{data}} às {{horario}} na {{barbearia}}."
-
-const DEFAULT_EMAIL_POST = "Obrigado pela preferência! Esperamos você novamente na {{barbearia}}."
 
 const ALLOWED_REMINDER_MINUTES = new Set<number>([30, 60, 120, 1440])
 
@@ -376,8 +368,8 @@ export default function ConfiguracoesPage() {
   const [waConnected, setWaConnected] = useState(false)
   const [waBusy, setWaBusy] = useState(false)
   const [waPlanBlocked, setWaPlanBlocked] = useState(false)
-  const [notifWaConfirmTpl, setNotifWaConfirmTpl] = useState(DEFAULT_WA_CONFIRM)
-  const [notifWaPostTpl, setNotifWaPostTpl] = useState(DEFAULT_WA_POST)
+  const [notifWaConfirmTpl, setNotifWaConfirmTpl] = useState(DEFAULT_WHATSAPP_CONFIRMATION)
+  const [notifWaPostTpl, setNotifWaPostTpl] = useState(DEFAULT_WHATSAPP_POST_SERVICE)
   const [notifCustomReminderHours, setNotifCustomReminderHours] = useState("")
   const [notifMetaTplConfirm, setNotifMetaTplConfirm] = useState("")
   const [notifMetaTplReminder, setNotifMetaTplReminder] = useState("")
@@ -388,10 +380,10 @@ export default function ConfiguracoesPage() {
   const [notifWa, setNotifWa] = useState(false)
   const [notifEmail, setNotifEmail] = useState(false)
   const [notifAppTpl, setNotifAppTpl] = useState(DEFAULT_APP_REMINDER)
-  const [notifWaTpl, setNotifWaTpl] = useState(DEFAULT_WA_REMINDER)
+  const [notifWaTpl, setNotifWaTpl] = useState(DEFAULT_WHATSAPP_REMINDER)
   const [notifEmailTpl, setNotifEmailTpl] = useState(DEFAULT_EMAIL_REMINDER)
-  const [notifEmailConfirmTpl, setNotifEmailConfirmTpl] = useState(DEFAULT_EMAIL_CONFIRM)
-  const [notifEmailPostTpl, setNotifEmailPostTpl] = useState(DEFAULT_EMAIL_POST)
+  const [notifEmailConfirmTpl, setNotifEmailConfirmTpl] = useState(DEFAULT_EMAIL_CONFIRMATION)
+  const [notifEmailPostTpl, setNotifEmailPostTpl] = useState(DEFAULT_EMAIL_POST_SERVICE)
   const [notifBusy, setNotifBusy] = useState(false)
   const [notifOk, setNotifOk] = useState(false)
   const [notifError, setNotifError] = useState<string | null>(null)
@@ -472,12 +464,12 @@ export default function ConfiguracoesPage() {
       setNotifWa(false)
       setNotifEmail(false)
       setNotifAppTpl(DEFAULT_APP_REMINDER)
-      setNotifWaTpl(DEFAULT_WA_REMINDER)
+      setNotifWaTpl(DEFAULT_WHATSAPP_REMINDER)
       setNotifEmailTpl(DEFAULT_EMAIL_REMINDER)
-      setNotifEmailConfirmTpl(DEFAULT_EMAIL_CONFIRM)
-      setNotifEmailPostTpl(DEFAULT_EMAIL_POST)
-      setNotifWaConfirmTpl(DEFAULT_WA_CONFIRM)
-      setNotifWaPostTpl(DEFAULT_WA_POST)
+      setNotifEmailConfirmTpl(DEFAULT_EMAIL_CONFIRMATION)
+      setNotifEmailPostTpl(DEFAULT_EMAIL_POST_SERVICE)
+      setNotifWaConfirmTpl(DEFAULT_WHATSAPP_CONFIRMATION)
+      setNotifWaPostTpl(DEFAULT_WHATSAPP_POST_SERVICE)
       setNotifCustomReminderHours("")
       setNotifMetaTplConfirm("")
       setNotifMetaTplReminder("")
@@ -490,16 +482,20 @@ export default function ConfiguracoesPage() {
     setNotifWa(ns.notify_whatsapp === true)
     setNotifEmail(ns.notify_email === true)
     setNotifAppTpl(ns.app_reminder_template?.trim() ? ns.app_reminder_template : DEFAULT_APP_REMINDER)
-    setNotifWaTpl(ns.whatsapp_reminder_template?.trim() ? ns.whatsapp_reminder_template : DEFAULT_WA_REMINDER)
+    setNotifWaTpl(ns.whatsapp_reminder_template?.trim() ? ns.whatsapp_reminder_template : DEFAULT_WHATSAPP_REMINDER)
     setNotifEmailTpl(ns.email_reminder_template?.trim() ? ns.email_reminder_template : DEFAULT_EMAIL_REMINDER)
     setNotifEmailConfirmTpl(
-      ns.email_confirmation_template?.trim() ? ns.email_confirmation_template : DEFAULT_EMAIL_CONFIRM
+      ns.email_confirmation_template?.trim() ? ns.email_confirmation_template : DEFAULT_EMAIL_CONFIRMATION
     )
-    setNotifEmailPostTpl(ns.email_post_service_template?.trim() ? ns.email_post_service_template : DEFAULT_EMAIL_POST)
+    setNotifEmailPostTpl(
+      ns.email_post_service_template?.trim() ? ns.email_post_service_template : DEFAULT_EMAIL_POST_SERVICE
+    )
     setNotifWaConfirmTpl(
-      ns.whatsapp_confirmation_template?.trim() ? ns.whatsapp_confirmation_template : DEFAULT_WA_CONFIRM
+      ns.whatsapp_confirmation_template?.trim() ? ns.whatsapp_confirmation_template : DEFAULT_WHATSAPP_CONFIRMATION
     )
-    setNotifWaPostTpl(ns.whatsapp_post_service_template?.trim() ? ns.whatsapp_post_service_template : DEFAULT_WA_POST)
+    setNotifWaPostTpl(
+      ns.whatsapp_post_service_template?.trim() ? ns.whatsapp_post_service_template : DEFAULT_WHATSAPP_POST_SERVICE
+    )
     const cm = ns.reminder_custom_minutes
     setNotifCustomReminderHours(
       typeof cm === "number" && cm > 0 && Number.isFinite(cm) ? String(Math.round(cm / 60)) : ""
@@ -723,14 +719,8 @@ export default function ConfiguracoesPage() {
   }, [])
   const waDigitsOnly = waPhone.replace(/\D/g, "")
   const fallbackWaMessage = renderNotificationTemplate(
-    notifWaConfirmTpl.trim() || DEFAULT_WA_CONFIRM,
-    {
-      nome_cliente: "Cliente",
-      data: "01/01/2026",
-      horario: "10:00",
-      servico: "Serviço",
-      barbearia: barbershop?.name ?? "Barbearia",
-    }
+    notifWaConfirmTpl.trim() || DEFAULT_WHATSAPP_CONFIRMATION,
+    sampleNotificationTemplateVars(barbershop?.name ?? "Barbearia", multiUnitsFeature && units.length > 1)
   )
   const fallbackWhatsappUrl =
     waDigitsOnly.length >= 10
@@ -1395,12 +1385,12 @@ export default function ConfiguracoesPage() {
               notify_whatsapp: notifWa,
               notify_email: emailNotificationsFeature ? notifEmail : false,
               app_reminder_template: notifAppTpl.trim() || DEFAULT_APP_REMINDER,
-              whatsapp_reminder_template: notifWaTpl.trim() || DEFAULT_WA_REMINDER,
-              whatsapp_confirmation_template: notifWaConfirmTpl.trim() || DEFAULT_WA_CONFIRM,
-              whatsapp_post_service_template: notifWaPostTpl.trim() || DEFAULT_WA_POST,
+              whatsapp_reminder_template: notifWaTpl.trim() || DEFAULT_WHATSAPP_REMINDER,
+              whatsapp_confirmation_template: notifWaConfirmTpl.trim() || DEFAULT_WHATSAPP_CONFIRMATION,
+              whatsapp_post_service_template: notifWaPostTpl.trim() || DEFAULT_WHATSAPP_POST_SERVICE,
               email_reminder_template: notifEmailTpl.trim() || DEFAULT_EMAIL_REMINDER,
-              email_confirmation_template: notifEmailConfirmTpl.trim() || DEFAULT_EMAIL_CONFIRM,
-              email_post_service_template: notifEmailPostTpl.trim() || DEFAULT_EMAIL_POST,
+              email_confirmation_template: notifEmailConfirmTpl.trim() || DEFAULT_EMAIL_CONFIRMATION,
+              email_post_service_template: notifEmailPostTpl.trim() || DEFAULT_EMAIL_POST_SERVICE,
               whatsapp_meta_template_confirmation: notifMetaTplConfirm.trim(),
               whatsapp_meta_template_reminder: notifMetaTplReminder.trim(),
               whatsapp_meta_template_post_service: notifMetaTplPost.trim(),
@@ -4248,19 +4238,20 @@ export default function ConfiguracoesPage() {
             <CardHeader>
               <CardTitle className="text-foreground">Notificação no aplicativo</CardTitle>
               <CardDescription className="text-muted-foreground">
-                Mensagem exibida no app / PWA quando o cliente usa o link de agendamento. Um modelo único para todos os
-                lembretes por push ou tela no app.
+                Push no app / PWA do cliente: lembrete antes do horário, confirmação ao agendar e mensagem após o
+                atendimento. Confirmação e pós-atendimento reutilizam o texto do e-mail ou WhatsApp, se você já
+                configurou.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 max-w-2xl">
               <div className="flex items-center gap-2">
                 <Switch checked={notifApp} onCheckedChange={setNotifApp} id="notif-app" />
                 <FieldLabel htmlFor="notif-app" className="cursor-pointer">
-                  Ativar lembretes no aplicativo
+                  Ativar notificações no aplicativo
                 </FieldLabel>
               </div>
               <Field>
-                <FieldLabel>Texto da notificação (app)</FieldLabel>
+                <FieldLabel>Texto do lembrete (app)</FieldLabel>
                 <Textarea
                   className="mt-1 bg-input border-border text-foreground min-h-[100px]"
                   value={notifAppTpl}
@@ -4268,11 +4259,12 @@ export default function ConfiguracoesPage() {
                   disabled={!notifApp}
                 />
                 <p className="text-xs text-muted-foreground mt-2">
-                  Variáveis: <code className="text-foreground/90">{"{{nome_cliente}}"}</code>,{" "}
-                  <code className="text-foreground/90">{"{{data}}"}</code>,{" "}
-                  <code className="text-foreground/90">{"{{horario}}"}</code>,{" "}
-                  <code className="text-foreground/90">{"{{servico}}"}</code>,{" "}
-                  <code className="text-foreground/90">{"{{barbearia}}"}</code>
+                  Variáveis:{" "}
+                  {NOTIFICATION_TEMPLATE_VARIABLE_HELP.map((v) => (
+                    <code key={v.tag} className="text-foreground/90 mr-1">
+                      {v.tag}
+                    </code>
+                  ))}
                 </p>
               </Field>
             </CardContent>
@@ -4343,6 +4335,70 @@ export default function ConfiguracoesPage() {
 
         <TabsContent value="integracao" className="space-y-6">
 
+          {whatsappIntegrationFeature ? (
+            <Card id="wa-manual-credentials" className="bg-card border-border border-primary/30">
+              <CardHeader>
+                <CardTitle className="text-foreground text-base">
+                  Colar token e Phone Number ID (Meta)
+                </CardTitle>
+                <CardDescription className="text-muted-foreground">
+                  Use os dados da tela <strong className="text-foreground">Etapa 1. Experimente</strong> no Meta for
+                  Developers. Este bloco fica no topo — não precisa dos apps abaixo para o teste.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4 max-w-xl">
+                <Field>
+                  <FieldLabel>Número WhatsApp (exibição)</FieldLabel>
+                  <Input
+                    className="mt-1 bg-input border-border text-foreground"
+                    value={waPhone}
+                    onChange={(e) => setWaPhone(e.target.value)}
+                    placeholder="5561993465193"
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel>Phone Number ID (Graph API)</FieldLabel>
+                  <Input
+                    className="mt-1 bg-input border-border text-foreground font-mono text-sm"
+                    value={waGraphPhoneId}
+                    onChange={(e) => setWaGraphPhoneId(e.target.value)}
+                    placeholder="1260723217113545"
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel>Token de acesso (Meta)</FieldLabel>
+                  <Input
+                    type="password"
+                    className="mt-1 bg-input border-border text-foreground font-mono text-sm"
+                    value={waManualToken}
+                    onChange={(e) => setWaManualToken(e.target.value)}
+                    placeholder="EAA..."
+                    autoComplete="off"
+                  />
+                </Field>
+                <Button
+                  type="button"
+                  className="bg-primary text-primary-foreground"
+                  disabled={waBusy}
+                  onClick={() => void handleSaveWaCredentials()}
+                >
+                  {waBusy ? "Salvando…" : "Salvar credenciais WhatsApp"}
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card className="bg-card border-amber-500/30">
+              <CardHeader>
+                <CardTitle className="text-foreground text-base">WhatsApp (Premium)</CardTitle>
+                <CardDescription className="text-muted-foreground">
+                  Os campos de token e Phone Number ID só aparecem no plano Premium. Vá em{" "}
+                  <strong className="text-foreground">Configurações → Plano</strong> e ative Premium (ou conta de
+                  teste / Super Admin).
+                </CardDescription>
+              </CardHeader>
+            </Card>
+          )}
+
           <WhatsAppConnectWizard
             premium={whatsappIntegrationFeature}
             loading={waLoading}
@@ -4359,58 +4415,6 @@ export default function ConfiguracoesPage() {
             onDisconnect={() => void handleWaDisconnect()}
             onSaveShopPhone={handleSaveShopPhoneForWhatsApp}
           />
-
-          {whatsappIntegrationFeature ? (
-            <Card className="bg-card border-border">
-              <CardHeader>
-                <CardTitle className="text-foreground text-base">Configuração manual (Meta Cloud API)</CardTitle>
-                <CardDescription className="text-muted-foreground">
-                  Cole o token permanente e o Phone Number ID do painel Meta for Developers. Use se a conexão automática
-                  não funcionar.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4 max-w-xl">
-                <Field>
-                  <FieldLabel>Número WhatsApp (exibição)</FieldLabel>
-                  <Input
-                    className="mt-1 bg-input border-border text-foreground"
-                    value={waPhone}
-                    onChange={(e) => setWaPhone(e.target.value)}
-                    placeholder="5511999998888"
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel>Phone Number ID (Graph API)</FieldLabel>
-                  <Input
-                    className="mt-1 bg-input border-border text-foreground font-mono text-sm"
-                    value={waGraphPhoneId}
-                    onChange={(e) => setWaGraphPhoneId(e.target.value)}
-                    placeholder="123456789012345"
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel>Token de acesso permanente</FieldLabel>
-                  <Input
-                    type="password"
-                    className="mt-1 bg-input border-border text-foreground font-mono text-sm"
-                    value={waManualToken}
-                    onChange={(e) => setWaManualToken(e.target.value)}
-                    placeholder="EAA..."
-                    autoComplete="off"
-                  />
-                </Field>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="border-border"
-                  disabled={waBusy}
-                  onClick={() => void handleSaveWaCredentials()}
-                >
-                  {waBusy ? "Salvando…" : "Salvar credenciais WhatsApp"}
-                </Button>
-              </CardContent>
-            </Card>
-          ) : null}
 
           {(waError || notifError) && waApiConnected ? (
             <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
@@ -4530,18 +4534,23 @@ export default function ConfiguracoesPage() {
                   <div className="rounded-lg bg-muted/40 border border-border p-3">
                     <p className="text-xs font-medium text-foreground mb-2">Palavras automáticas disponíveis:</p>
                     <div className="flex flex-wrap gap-1.5">
-                      {[
-                        { tag: "{{nome}}", desc: "Nome do cliente" },
-                        { tag: "{{data}}", desc: "Data do horário" },
-                        { tag: "{{horario}}", desc: "Hora do horário" },
-                        { tag: "{{servico}}", desc: "Nome do serviço" },
-                        { tag: "{{barbearia}}", desc: "Nome da barbearia" },
-                      ].map((v) => (
-                        <span key={v.tag} className="inline-flex items-center gap-1 rounded-md bg-primary/10 text-primary px-2 py-0.5 text-[11px] font-mono" title={v.desc}>
+                      {NOTIFICATION_TEMPLATE_VARIABLE_HELP.map((v) => (
+                        <span
+                          key={v.tag}
+                          className="inline-flex items-center gap-1 rounded-md bg-primary/10 text-primary px-2 py-0.5 text-[11px] font-mono"
+                          title={v.desc}
+                        >
                           {v.tag}
                         </span>
                       ))}
                     </div>
+                    {multiUnitsFeature ? (
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Com várias unidades, use <code className="text-foreground/90">{"{{unidade}}"}</code>,{" "}
+                        <code className="text-foreground/90">{"{{endereco}}"}</code> e{" "}
+                        <code className="text-foreground/90">{"{{maps}}"}</code> para o cliente saber onde ir.
+                      </p>
+                    ) : null}
                   </div>
                 </CardContent>
               </Card>

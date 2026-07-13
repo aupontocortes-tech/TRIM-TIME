@@ -17,6 +17,7 @@ import {
 import { withServiceDescriptionsFromDb } from "@/lib/service-queries"
 import { trySendWhatsAppAppointmentConfirmation } from "@/lib/whatsapp-appointment-events"
 import { trySendEmailAppointmentConfirmation } from "@/lib/email-appointment-events"
+import { trySendPushAppointmentConfirmation } from "@/lib/push-appointment-events"
 import { expireStaleAppointmentsForBarbershop } from "@/lib/appointment-expiry"
 import { clientHasBlockingAppointmentOnDay } from "@/lib/client-same-day-appointment"
 import {
@@ -198,6 +199,7 @@ export async function POST(request: Request) {
     )
     void trySendWhatsAppAppointmentConfirmation(barbershopId, created.id)
     void trySendEmailAppointmentConfirmation(barbershopId, created.id)
+    void trySendPushAppointmentConfirmation(barbershopId, created.id)
     return NextResponse.json(
       mapAppointmentRowToApi(created as Parameters<typeof mapAppointmentRowToApi>[0]) as Appointment
     )

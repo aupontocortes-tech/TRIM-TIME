@@ -2,7 +2,13 @@ import type { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import type { BarbershopNotificationSettings, BarbershopSettings } from "@/lib/db/types"
 import { appointmentStartUtcMs } from "@/lib/appointment-reminder-time"
-import { renderNotificationTemplate, type NotificationTemplateVars } from "@/lib/notification-template"
+import { buildAppointmentNotificationVars } from "@/lib/appointment-notification-vars"
+import {
+  DEFAULT_APP_REMINDER,
+  DEFAULT_EMAIL_REMINDER,
+  DEFAULT_WHATSAPP_REMINDER,
+} from "@/lib/notification-default-templates"
+import { renderNotificationTemplate } from "@/lib/notification-template"
 import { sendWebPushToClient } from "@/lib/web-push-send"
 import { sendWhatsAppByProvider, type WhatsAppSendResult } from "@/lib/whatsapp-send-unified"
 import { sendClientNotificationEmail, type ClientEmailSendResult } from "@/lib/client-notification-email"
@@ -23,35 +29,6 @@ function reminderOffsetsMinutes(ns: BarbershopNotificationSettings): number[] {
   return [...out].sort((a, b) => a - b)
 }
 const WINDOW_MS = 25 * 60 * 60 * 1000
-
-const DEFAULT_APP =
-  "Olá {{nome_cliente}}! 📅 Lembrete: seu {{servico}} na {{barbearia}} é em {{data}} às {{horario}}. Não se atrase!"
-const DEFAULT_WA = "Olá {{nome}}, lembrando do seu horário amanhã às {{hora}}."
-const DEFAULT_EMAIL =
-  "Olá {{nome_cliente}}! Lembrete: você tem {{servico}} na {{barbearia}} em {{data}} às {{horario}}."
-
-function formatDatePt(isoDate: string): string {
-  const [y, m, d] = isoDate.split("-").map(Number)
-  if (!y || !m || !d) return isoDate
-  return `${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}/${y}`
-}
-
-function templateVars(appt: {
-  client: { name: string }
-  service: { name: string }
-  barbershop: { name: string }
-  date: Date
-  time: string
-}): NotificationTemplateVars {
-  const ymd = appt.date.toISOString().slice(0, 10)
-  return {
-    nome_cliente: appt.client.name,
-    servico: appt.service.name,
-    barbearia: appt.barbershop.name,
-    data: formatDatePt(ymd),
-    horario: appt.time.slice(0, 5),
-  }
-}
 
 export type ReminderRunStats = {
   appointments_scanned: number
@@ -95,6 +72,8 @@ export async function processAppointmentReminders(): Promise<ReminderRunStats> {
       client: true,
       service: true,
       barbershop: true,
+      barber: { include: { unit: true } },
+      unit: true,
     },
   })
 
@@ -109,9 +88,9 @@ export async function processAppointmentReminders(): Promise<ReminderRunStats> {
       notify_app: true,
       notify_whatsapp: false,
       notify_email: false,
-      app_reminder_template: DEFAULT_APP,
-      whatsapp_reminder_template: DEFAULT_WA,
-      email_reminder_template: DEFAULT_EMAIL,
+      app_reminder_template: DEFAULT_APP_REMINDER,
+      whatsapp_reminder_template: DEFAULT_WHATSAPP_REMINDER,
+      email_reminder_template: DEFAULT_EMAIL_REMINDER,
       ...settings,
     }
 
@@ -138,10 +117,10 @@ export async function processAppointmentReminders(): Promise<ReminderRunStats> {
         .filter((x): x is number => x != null)
     )
 
-    const vars = templateVars(appt)
-    const appBody = renderNotificationTemplate(ns.app_reminder_template || DEFAULT_APP, vars)
-    const waBody = renderNotificationTemplate(ns.whatsapp_reminder_template || DEFAULT_WA, vars)
-    const emailBody = renderNotificationTemplate(ns.email_reminder_template || DEFAULT_EMAIL, vars)
+    const vars = buildAppointmentNotificationVars(appt)
+    const appBody = renderNotificationTemplate(ns.app_reminder_template || DEFAULT_APP_REMINDER, vars)
+    const waBody = renderNotificationTemplate(ns.whatsapp_reminder_template || DEFAULT_WHATSAPP_REMINDER, vars)
+    const emailBody = renderNotificationTemplate(ns.email_reminder_template || DEFAULT_EMAIL_REMINDER, vars)
     const openUrl = `${baseUrl}/b/${appt.barbershop.slug}`
 
     const waIntegration =

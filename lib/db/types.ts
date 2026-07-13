@@ -43,8 +43,16 @@ export type BarbershopNotificationSettings = {
   whatsapp_send_confirmation?: boolean
   /** Mensagem pós-atendimento ao marcar como concluído (padrão: ativo se não definido). */
   whatsapp_send_post_service?: boolean
-  /** Texto com placeholders: {{nome_cliente}}, {{data}}, {{horario}}, {{servico}}, {{barbearia}} */
+  /** Confirmação automática por push no app/PWA (padrão: ativo se não definido). */
+  app_send_confirmation?: boolean
+  /** Mensagem pós-atendimento por push (padrão: ativo se não definido). */
+  app_send_post_service?: boolean
+  /** Texto com placeholders: {{nome_cliente}}, {{data}}, {{horario}}, {{servico}}, {{barbearia}}, {{unidade}}, {{endereco}}, {{maps}}, {{barbeiro}} */
   app_reminder_template?: string
+  /** Push de confirmação; se vazio, usa o texto de e-mail ou WhatsApp. */
+  app_confirmation_template?: string
+  /** Push pós-atendimento; se vazio, usa o texto de e-mail ou WhatsApp. */
+  app_post_service_template?: string
   whatsapp_reminder_template?: string
   /** Confirmação (API). Também aceita {{nome}} e {{hora}} (sinônimos). */
   whatsapp_confirmation_template?: string

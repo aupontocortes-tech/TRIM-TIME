@@ -3,39 +3,25 @@ import { prisma } from "@/lib/prisma"
 import { hasFeature } from "@/lib/plans"
 import { resolveEffectivePlanForBarbershop } from "@/lib/barbershop-effective-plan-server"
 import type { BarbershopNotificationSettings, BarbershopSettings } from "@/lib/db/types"
-import { renderNotificationTemplate, type NotificationTemplateVars } from "@/lib/notification-template"
+import { buildAppointmentNotificationVars } from "@/lib/appointment-notification-vars"
+import {
+  DEFAULT_WHATSAPP_CONFIRMATION,
+  DEFAULT_WHATSAPP_POST_SERVICE,
+} from "@/lib/notification-default-templates"
+import { renderNotificationTemplate } from "@/lib/notification-template"
 import {
   sendWhatsAppByProvider,
   isWhatsAppIntegrationReady,
   type WhatsAppSendResult,
 } from "@/lib/whatsapp-send-unified"
 
-const DEFAULT_CONFIRM =
-  "Olá {{nome_cliente}}, seu horário está confirmado para {{data}} às {{horario}}."
-const DEFAULT_POST = "Obrigado pela preferência! Esperamos você novamente."
-
-function formatDatePt(isoDate: string): string {
-  const [y, m, d] = isoDate.split("-").map(Number)
-  if (!y || !m || !d) return isoDate
-  return `${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}/${y}`
-}
-
-function templateVars(appt: {
-  client: { name: string }
-  service: { name: string }
-  barbershop: { name: string }
-  date: Date
-  time: string
-}): NotificationTemplateVars {
-  const ymd = appt.date.toISOString().slice(0, 10)
-  return {
-    nome_cliente: appt.client.name,
-    servico: appt.service.name,
-    barbearia: appt.barbershop.name,
-    data: formatDatePt(ymd),
-    horario: appt.time.slice(0, 5),
-  }
-}
+const APPOINTMENT_INCLUDE = {
+  client: true,
+  service: true,
+  barbershop: true,
+  barber: { include: { unit: true } },
+  unit: true,
+} as const
 
 async function alreadySentSuccessfully(
   event: "appointment_confirmation" | "appointment_post_service",
@@ -67,7 +53,7 @@ export async function trySendWhatsAppAppointmentConfirmation(
 
     const appt = await prisma.appointment.findFirst({
       where: { id: appointmentId, barbershopId },
-      include: { client: true, service: true, barbershop: true },
+      include: APPOINTMENT_INCLUDE,
     })
     if (!appt || appt.status === "canceled") return
 
@@ -80,8 +66,8 @@ export async function trySendWhatsAppAppointmentConfirmation(
     })
     if (!isWhatsAppIntegrationReady(integration)) return
 
-    const tpl = ns?.whatsapp_confirmation_template?.trim() || DEFAULT_CONFIRM
-    const body = renderNotificationTemplate(tpl, templateVars(appt))
+    const tpl = ns?.whatsapp_confirmation_template?.trim() || DEFAULT_WHATSAPP_CONFIRMATION
+    const body = renderNotificationTemplate(tpl, buildAppointmentNotificationVars(appt))
     const digits = (appt.client.phone ?? "").replace(/\D/g, "")
     if (digits.length < 10) return
 
@@ -119,7 +105,7 @@ export async function trySendWhatsAppAppointmentPostService(
 
     const appt = await prisma.appointment.findFirst({
       where: { id: appointmentId, barbershopId, status: "completed" },
-      include: { client: true, service: true, barbershop: true },
+      include: APPOINTMENT_INCLUDE,
     })
     if (!appt) return
 
@@ -132,8 +118,8 @@ export async function trySendWhatsAppAppointmentPostService(
     })
     if (!isWhatsAppIntegrationReady(integration)) return
 
-    const tpl = ns?.whatsapp_post_service_template?.trim() || DEFAULT_POST
-    const body = renderNotificationTemplate(tpl, templateVars(appt))
+    const tpl = ns?.whatsapp_post_service_template?.trim() || DEFAULT_WHATSAPP_POST_SERVICE
+    const body = renderNotificationTemplate(tpl, buildAppointmentNotificationVars(appt))
     const digits = (appt.client.phone ?? "").replace(/\D/g, "")
     if (digits.length < 10) return
 
