@@ -1,5 +1,6 @@
 import type { WhatsAppIntegration } from "@prisma/client"
 import { sendWhatsAppText, type WhatsAppSendResult } from "@/lib/whatsapp-cloud-send"
+import { whatsappDigitsForCloudApi } from "@/lib/whatsapp-phone"
 
 export type { WhatsAppSendResult }
 
@@ -20,6 +21,7 @@ export async function sendWhatsAppByProvider(params: {
 }): Promise<WhatsAppSendResult> {
   const { integration, toDigits, body } = params
   if (!integration) return { ok: false, skipped: "whatsapp_not_configured" }
-  if (toDigits.length < 10) return { ok: false, skipped: "client_no_phone" }
-  return sendWhatsAppText({ integration, toDigits, body })
+  const normalized = whatsappDigitsForCloudApi(toDigits)
+  if (!normalized) return { ok: false, skipped: "client_no_phone" }
+  return sendWhatsAppText({ integration, toDigits: normalized, body })
 }
