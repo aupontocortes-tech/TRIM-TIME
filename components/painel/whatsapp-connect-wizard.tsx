@@ -95,7 +95,11 @@ export type WhatsAppConnectWizardProps = {
   onPhoneChange?: (value: string) => void
   onGraphPhoneIdChange?: (value: string) => void
   onAccessTokenChange?: (value: string) => void
-  onSaveCredentials?: () => void | Promise<void>
+  onSaveCredentials?: (payload: {
+    phone: string
+    graphPhoneId: string
+    accessToken: string
+  }) => void | Promise<void>
 }
 
 function ShopPhoneEditor({
@@ -230,18 +234,51 @@ function MetaCredentialsForm({
   onPhoneChange?: (value: string) => void
   onGraphPhoneIdChange?: (value: string) => void
   onAccessTokenChange?: (value: string) => void
-  onSaveCredentials?: () => void | Promise<void>
+  onSaveCredentials?: (payload: {
+    phone: string
+    graphPhoneId: string
+    accessToken: string
+  }) => void | Promise<void>
 }) {
+  const [localPhone, setLocalPhone] = useState(phone)
+  const [localGraphId, setLocalGraphId] = useState(graphPhoneId)
+  const [localToken, setLocalToken] = useState(accessToken)
+  const [showToken, setShowToken] = useState(true)
+
+  useEffect(() => {
+    setLocalPhone(phone)
+  }, [phone])
+  useEffect(() => {
+    setLocalGraphId(graphPhoneId)
+  }, [graphPhoneId])
+  useEffect(() => {
+    setLocalToken(accessToken)
+  }, [accessToken])
+
   if (!onPhoneChange || !onGraphPhoneIdChange || !onAccessTokenChange || !onSaveCredentials) {
     return null
   }
+
+  const save = () => {
+    const payload = {
+      phone: localPhone.trim(),
+      graphPhoneId: localGraphId.trim(),
+      accessToken: localToken.trim(),
+    }
+    onPhoneChange(payload.phone)
+    onGraphPhoneIdChange(payload.graphPhoneId)
+    onAccessTokenChange(payload.accessToken)
+    void onSaveCredentials(payload)
+  }
+
   return (
     <section className="w-full rounded-xl border border-primary/30 bg-primary/5 p-5 text-left space-y-4">
       <div className="space-y-1">
         <p className="text-base font-semibold text-foreground">Colar dados da Meta (teste)</p>
         <p className="text-sm text-muted-foreground leading-relaxed">
           Na Meta: WhatsApp → Etapa 1 → copie <strong className="text-foreground">Phone Number ID</strong> e{" "}
-          <strong className="text-foreground">Token</strong> e cole aqui.
+          <strong className="text-foreground">Token</strong> e cole aqui. O token deve começar com{" "}
+          <strong className="text-foreground">EAA</strong>.
         </p>
       </div>
       <div className="space-y-3">
@@ -249,8 +286,11 @@ function MetaCredentialsForm({
           <label className="text-sm font-medium text-foreground">Número WhatsApp (exibição)</label>
           <Input
             className="mt-1 bg-input border-border text-foreground"
-            value={phone}
-            onChange={(e) => onPhoneChange(e.target.value)}
+            value={localPhone}
+            onChange={(e) => {
+              setLocalPhone(e.target.value)
+              onPhoneChange(e.target.value)
+            }}
             placeholder="5561993465193"
           />
         </div>
@@ -258,27 +298,47 @@ function MetaCredentialsForm({
           <label className="text-sm font-medium text-foreground">Phone Number ID</label>
           <Input
             className="mt-1 bg-input border-border text-foreground font-mono text-sm"
-            value={graphPhoneId}
-            onChange={(e) => onGraphPhoneIdChange(e.target.value)}
+            value={localGraphId}
+            onChange={(e) => {
+              setLocalGraphId(e.target.value)
+              onGraphPhoneIdChange(e.target.value)
+            }}
             placeholder="1260723217113545"
           />
         </div>
         <div>
-          <label className="text-sm font-medium text-foreground">Token de acesso</label>
+          <div className="flex items-center justify-between gap-2">
+            <label className="text-sm font-medium text-foreground">Token de acesso</label>
+            <button
+              type="button"
+              className="text-xs text-primary underline"
+              onClick={() => setShowToken((v) => !v)}
+            >
+              {showToken ? "Ocultar" : "Mostrar"}
+            </button>
+          </div>
           <Input
-            type="password"
+            type={showToken ? "text" : "password"}
             className="mt-1 bg-input border-border text-foreground font-mono text-sm"
-            value={accessToken}
-            onChange={(e) => onAccessTokenChange(e.target.value)}
+            value={localToken}
+            onChange={(e) => {
+              setLocalToken(e.target.value)
+              onAccessTokenChange(e.target.value)
+            }}
             placeholder="EAA..."
             autoComplete="off"
           />
+          <p className="mt-1 text-xs text-muted-foreground">
+            {localToken.trim().length > 0
+              ? `${localToken.trim().length} caracteres — deve começar com EAA`
+              : "Cole o token aqui (campo vazio)"}
+          </p>
         </div>
         <Button
           type="button"
           className="bg-primary text-primary-foreground w-full sm:w-auto"
           disabled={busy}
-          onClick={() => void onSaveCredentials()}
+          onClick={save}
         >
           {busy ? "Salvando…" : "Salvar Phone Number ID e token"}
         </Button>

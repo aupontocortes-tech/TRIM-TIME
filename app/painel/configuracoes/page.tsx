@@ -1315,14 +1315,29 @@ export default function ConfiguracoesPage() {
     }
   }
 
-  const handleSaveWaCredentials = async () => {
-    const phone = waPhone.trim()
-    const graphId = waGraphPhoneId.trim()
-    const token = waManualToken.trim()
-    if (!phone || !graphId || !token) {
-      setWaError("Preencha número, Phone Number ID e token de acesso.")
+  const handleSaveWaCredentials = async (payload?: {
+    phone?: string
+    graphPhoneId?: string
+    accessToken?: string
+  }) => {
+    const phone = (payload?.phone ?? waPhone).trim()
+    const graphId = (payload?.graphPhoneId ?? waGraphPhoneId).trim()
+    const token = (payload?.accessToken ?? waManualToken).trim()
+    const missing: string[] = []
+    if (!phone) missing.push("número")
+    if (!graphId) missing.push("Phone Number ID")
+    if (!token) missing.push("token de acesso")
+    if (missing.length > 0) {
+      setWaError(`Preencha: ${missing.join(", ")}.`)
       return
     }
+    if (!token.startsWith("EAA")) {
+      setWaError("Token inválido. Cole o token completo da Meta (começa com EAA).")
+      return
+    }
+    setWaPhone(phone)
+    setWaGraphPhoneId(graphId)
+    setWaManualToken(token)
     setWaBusy(true)
     setWaError(null)
     try {
