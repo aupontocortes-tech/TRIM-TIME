@@ -17,7 +17,6 @@ import {
   Menu,
   X,
   LogOut,
-  Bell,
   ChevronDown,
   Shield,
   Lock,
@@ -34,6 +33,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { BrandLogo } from "@/components/brand-logo"
+import { NotificationsBell } from "@/components/painel/notifications-bell"
 import { DeleteAccountDialog } from "@/components/delete-account-dialog"
 import { SubscriptionGate } from "@/components/subscription-gate"
 import { PLAN_SIMULATION_COOKIE_NAME } from "@/lib/plan-simulation-constants"
@@ -297,18 +297,7 @@ function PainelLayoutInner({ children }: { children: React.ReactNode }) {
                   ))}
                 </select>
               </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="relative opacity-60 cursor-not-allowed"
-                type="button"
-                disabled
-                title="Notificações em breve"
-                aria-label="Notificações (em breve)"
-              >
-                <Bell className="w-5 h-5 text-muted-foreground" />
-                <span className="absolute top-1 right-1 w-2 h-2 bg-muted-foreground/40 rounded-full" />
-              </Button>
+              <NotificationsBell barbershopId={barbershop?.id} selectedUnitId={selectedUnitId} />
               <span className="md:hidden text-xs text-muted-foreground">{selectedUnitLabel}</span>
               <Link href={barbershop?.slug ? `/b/${barbershop.slug}` : "/b/trim-time"} target="_blank" rel="noopener noreferrer">
                 <Button variant="outline" size="sm" className="hidden sm:flex border-border text-foreground hover:bg-secondary">
