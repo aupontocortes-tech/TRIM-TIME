@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { cookies } from "next/headers"
-import { BARBERSHOP_ID_COOKIE } from "@/lib/tenant"
+import { BARBERSHOP_ID_COOKIE, IMPERSONATE_COOKIE, BARBERSHOP_UNIT_COOKIE } from "@/lib/tenant"
 import { getBarbershopPasswordHash, withBarbershopPasswordHash } from "@/lib/barbershop-auth-settings"
 import { hashPassword, verifyPassword } from "@/lib/auth/password"
 import { findBarbershopByLoginEmail } from "@/lib/barbershop-login"
@@ -67,6 +67,8 @@ export async function POST(request: Request) {
     }
 
     const cookieStore = await cookies()
+    cookieStore.delete(IMPERSONATE_COOKIE)
+    cookieStore.delete(BARBERSHOP_UNIT_COOKIE)
     cookieStore.set(BARBERSHOP_ID_COOKIE, barbershop.id, {
       path: "/",
       maxAge: 60 * 60 * 24 * 30,

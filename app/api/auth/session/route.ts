@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { cookies } from "next/headers"
 import { createServiceRoleClient } from "@/lib/supabase/server"
-import { BARBERSHOP_ID_COOKIE } from "@/lib/tenant"
+import { BARBERSHOP_ID_COOKIE, IMPERSONATE_COOKIE, BARBERSHOP_UNIT_COOKIE } from "@/lib/tenant"
 
 /** Define a barbearia da sessão (após login). Recebe barbershop_id no body. */
 export async function POST(request: Request) {
@@ -12,6 +12,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "barbershop_id obrigatório" }, { status: 400 })
     }
     const cookieStore = await cookies()
+    cookieStore.delete(IMPERSONATE_COOKIE)
+    cookieStore.delete(BARBERSHOP_UNIT_COOKIE)
     cookieStore.set(BARBERSHOP_ID_COOKIE, id, {
       path: "/",
       maxAge: 60 * 60 * 24 * 30,
@@ -32,5 +34,7 @@ export async function POST(request: Request) {
 export async function DELETE() {
   const cookieStore = await cookies()
   cookieStore.delete(BARBERSHOP_ID_COOKIE)
+  cookieStore.delete(IMPERSONATE_COOKIE)
+  cookieStore.delete(BARBERSHOP_UNIT_COOKIE)
   return NextResponse.json({ ok: true })
 }
