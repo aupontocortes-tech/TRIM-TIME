@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { requireBarbershopId } from "@/lib/tenant"
 import { prisma } from "@/lib/prisma"
-import { prismaServicePatchWithOptionalDescription } from "@/lib/service-mutations"
+import { prismaServicePatchWithOptionalDescription, deleteServiceForBarbershop } from "@/lib/service-mutations"
 import { fetchServiceByIdRaw, serviceDbRowToApi } from "@/lib/service-queries"
 import type { Service } from "@/lib/db/types"
 
@@ -64,10 +64,20 @@ export async function DELETE(
   try {
     const barbershopId = await requireBarbershopId()
     const { id } = await params
-    await prisma.service.deleteMany({
-      where: { id, barbershopId },
-    })
-    return NextResponse.json({ ok: true })
+    const result = await deleteServiceForBarbershop(barbershopId, id)
+    if (result.ok) {
+      return NextResponse.json({ ok: true })
+    }
+    if (result.reason === "in_use") {
+      return NextResponse.json(
+        {
+          error:
+            "Este serviço já foi usado em agendamentos e não pode ser excluído. Desative-o para ocultar do agendamento.",
+        },
+        { status: 409 }
+      )
+    }
+    return NextResponse.json({ error: "Serviço não encontrado" }, { status: 404 })
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Erro ao excluir" },

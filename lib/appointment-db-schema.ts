@@ -184,6 +184,11 @@ async function getServicesTableName(): Promise<string> {
   return resolvedServicesTable
 }
 
+/** Nome físico da tabela de serviços (prioriza a que o Prisma usa). */
+export async function resolveServicesTableName(): Promise<string> {
+  return getServicesTableName()
+}
+
 async function appointmentsTableHasColumn(table: string, columnName: string): Promise<boolean> {
   try {
     const rows = await prisma.$queryRaw<{ exists: boolean }[]>(Prisma.sql`

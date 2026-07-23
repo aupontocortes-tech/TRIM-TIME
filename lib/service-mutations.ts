@@ -1,5 +1,50 @@
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
+import { resolveServicesTableName } from "@/lib/appointment-db-schema"
+import { fetchServiceByIdRaw } from "@/lib/service-queries"
+
+export type DeleteServiceResult =
+  | { ok: true }
+  | { ok: false; reason: "not_found" | "in_use" }
+
+async function serviceIsUsedInAppointments(serviceId: string, barbershopId: string): Promise<boolean> {
+  const [appointmentCount, lineCount] = await Promise.all([
+    prisma.appointment.count({ where: { serviceId, barbershopId } }),
+    prisma.appointmentServiceLine.count({ where: { serviceId } }),
+  ])
+  return appointmentCount > 0 || lineCount > 0
+}
+
+export async function deleteServiceForBarbershop(
+  barbershopId: string,
+  serviceId: string
+): Promise<DeleteServiceResult> {
+  const existing = await fetchServiceByIdRaw(serviceId)
+  if (!existing || existing.barbershop_id !== barbershopId) {
+    return { ok: false, reason: "not_found" }
+  }
+
+  if (await serviceIsUsedInAppointments(serviceId, barbershopId)) {
+    return { ok: false, reason: "in_use" }
+  }
+
+  const table = await resolveServicesTableName()
+  if (table === "Service") {
+    const result = await prisma.service.deleteMany({
+      where: { id: serviceId, barbershopId },
+    })
+    return result.count > 0 ? { ok: true } : { ok: false, reason: "not_found" }
+  }
+
+  const deleted = await prisma.$executeRaw(
+    Prisma.sql`
+      DELETE FROM services
+      WHERE id = ${serviceId}::uuid
+        AND barbershop_id = ${barbershopId}::uuid
+    `
+  )
+  return Number(deleted) > 0 ? { ok: true } : { ok: false, reason: "not_found" }
+}
 
 function isStaleClientDescriptionError(e: unknown): boolean {
   if (!(e instanceof Error)) return false

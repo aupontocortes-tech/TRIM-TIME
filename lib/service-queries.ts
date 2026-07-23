@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
+import { resolveServicesTableName } from "@/lib/appointment-db-schema"
 import type { Appointment } from "@/lib/db/types"
 
 /** Linha lida direto do Postgres (independe do Prisma Client conhecer o campo `description`). */
@@ -90,11 +91,8 @@ export async function fetchServicesForBarbershopRaw(
   barbershopId: string,
   opts: FetchOpts = { orderBy: "name" }
 ): Promise<ServiceDbRow[]> {
-  try {
-    return await selectServicesFrom("services", barbershopId, opts)
-  } catch {
-    return await selectServicesFrom("Service", barbershopId, opts)
-  }
+  const table = await resolveServicesTableName()
+  return selectServicesFrom(table === "Service" ? "Service" : "services", barbershopId, opts)
 }
 
 /** Descrições atuais no banco para vários serviços (uma query). */
@@ -103,15 +101,9 @@ export async function fetchServiceDescriptionsByIds(serviceIds: string[]): Promi
   if (unique.length === 0) return new Map()
 
   const idList = Prisma.join(unique.map((id) => Prisma.sql`${id}::uuid`))
+  const table = await resolveServicesTableName()
 
-  try {
-    const rows = await prisma.$queryRaw<{ id: string; description: string }[]>(Prisma.sql`
-      SELECT id, COALESCE(description, '')::text AS description
-      FROM services
-      WHERE id IN (${idList})
-    `)
-    return new Map(rows.map((r) => [r.id, (r.description ?? "").trim()]))
-  } catch {
+  if (table === "Service") {
     const rows = await prisma.$queryRaw<{ id: string; description: string }[]>(Prisma.sql`
       SELECT id, COALESCE(description, '')::text AS description
       FROM "Service"
@@ -119,6 +111,13 @@ export async function fetchServiceDescriptionsByIds(serviceIds: string[]): Promi
     `)
     return new Map(rows.map((r) => [r.id, (r.description ?? "").trim()]))
   }
+
+  const rows = await prisma.$queryRaw<{ id: string; description: string }[]>(Prisma.sql`
+    SELECT id, COALESCE(description, '')::text AS description
+    FROM services
+    WHERE id IN (${idList})
+  `)
+  return new Map(rows.map((r) => [r.id, (r.description ?? "").trim()]))
 }
 
 /** Garante `service.description` vinda do Postgres (útil quando o Prisma Client omite o campo). */
@@ -134,24 +133,9 @@ export async function withServiceDescriptionsFromDb(appointments: Appointment[])
 }
 
 export async function fetchServiceByIdRaw(serviceId: string): Promise<ServiceDbRow | null> {
-  try {
-    const rows = await prisma.$queryRaw<ServiceDbRow[]>(Prisma.sql`
-      SELECT
-        id,
-        barbershop_id,
-        name,
-        COALESCE(description, '')::text AS description,
-        price,
-        duration,
-        active,
-        created_at,
-        updated_at
-      FROM services
-      WHERE id = ${serviceId}::uuid
-      LIMIT 1
-    `)
-    return rows[0] ?? null
-  } catch {
+  const table = await resolveServicesTableName()
+
+  if (table === "Service") {
     const rows = await prisma.$queryRaw<ServiceDbRow[]>(Prisma.sql`
       SELECT
         id,
@@ -169,4 +153,21 @@ export async function fetchServiceByIdRaw(serviceId: string): Promise<ServiceDbR
     `)
     return rows[0] ?? null
   }
+
+  const rows = await prisma.$queryRaw<ServiceDbRow[]>(Prisma.sql`
+    SELECT
+      id,
+      barbershop_id,
+      name,
+      COALESCE(description, '')::text AS description,
+      price,
+      duration,
+      active,
+      created_at,
+      updated_at
+    FROM services
+    WHERE id = ${serviceId}::uuid
+    LIMIT 1
+  `)
+  return rows[0] ?? null
 }

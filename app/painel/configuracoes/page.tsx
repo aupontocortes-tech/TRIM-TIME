@@ -1205,6 +1205,34 @@ export default function ConfiguracoesPage() {
     setServicosError(null)
     try {
       const r = await fetch(`/api/services/${s.id}`, { method: "DELETE", credentials: "include" })
+      if (r.status === 409) {
+        const j = await r.json().catch(() => ({}))
+        const msg =
+          typeof j.error === "string"
+            ? j.error
+            : "Este serviço já foi usado em agendamentos e não pode ser excluído."
+        if (
+          confirm(
+            `${msg}\n\nDeseja desativá-lo agora? Ele some do agendamento do cliente, mas o histórico de agendamentos é mantido.`
+          )
+        ) {
+          const patch = await fetch(`/api/services/${s.id}`, {
+            method: "PATCH",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ active: false }),
+          })
+          if (!patch.ok) {
+            const pj = await patch.json().catch(() => ({}))
+            setServicosError(typeof pj.error === "string" ? pj.error : "Erro ao desativar serviço")
+            return
+          }
+          await loadServices()
+        } else {
+          setServicosError(msg)
+        }
+        return
+      }
       if (!r.ok) {
         const j = await r.json().catch(() => ({}))
         setServicosError(typeof j.error === "string" ? j.error : "Erro ao excluir")
