@@ -30,6 +30,10 @@ import {
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { formatCpfDisplay } from "@/lib/cpf"
 import { publicBookingUrl } from "@/lib/booking-public-url"
+import {
+  bookingLinkReadinessMessage,
+  getBookingLinkReadiness,
+} from "@/lib/booking-link-readiness"
 import { barberPhotoImageStyle } from "@/lib/barber-photo-style"
 import { normalizeGoogleMapsUrl } from "@/lib/google-maps-url"
 import { MapsLinkFieldLabel } from "@/components/maps-link-field-label"
@@ -319,6 +323,8 @@ export default function ConfiguracoesPage() {
   const [editProdAtivo, setEditProdAtivo] = useState(true)
 
   const [barbers, setBarbers] = useState<Barber[]>([])
+  const [shopBarbersForReadiness, setShopBarbersForReadiness] = useState<Barber[]>([])
+  const [shopBarbersReadinessLoading, setShopBarbersReadinessLoading] = useState(true)
   const [barbersLoading, setBarbersLoading] = useState(true)
   const [equipeError, setEquipeError] = useState<string | null>(null)
   const [equipeBusy, setEquipeBusy] = useState(false)
@@ -357,6 +363,7 @@ export default function ConfiguracoesPage() {
   const [isSavingBarbearia, setIsSavingBarbearia] = useState(false)
   const [linkCopiado, setLinkCopiado] = useState(false)
   const [linkCompartilhado, setLinkCompartilhado] = useState(false)
+  const [linkSetupAviso, setLinkSetupAviso] = useState<string | null>(null)
   const [qrDialogOpen, setQrDialogOpen] = useState(false)
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null)
 
@@ -555,6 +562,23 @@ export default function ConfiguracoesPage() {
     }
   }, [selectedUnitId, units.length, unitScopeVersion])
 
+  const loadShopBarbersForReadiness = useCallback(async () => {
+    setShopBarbersReadinessLoading(true)
+    try {
+      const r = await fetch("/api/barbers", { credentials: "include", cache: "no-store" })
+      if (!r.ok) {
+        setShopBarbersForReadiness([])
+        return
+      }
+      const data = await r.json()
+      setShopBarbersForReadiness(Array.isArray(data) ? data : [])
+    } catch {
+      setShopBarbersForReadiness([])
+    } finally {
+      setShopBarbersReadinessLoading(false)
+    }
+  }, [])
+
   /** Garante lista correta mesmo se a API devolver dados legados (sem unit_id). */
   const barbersForUnit = useMemo(() => {
     if (units.length <= 1 || !selectedUnitId) return barbers
@@ -606,6 +630,10 @@ export default function ConfiguracoesPage() {
   useEffect(() => {
     loadBarbers()
   }, [loadBarbers])
+
+  useEffect(() => {
+    if (!barbershopLoading && barbershop) void loadShopBarbersForReadiness()
+  }, [barbershopLoading, barbershop?.id, loadShopBarbersForReadiness])
 
   useEffect(() => {
     if (!barbershopLoading && barbershop) loadServices()
@@ -713,6 +741,26 @@ export default function ConfiguracoesPage() {
     ? publicBookingUrl(barbershop.slug, origin)
     : "—"
 
+  const bookingLinkReadiness = useMemo(
+    () => getBookingLinkReadiness(listaServicos, shopBarbersForReadiness),
+    [listaServicos, shopBarbersForReadiness]
+  )
+  const bookingLinkSetupMessage = bookingLinkReadinessMessage(bookingLinkReadiness)
+  const bookingLinkSetupLoaded = !servicosLoading && !shopBarbersReadinessLoading
+
+  const ensureBookingLinkReady = useCallback((): boolean => {
+    if (bookingLinkReadiness.ready) {
+      setLinkSetupAviso(null)
+      return true
+    }
+    setLinkSetupAviso(bookingLinkSetupMessage)
+    return false
+  }, [bookingLinkReadiness.ready, bookingLinkSetupMessage])
+
+  useEffect(() => {
+    if (bookingLinkReadiness.ready) setLinkSetupAviso(null)
+  }, [bookingLinkReadiness.ready])
+
   const waApiConnected = Boolean(whatsappIntegrationFeature) && waConnected
   const scrollToWaSettings = useCallback(() => {
     const el =
@@ -730,13 +778,20 @@ export default function ConfiguracoesPage() {
       : `https://api.whatsapp.com/send?text=${encodeURIComponent(fallbackWaMessage)}`
 
   const copiarLink = () => {
+    if (!ensureBookingLinkReady()) return
     const full = resolveFullBookingUrl()
     if (full) void navigator.clipboard.writeText(full)
     setLinkCopiado(true)
     setTimeout(() => setLinkCopiado(false), 2000)
   }
 
+  const abrirQrDialog = () => {
+    if (!ensureBookingLinkReady()) return
+    setQrDialogOpen(true)
+  }
+
   const compartilharLink = async () => {
+    if (!ensureBookingLinkReady()) return
     const full = resolveFullBookingUrl()
     if (!full) return
     const nav = typeof navigator !== "undefined" ? navigator : undefined
@@ -1637,7 +1692,7 @@ export default function ConfiguracoesPage() {
       setNewPhotoPosition(50)
       setNewPhotoScale(100)
       setNewCommission("50")
-      await loadBarbers()
+      await Promise.all([loadBarbers(), loadShopBarbersForReadiness()])
     } catch {
       setEquipeError("Erro de rede")
     } finally {
@@ -1691,7 +1746,7 @@ export default function ConfiguracoesPage() {
       }
       setEditOpen(false)
       setEditing(null)
-      await loadBarbers()
+      await Promise.all([loadBarbers(), loadShopBarbersForReadiness()])
     } catch {
       setEquipeError("Erro de rede")
     } finally {
@@ -1711,7 +1766,7 @@ export default function ConfiguracoesPage() {
         setEquipeBusy(false)
         return
       }
-      await loadBarbers()
+      await Promise.all([loadBarbers(), loadShopBarbersForReadiness()])
     } catch {
       setEquipeError("Erro de rede")
     } finally {
@@ -1735,7 +1790,7 @@ export default function ConfiguracoesPage() {
         setEquipeBusy(false)
         return
       }
-      await loadBarbers()
+      await Promise.all([loadBarbers(), loadShopBarbersForReadiness()])
     } catch {
       setEquipeError("Erro de rede")
     } finally {
@@ -1908,6 +1963,16 @@ export default function ConfiguracoesPage() {
                 (Chrome no Android, Safari no iPhone — &quot;Adicionar à tela de início&quot;). Pode enviar o link por
                 WhatsApp tal como está; não precisa de segunda URL.
               </p>
+              {bookingLinkSetupLoaded && !bookingLinkReadiness.ready && (
+                <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-200 text-sm mb-3">
+                  {bookingLinkSetupMessage}
+                </div>
+              )}
+              {linkSetupAviso && (
+                <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm mb-3">
+                  {linkSetupAviso}
+                </div>
+              )}
               <div className="flex flex-col sm:flex-row sm:items-stretch gap-2 p-3 bg-background/50 rounded-lg border border-border">
                 <span className="text-primary font-medium flex-1 truncate min-w-0 py-2 sm:py-0 sm:flex sm:items-center">
                   {linkAgendamento}
@@ -1938,7 +2003,7 @@ export default function ConfiguracoesPage() {
                 className="border-border"
                 type="button"
                 disabled={!barbershop?.slug}
-                onClick={() => setQrDialogOpen(true)}
+                onClick={abrirQrDialog}
               >
                 <QrCode className="w-4 h-4 mr-2" />
                 QR Code
