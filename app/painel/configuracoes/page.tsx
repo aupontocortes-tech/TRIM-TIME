@@ -109,6 +109,7 @@ import { cn } from "@/lib/utils"
 import { planSalesButtonVariant, planSalesTheme } from "@/lib/plan-sales-theme"
 import { BarberPhotoAdjust } from "@/components/barber-photo-adjust"
 import { WhatsAppConnectWizard } from "@/components/painel/whatsapp-connect-wizard"
+import { META_WHATSAPP_ID_FIELD_COPY } from "@/lib/whatsapp-meta-resolver"
 import { ChangePasswordForm } from "@/components/account/change-password-form"
 import { DeleteAccountSection } from "@/components/account/delete-account-section"
 import {
@@ -369,6 +370,7 @@ export default function ConfiguracoesPage() {
 
   const [waLoading, setWaLoading] = useState(false)
   const [waError, setWaError] = useState<string | null>(null)
+  const [waSaveInfo, setWaSaveInfo] = useState<string | null>(null)
   const [waPhone, setWaPhone] = useState("")
   const [waGraphPhoneId, setWaGraphPhoneId] = useState("")
   const [waManualToken, setWaManualToken] = useState("")
@@ -1408,7 +1410,7 @@ export default function ConfiguracoesPage() {
     const token = (payload?.accessToken ?? waManualToken).trim()
     const missing: string[] = []
     if (!phone) missing.push("número")
-    if (!graphId) missing.push("Phone Number ID")
+    if (!graphId) missing.push("identificador do número de telefone")
     if (!token) missing.push("token de acesso")
     if (missing.length > 0) {
       setWaError(`Preencha: ${missing.join(", ")}.`)
@@ -1423,6 +1425,7 @@ export default function ConfiguracoesPage() {
     setWaManualToken(token)
     setWaBusy(true)
     setWaError(null)
+    setWaSaveInfo(null)
     try {
       const r = await fetch("/api/whatsapp", {
         method: "POST",
@@ -1438,6 +1441,14 @@ export default function ConfiguracoesPage() {
       if (!r.ok) {
         setWaError(typeof j.error === "string" ? j.error : "Erro ao salvar credenciais")
         return
+      }
+      if (j.meta_id_corrected_from_waba === true && typeof j.meta_phone_number_id_saved === "string") {
+        setWaGraphPhoneId(j.meta_phone_number_id_saved)
+        setWaSaveInfo(
+          `Você colou o ID da conta Business; salvamos o identificador correto do número: ${j.meta_phone_number_id_saved}`
+        )
+      } else {
+        setWaSaveInfo(null)
       }
       setWaManualToken("")
       await loadWhatsapp()
@@ -4449,11 +4460,16 @@ export default function ConfiguracoesPage() {
             <Card id="wa-manual-credentials" className="bg-card border-border border-primary/30">
               <CardHeader>
                 <CardTitle className="text-foreground text-base">
-                  Colar token e Phone Number ID (Meta)
+                  Colar token e identificador da Meta
                 </CardTitle>
-                <CardDescription className="text-muted-foreground">
-                  Use os dados da tela <strong className="text-foreground">Etapa 1. Experimente</strong> no Meta for
-                  Developers. Este bloco fica no topo — não precisa dos apps abaixo para o teste.
+                <CardDescription className="text-muted-foreground space-y-2">
+                  <span className="block">
+                    Use os dados de <strong className="text-foreground">WhatsApp → Etapa 1. Experimente</strong> no Meta for
+                    Developers.
+                  </span>
+                  <span className="block text-amber-800 dark:text-amber-200">
+                    {META_WHATSAPP_ID_FIELD_COPY.wabaWarning}
+                  </span>
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4 max-w-xl">
@@ -4467,13 +4483,16 @@ export default function ConfiguracoesPage() {
                   />
                 </Field>
                 <Field>
-                  <FieldLabel>Phone Number ID (Graph API)</FieldLabel>
+                  <FieldLabel>{META_WHATSAPP_ID_FIELD_COPY.phoneNumberIdLabel}</FieldLabel>
                   <Input
                     className="mt-1 bg-input border-border text-foreground font-mono text-sm"
                     value={waGraphPhoneId}
                     onChange={(e) => setWaGraphPhoneId(e.target.value)}
                     placeholder="1260723217113545"
                   />
+                  <p className="mt-1.5 text-xs text-muted-foreground leading-relaxed">
+                    {META_WHATSAPP_ID_FIELD_COPY.phoneNumberIdHint}
+                  </p>
                 </Field>
                 <Field>
                   <FieldLabel>Token de acesso (Meta)</FieldLabel>
@@ -4494,6 +4513,16 @@ export default function ConfiguracoesPage() {
                 >
                   {waBusy ? "Salvando…" : "Salvar credenciais WhatsApp"}
                 </Button>
+                {waSaveInfo ? (
+                  <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-200 text-sm">
+                    {waSaveInfo}
+                  </div>
+                ) : null}
+                {waError ? (
+                  <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+                    {waError}
+                  </div>
+                ) : null}
               </CardContent>
             </Card>
           ) : (
@@ -4501,7 +4530,7 @@ export default function ConfiguracoesPage() {
               <CardHeader>
                 <CardTitle className="text-foreground text-base">WhatsApp (Premium)</CardTitle>
                 <CardDescription className="text-muted-foreground">
-                  Os campos de token e Phone Number ID só aparecem no plano Premium. Vá em{" "}
+                  Os campos de token e identificador do número só aparecem no plano Premium. Vá em{" "}
                   <strong className="text-foreground">Configurações → Plano</strong> e ative Premium (ou conta de
                   teste / Super Admin).
                 </CardDescription>

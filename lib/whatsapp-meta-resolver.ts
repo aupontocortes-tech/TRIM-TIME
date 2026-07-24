@@ -11,6 +11,19 @@ export type WhatsAppMetaAssets = {
   displayPhone: string
 }
 
+export type ResolveGraphPhoneNumberIdResult =
+  | { ok: true; phoneNumberId: string; displayPhone?: string; correctedFromWaba: boolean }
+  | { ok: false; error: string }
+
+/** Textos alinhados aos rótulos da Meta (Etapa 1 / API Setup). */
+export const META_WHATSAPP_ID_FIELD_COPY = {
+  phoneNumberIdLabel: "Identificador do número de telefone",
+  phoneNumberIdHint:
+    "Na Meta (WhatsApp → Etapa 1), copie o ID do bloco do número (+55…). É o que o Trim Time usa para enviar mensagens.",
+  wabaWarning:
+    "Não use o ID da linha “Identificação da conta do WhatsApp Business” — esse é da conta (WABA), não do número.",
+} as const
+
 async function graphGet<T>(path: string, accessToken: string): Promise<T & GraphError> {
   const res = await fetch(`https://graph.facebook.com/v21.0/${path}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
@@ -34,6 +47,62 @@ function pickPhone(phones: GraphPhone[] | undefined): WhatsAppMetaAssets | null 
 async function phonesForWaba(wabaId: string, accessToken: string): Promise<WhatsAppMetaAssets | null> {
   const res = await graphGet<{ data?: GraphPhone[] }>(`${wabaId}/phone_numbers`, accessToken)
   return pickPhone(res.data)
+}
+
+async function looksLikePhoneNumberId(id: string, accessToken: string): Promise<WhatsAppMetaAssets | null> {
+  try {
+    const row = await graphGet<GraphPhone>(
+      `${id}?fields=display_phone_number,verified_name`,
+      accessToken
+    )
+    if (!row.display_phone_number && !row.verified_name) return null
+    return {
+      phoneNumberId: id.trim(),
+      displayPhone: (row.display_phone_number ?? row.verified_name ?? "").trim(),
+    }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Aceita Phone Number ID ou WABA ID colado por engano; sempre persiste o ID do número para envio.
+ */
+export async function resolveGraphPhoneNumberIdForSave(
+  graphId: string,
+  accessToken: string
+): Promise<ResolveGraphPhoneNumberIdResult> {
+  const id = graphId.trim()
+  const token = accessToken.trim()
+  if (!id || !token) {
+    return { ok: false, error: "Informe o identificador e o token da Meta." }
+  }
+
+  const asPhone = await looksLikePhoneNumberId(id, token)
+  if (asPhone) {
+    return {
+      ok: true,
+      phoneNumberId: asPhone.phoneNumberId,
+      displayPhone: asPhone.displayPhone,
+      correctedFromWaba: false,
+    }
+  }
+
+  const fromWaba = await phonesForWaba(id, token)
+  if (fromWaba) {
+    return {
+      ok: true,
+      phoneNumberId: fromWaba.phoneNumberId,
+      displayPhone: fromWaba.displayPhone,
+      correctedFromWaba: true,
+    }
+  }
+
+  return {
+    ok: false,
+    error:
+      "ID ou token inválido. Na Meta, copie o Identificador do número de telefone (bloco +55…) e um token EAA novo.",
+  }
 }
 
 /** Converte token de curta duração em long-lived (quando possível). */

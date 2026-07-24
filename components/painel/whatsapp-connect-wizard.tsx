@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { META_WHATSAPP_ID_FIELD_COPY } from "@/lib/whatsapp-meta-resolver"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -276,9 +277,13 @@ function MetaCredentialsForm({
       <div className="space-y-1">
         <p className="text-base font-semibold text-foreground">Colar dados da Meta (teste)</p>
         <p className="text-sm text-muted-foreground leading-relaxed">
-          Na Meta: WhatsApp → Etapa 1 → copie <strong className="text-foreground">Phone Number ID</strong> e{" "}
-          <strong className="text-foreground">Token</strong> e cole aqui. O token deve começar com{" "}
+          Na Meta: WhatsApp → Etapa 1 → copie o{" "}
+          <strong className="text-foreground">{META_WHATSAPP_ID_FIELD_COPY.phoneNumberIdLabel}</strong> e o{" "}
+          <strong className="text-foreground">Token</strong>. O token começa com{" "}
           <strong className="text-foreground">EAA</strong>.
+        </p>
+        <p className="text-xs text-amber-800 dark:text-amber-200 leading-relaxed">
+          {META_WHATSAPP_ID_FIELD_COPY.wabaWarning}
         </p>
       </div>
       <div className="space-y-3">
@@ -295,7 +300,9 @@ function MetaCredentialsForm({
           />
         </div>
         <div>
-          <label className="text-sm font-medium text-foreground">Phone Number ID</label>
+          <label className="text-sm font-medium text-foreground">
+            {META_WHATSAPP_ID_FIELD_COPY.phoneNumberIdLabel}
+          </label>
           <Input
             className="mt-1 bg-input border-border text-foreground font-mono text-sm"
             value={localGraphId}
@@ -305,6 +312,7 @@ function MetaCredentialsForm({
             }}
             placeholder="1260723217113545"
           />
+          <p className="mt-1 text-xs text-muted-foreground">{META_WHATSAPP_ID_FIELD_COPY.phoneNumberIdHint}</p>
         </div>
         <div>
           <div className="flex items-center justify-between gap-2">
@@ -340,7 +348,7 @@ function MetaCredentialsForm({
           disabled={busy}
           onClick={save}
         >
-          {busy ? "Salvando…" : "Salvar Phone Number ID e token"}
+          {busy ? "Salvando…" : "Salvar credenciais WhatsApp"}
         </Button>
       </div>
     </section>
