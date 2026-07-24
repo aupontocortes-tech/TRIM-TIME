@@ -45,12 +45,18 @@ async function alreadySentSuccessfully(
  */
 export async function trySendWhatsAppAppointmentConfirmation(
   barbershopId: string,
-  appointmentId: string
+  appointmentId: string,
+  options?: { allowResend?: boolean }
 ): Promise<void> {
   try {
     const plan = await resolveEffectivePlanForBarbershop(barbershopId)
     if (!plan || !hasFeature(plan, "whatsapp_integration")) return
-    if (await alreadySentSuccessfully("appointment_confirmation", appointmentId)) return
+    if (
+      !options?.allowResend &&
+      (await alreadySentSuccessfully("appointment_confirmation", appointmentId))
+    ) {
+      return
+    }
 
     const appt = await prisma.appointment.findFirst({
       where: { id: appointmentId, barbershopId },

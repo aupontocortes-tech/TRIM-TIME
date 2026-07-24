@@ -13,7 +13,10 @@ import {
 } from "@/lib/appointment-prisma-helpers"
 import { withServiceDescriptionsFromDb } from "@/lib/service-queries"
 import { normalizeAppointmentTime } from "@/lib/scheduling"
-import { trySendWhatsAppAppointmentPostService } from "@/lib/whatsapp-appointment-events"
+import {
+  trySendWhatsAppAppointmentConfirmation,
+  trySendWhatsAppAppointmentPostService,
+} from "@/lib/whatsapp-appointment-events"
 import { trySendEmailAppointmentPostService } from "@/lib/email-appointment-events"
 import { trySendPushAppointmentPostService } from "@/lib/push-appointment-events"
 import { expireStaleAppointmentsForBarbershop } from "@/lib/appointment-expiry"
@@ -384,6 +387,19 @@ export async function PATCH(
 
     if (body.status === "canceled") {
       await notifyFirstWaitingList(barbershopId, enriched)
+    }
+    const scheduleChanged =
+      (body.date !== undefined && body.date !== beforeApi.date) ||
+      (body.time !== undefined &&
+        normalizeAppointmentTime(body.time) !== normalizeAppointmentTime(beforeApi.time)) ||
+      (body.barber_id !== undefined && body.barber_id !== beforeApi.barber_id)
+    if (
+      scheduleChanged &&
+      enriched.status !== "canceled" &&
+      enriched.status !== "completed" &&
+      body.status !== "canceled"
+    ) {
+      void trySendWhatsAppAppointmentConfirmation(barbershopId, id, { allowResend: true })
     }
     if (body.status === "completed" && beforeApi.status !== "completed") {
       void trySendWhatsAppAppointmentPostService(barbershopId, id)
