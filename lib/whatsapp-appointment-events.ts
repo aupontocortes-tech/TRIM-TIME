@@ -10,10 +10,11 @@ import {
 } from "@/lib/notification-default-templates"
 import { renderNotificationTemplate } from "@/lib/notification-template"
 import {
-  sendWhatsAppByProvider,
+  sendWhatsAppNotification,
   isWhatsAppIntegrationReady,
   type WhatsAppSendResult,
 } from "@/lib/whatsapp-send-unified"
+import { metaTemplateBodyParamsFromVars } from "@/lib/whatsapp-meta-templates"
 
 const APPOINTMENT_INCLUDE = {
   client: true,
@@ -67,14 +68,17 @@ export async function trySendWhatsAppAppointmentConfirmation(
     if (!isWhatsAppIntegrationReady(integration)) return
 
     const tpl = ns?.whatsapp_confirmation_template?.trim() || DEFAULT_WHATSAPP_CONFIRMATION
-    const body = renderNotificationTemplate(tpl, buildAppointmentNotificationVars(appt))
+    const vars = buildAppointmentNotificationVars(appt)
+    const body = renderNotificationTemplate(tpl, vars)
     const digits = (appt.client.phone ?? "").replace(/\D/g, "")
     if (digits.length < 10) return
 
-    const result = await sendWhatsAppByProvider({
+    const result = await sendWhatsAppNotification({
       integration: integration!,
       toDigits: digits,
       body,
+      metaTemplateName: ns?.whatsapp_meta_template_confirmation,
+      metaTemplateBodyParams: metaTemplateBodyParamsFromVars(vars),
     })
     await prisma.notificationLog.create({
       data: {
@@ -119,14 +123,17 @@ export async function trySendWhatsAppAppointmentPostService(
     if (!isWhatsAppIntegrationReady(integration)) return
 
     const tpl = ns?.whatsapp_post_service_template?.trim() || DEFAULT_WHATSAPP_POST_SERVICE
-    const body = renderNotificationTemplate(tpl, buildAppointmentNotificationVars(appt))
+    const vars = buildAppointmentNotificationVars(appt)
+    const body = renderNotificationTemplate(tpl, vars)
     const digits = (appt.client.phone ?? "").replace(/\D/g, "")
     if (digits.length < 10) return
 
-    const result = await sendWhatsAppByProvider({
+    const result = await sendWhatsAppNotification({
       integration: integration!,
       toDigits: digits,
       body,
+      metaTemplateName: ns?.whatsapp_meta_template_post_service,
+      metaTemplateBodyParams: metaTemplateBodyParamsFromVars(vars),
     })
     await prisma.notificationLog.create({
       data: {

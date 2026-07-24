@@ -4575,9 +4575,13 @@ export default function ConfiguracoesPage() {
                     <Bell className="w-4 h-4 text-primary" />
                     Lembretes automáticos
                   </CardTitle>
-                  <CardDescription className="text-muted-foreground">
-                    O cliente recebe um aviso no WhatsApp antes do horário marcado.
-                  </CardDescription>
+              <CardDescription className="text-muted-foreground">
+                O cliente recebe um aviso no WhatsApp antes do horário marcado.
+              </CardDescription>
+              <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
+                Confirmação de agendamento usa o mesmo envio da Meta (template). Se o texto livre falhar, o Trim Time
+                envia o template <strong className="text-foreground">hello_world</strong> — igual ao teste da Etapa 1.
+              </p>
                 </CardHeader>
                 <CardContent className="space-y-5 max-w-xl">
                   <div className="flex items-center gap-3">
