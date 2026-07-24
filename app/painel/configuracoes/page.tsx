@@ -4579,8 +4579,9 @@ export default function ConfiguracoesPage() {
                 O cliente recebe um aviso no WhatsApp antes do horário marcado.
               </CardDescription>
               <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
-                Confirmação de agendamento usa o mesmo envio da Meta (template). Se o texto livre falhar, o Trim Time
-                envia o template <strong className="text-foreground">hello_world</strong> — igual ao teste da Etapa 1.
+                Confirmação de agendamento (inclui remarcação na Agenda e pelo link público) usa o mesmo envio da Meta
+                (template). Se o texto livre falhar, o Trim Time envia o template{" "}
+                <strong className="text-foreground">hello_world</strong> — igual ao teste da Etapa 1.
               </p>
                 </CardHeader>
                 <CardContent className="space-y-5 max-w-xl">
@@ -4647,7 +4648,9 @@ export default function ConfiguracoesPage() {
                       onChange={(e) => setNotifWaConfirmTpl(e.target.value)}
                     />
                     <p className="text-xs text-muted-foreground mt-1.5">
-                      Enviada quando o cliente marca um horário. Ex.: Olá {"{{nome}}"}, confirmado para {"{{data}}"} às {"{{horario}}"}!
+                      Enviada quando o cliente marca um horário, quando você remarca na Agenda ou quando o cliente
+                      remarca pelo link de agendamento. Ex.: Olá {"{{nome_cliente}}"}, confirmado para {"{{data}}"} às{" "}
+                      {"{{horario}}"}!
                     </p>
                   </Field>
                   <Field>

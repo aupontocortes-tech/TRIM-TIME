@@ -2168,7 +2168,7 @@ export default function AgendaPage() {
             <DialogTitle className="text-foreground">Remarcar horário</DialogTitle>
             <DialogDescription className="text-muted-foreground">
               {remarcarDialog
-                ? `Altere a data e o horário de ${remarcarDialog.cliente}. O cliente verá a atualização no app de agendamento.`
+                ? `Altere a data e o horário de ${remarcarDialog.cliente}. O cliente verá a atualização no app de agendamento e, se o WhatsApp estiver integrado, receberá a confirmação com o novo horário.`
                 : null}
             </DialogDescription>
           </DialogHeader>
