@@ -5,7 +5,6 @@ import { GREEN_API_FIELD_COPY } from "@/lib/whatsapp-green-api"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Checkbox } from "@/components/ui/checkbox"
 import {
   CalendarCheck,
   Clock3,
@@ -14,24 +13,17 @@ import {
   ArrowRight,
   ArrowLeft,
   ExternalLink,
-  Smartphone,
-  Pencil,
-  Check,
-  X,
   KeyRound,
   RefreshCw,
   AlertCircle,
   Sparkles,
   MousePointerClick,
-  Crown,
   Copy,
 } from "lucide-react"
 
 const STEPS = [
   { label: "Benefícios", color: "bg-emerald-500" },
-  { label: "Plano", color: "bg-green-500" },
-  { label: "QR Code", color: "bg-lime-500" },
-  { label: "Conectar", color: "bg-teal-500" },
+  { label: "Conectar", color: "bg-green-500" },
   { label: "Pronto", color: "bg-emerald-600" },
 ] as const
 
@@ -93,22 +85,6 @@ function WhatsAppIcon({ className = "w-10 h-10" }: { className?: string }) {
     <svg viewBox="0 0 24 24" className={className} fill="currentColor" aria-hidden>
       <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.435 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
     </svg>
-  )
-}
-
-function QrIllustration() {
-  return (
-    <div className="relative mx-auto w-40 h-40 rounded-2xl border-2 border-dashed border-green-500/50 bg-green-500/5 overflow-hidden">
-      <div className="absolute inset-3 grid grid-cols-5 grid-rows-5 gap-1 opacity-80">
-        {Array.from({ length: 25 }).map((_, i) => (
-          <div
-            key={i}
-            className={`rounded-sm ${[0, 1, 2, 4, 5, 6, 10, 14, 18, 19, 20, 22, 23, 24].includes(i) ? "bg-green-500" : "bg-green-500/20"}`}
-          />
-        ))}
-      </div>
-      <div className="wa-qr-scan-line absolute left-2 right-2 h-0.5 bg-green-400 shadow-[0_0_8px_2px_rgba(74,222,128,0.8)]" />
-    </div>
   )
 }
 
@@ -195,89 +171,6 @@ function StepHeader({ step }: { step: number }) {
         })}
       </div>
     </div>
-  )
-}
-
-function ShopPhoneEditor({
-  shopName,
-  displayPhone,
-  onSaveShopPhone,
-  onSaved,
-}: {
-  shopName: string
-  displayPhone: string
-  onSaveShopPhone?: (phone: string) => Promise<void>
-  onSaved?: () => void
-}) {
-  const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState(displayPhone)
-  const [saving, setSaving] = useState(false)
-  const [localError, setLocalError] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (!editing) setDraft(displayPhone)
-  }, [displayPhone, editing])
-
-  const save = async () => {
-    if (!onSaveShopPhone) return
-    const trimmed = draft.trim()
-    if (trimmed.replace(/\D/g, "").length < 10) {
-      setLocalError("Informe um número válido com DDD.")
-      return
-    }
-    setSaving(true)
-    setLocalError(null)
-    try {
-      await onSaveShopPhone(trimmed)
-      setEditing(false)
-      onSaved?.()
-    } catch (e) {
-      setLocalError(e instanceof Error ? e.message : "Não foi possível salvar o número")
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <section className="rounded-2xl border-2 border-green-500/30 bg-gradient-to-br from-green-500/10 to-emerald-500/5 p-5 space-y-3">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-green-500 flex items-center justify-center text-white">
-            <Smartphone className="w-5 h-5" />
-          </div>
-          <p className="text-base font-semibold text-foreground">Número da barbearia</p>
-        </div>
-        {!editing && onSaveShopPhone ? (
-          <Button type="button" variant="outline" size="sm" onClick={() => setEditing(true)}>
-            <Pencil className="w-4 h-4 mr-1" />
-            Trocar
-          </Button>
-        ) : null}
-      </div>
-      {shopName.trim() ? <p className="text-sm font-medium text-foreground">{shopName.trim()}</p> : null}
-      {editing ? (
-        <div className="space-y-3">
-          <Input
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            placeholder="(61) 99999-9999"
-            className="text-lg font-semibold"
-            autoFocus
-          />
-          {localError ? <p className="text-sm text-destructive">{localError}</p> : null}
-          <div className="flex gap-2">
-            <Button type="button" size="sm" disabled={saving} onClick={() => void save()}>
-              {saving ? "Salvando…" : "Salvar"}
-            </Button>
-            <Button type="button" size="sm" variant="outline" onClick={() => setEditing(false)}>
-              Cancelar
-            </Button>
-          </div>
-        </div>
-      ) : (
-        <p className="text-2xl font-bold text-green-400 tabular-nums">{displayPhone || "Cadastre o número"}</p>
-      )}
-    </section>
   )
 }
 
@@ -440,10 +333,6 @@ export function WhatsAppConnectWizard(props: WhatsAppConnectWizardProps) {
   } = props
 
   const [step, setStep] = useState(1)
-  const [pickedBusiness, setPickedBusiness] = useState(false)
-  const [createdInstance, setCreatedInstance] = useState(false)
-  const [checkNumber, setCheckNumber] = useState(false)
-  const [checkQr, setCheckQr] = useState(false)
   const [checkingStatus, setCheckingStatus] = useState(false)
   const [liveStateLabel, setLiveStateLabel] = useState<string | null>(stateLabel)
   const [liveReady, setLiveReady] = useState(readyToSend)
@@ -459,7 +348,6 @@ export function WhatsAppConnectWizard(props: WhatsAppConnectWizardProps) {
   }
 
   const displayShopPhone = shopPhone.trim() || phone.trim()
-  const step2Ready = pickedBusiness && createdInstance && checkNumber
 
   const handleCheckStatus = async () => {
     if (!premium) return
@@ -482,7 +370,6 @@ export function WhatsAppConnectWizard(props: WhatsAppConnectWizardProps) {
       }
       setLiveStateLabel(typeof j.state_label === "string" ? j.state_label : null)
       setLiveReady(j.ready_to_send === true)
-      if (j.ready_to_send === true) setCheckQr(true)
     } catch {
       onSetError("Erro de rede")
     } finally {
@@ -582,120 +469,54 @@ export function WhatsAppConnectWizard(props: WhatsAppConnectWizardProps) {
             </div>
           )}
 
-          {step === 2 && (
+          {step === 2 && premium ? (
             <div className="space-y-5 text-left">
-              <ShopPhoneEditor
-                shopName={shopName}
-                displayPhone={displayShopPhone}
-                onSaveShopPhone={onSaveShopPhone}
-                onSaved={() => setCheckNumber(false)}
-              />
-
-              <p className="text-sm font-semibold text-foreground text-center">Qual plano escolher no Green API?</p>
-
-              <div className="grid sm:grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => setPickedBusiness(true)}
-                  className={`rounded-2xl border-2 p-4 text-left transition-all ${
-                    pickedBusiness
-                      ? "border-green-500 bg-green-500/15 wa-pulse-cta"
-                      : "border-green-500/40 bg-green-500/5 hover:border-green-500/70"
-                  }`}
-                >
-                  <div className="flex items-center gap-2 mb-2">
-                    <Crown className="w-5 h-5 text-amber-400" />
-                    <span className="text-xs font-bold uppercase text-green-400">Recomendado</span>
-                  </div>
-                  <p className="font-bold text-foreground">{GREEN_API_FIELD_COPY.planBusinessTitle}</p>
-                  <p className="text-green-400 font-semibold">{GREEN_API_FIELD_COPY.planBusinessPrice}</p>
-                  <p className="text-xs text-muted-foreground mt-2">{GREEN_API_FIELD_COPY.planBusinessDesc}</p>
-                </button>
-                <div className="rounded-2xl border border-border/60 bg-muted/20 p-4 text-left opacity-80">
-                  <p className="font-bold text-foreground">{GREEN_API_FIELD_COPY.planDeveloperTitle}</p>
-                  <p className="text-muted-foreground font-semibold">{GREEN_API_FIELD_COPY.planDeveloperPrice}</p>
-                  <p className="text-xs text-amber-500/90 mt-2">{GREEN_API_FIELD_COPY.planDeveloperDesc}</p>
-                </div>
-              </div>
-
-              <ClickCard
-                href={GREEN_API_FIELD_COPY.consoleUrl}
-                pulse={!createdInstance}
-                icon={<WhatsAppIcon className="w-7 h-7 text-green-500" />}
-                title="1. Clique — Create an instance (WhatsApp)"
-                subtitle="Escolha WhatsApp: Business → Select. Depois copie idInstance e apiTokenInstance."
-              />
-
-              <label className="flex items-start gap-3 cursor-pointer rounded-xl border border-border p-4 bg-background/40">
-                <Checkbox checked={createdInstance} onCheckedChange={(v) => setCreatedInstance(v === true)} />
-                <span className="text-sm leading-relaxed">
-                  Já criei a instância <strong className="text-green-400">WhatsApp Business</strong> no console
-                </span>
-              </label>
-              <label className="flex items-start gap-3 cursor-pointer rounded-xl border border-border p-4 bg-background/40">
-                <Checkbox checked={checkNumber} onCheckedChange={(v) => setCheckNumber(v === true)} />
-                <span className="text-sm leading-relaxed">Confirmei o número da barbearia acima</span>
-              </label>
-            </div>
-          )}
-
-          {step === 3 && (
-            <div className="space-y-5 text-left">
-              <div className="flex flex-col sm:flex-row items-center gap-6 rounded-2xl border-2 border-green-500/30 bg-green-500/5 p-6">
-                <QrIllustration />
-                <div className="space-y-3 flex-1">
-                  <p className="font-semibold text-foreground">Escaneie o QR Code</p>
-                  <ol className="space-y-2 text-sm text-muted-foreground">
-                    <li>1. Abra o console Green API → sua instância</li>
-                    <li>2. Clique em <strong className="text-foreground">QR</strong></li>
-                    <li>3. No celular: WhatsApp → ⋮ → Aparelhos conectados</li>
-                    <li>4. Escaneie até aparecer <strong className="text-green-400">authorized</strong></li>
-                  </ol>
-                </div>
-              </div>
+              <p className="text-center text-sm text-muted-foreground">
+                Cole <strong className="text-foreground">idInstance</strong> e{" "}
+                <strong className="text-foreground">apiTokenInstance</strong> do console Green API. No site: Developer
+                (grátis, teste) ou Business (com clientes).
+              </p>
 
               <ClickCard
                 href={GREEN_API_FIELD_COPY.consoleUrl}
                 pulse
-                icon={<Smartphone className="w-7 h-7 text-green-500" />}
-                title="Abrir console — escanear QR agora"
-                subtitle="Toque aqui. Não escolha Telegram — só WhatsApp."
+                icon={<WhatsAppIcon className="w-7 h-7 text-green-500" />}
+                title="Abrir console Green API"
+                subtitle="Create instance → copie idInstance e apiTokenInstance. QR na mesma instância."
               />
 
-              {liveStateLabel ? (
-                <p className="text-sm text-center text-muted-foreground">
-                  Status: <strong className="text-foreground">{liveStateLabel}</strong>
+              <GreenApiCredentialsForm
+                phone={phone}
+                idInstance={idInstance}
+                apiTokenInstance={apiTokenInstance}
+                busy={busy}
+                onPhoneChange={onPhoneChange}
+                onIdInstanceChange={onIdInstanceChange}
+                onApiTokenInstanceChange={onApiTokenInstanceChange}
+                onSaveCredentials={async (payload) => {
+                  const ok = await onSaveCredentials?.(payload)
+                  if (ok === false) return
+                  goTo(3)
+                }}
+              />
+
+              <div className="rounded-xl border border-green-500/30 bg-green-500/5 p-4 space-y-3">
+                <p className="text-sm font-medium text-foreground">Já escaneou o QR?</p>
+                <p className="text-xs text-muted-foreground">
+                  WhatsApp → Aparelhos conectados. Status precisa estar <strong className="text-green-400">authorized</strong>.
                 </p>
-              ) : null}
-
-              <label className="flex items-start gap-3 cursor-pointer rounded-xl border-2 border-green-500/30 p-4">
-                <Checkbox checked={checkQr} onCheckedChange={(v) => setCheckQr(v === true)} />
-                <span className="text-sm">Escaneei o QR e o status está <strong className="text-green-400">authorized</strong></span>
-              </label>
-
-              <Button variant="outline" size="sm" disabled={checkingStatus} onClick={() => void handleCheckStatus()}>
-                <RefreshCw className={`w-4 h-4 mr-2 ${checkingStatus ? "animate-spin" : ""}`} />
-                Verificar status
-              </Button>
+                {liveStateLabel ? (
+                  <p className="text-sm text-muted-foreground">
+                    Status: <strong className="text-foreground">{liveStateLabel}</strong>
+                  </p>
+                ) : null}
+                <Button variant="outline" size="sm" disabled={checkingStatus} onClick={() => void handleCheckStatus()}>
+                  <RefreshCw className={`w-4 h-4 mr-2 ${checkingStatus ? "animate-spin" : ""}`} />
+                  Verificar status
+                </Button>
+              </div>
             </div>
-          )}
-
-          {step === 4 && premium ? (
-            <GreenApiCredentialsForm
-              phone={phone}
-              idInstance={idInstance}
-              apiTokenInstance={apiTokenInstance}
-              busy={busy}
-              onPhoneChange={onPhoneChange}
-              onIdInstanceChange={onIdInstanceChange}
-              onApiTokenInstanceChange={onApiTokenInstanceChange}
-              onSaveCredentials={async (payload) => {
-                const ok = await onSaveCredentials?.(payload)
-                if (ok === false) return
-                goTo(5)
-              }}
-            />
-          ) : step === 4 && !premium ? (
+          ) : step === 2 && !premium ? (
             <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-6 text-center">
               <p className="font-semibold text-foreground">Plano Premium necessário</p>
               <p className="text-sm text-muted-foreground mt-2">
@@ -707,18 +528,18 @@ export function WhatsAppConnectWizard(props: WhatsAppConnectWizardProps) {
             </div>
           ) : null}
 
-          {step === 5 && (
+          {step === 3 && (
             <div className="text-center space-y-4 py-4">
               <div className="wa-float-icon inline-flex w-24 h-24 rounded-full bg-green-500 items-center justify-center text-white wa-pulse-cta">
                 <CheckCircle2 className="w-12 h-12" />
               </div>
               <p className="text-xl font-bold text-foreground">WhatsApp configurado!</p>
-              <p className="text-muted-foreground">Agora ative os lembretes e personalize os textos abaixo.</p>
+              <p className="text-muted-foreground">Ative os lembretes e personalize os textos abaixo.</p>
             </div>
           )}
 
           <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
-            {step > 1 && (
+            {step > 1 && step < 3 && (
               <Button variant="outline" onClick={() => goTo(step - 1)} disabled={busy}>
                 <ArrowLeft className="w-4 h-4 mr-1" />
                 Voltar
@@ -726,33 +547,11 @@ export function WhatsAppConnectWizard(props: WhatsAppConnectWizardProps) {
             )}
             {step === 1 && (
               <Button size="lg" className="bg-green-600 hover:bg-green-700 text-white wa-pulse-cta" onClick={() => goTo(2)}>
-                Começar
-                <ArrowRight className="w-4 h-4 ml-2" />
-              </Button>
-            )}
-            {step === 2 && (
-              <Button
-                size="lg"
-                className="bg-green-600 hover:bg-green-700 text-white"
-                disabled={!step2Ready}
-                onClick={() => goTo(3)}
-              >
-                Próximo: QR Code
+                Conectar WhatsApp
                 <ArrowRight className="w-4 h-4 ml-2" />
               </Button>
             )}
             {step === 3 && (
-              <Button
-                size="lg"
-                className="bg-green-600 hover:bg-green-700 text-white wa-pulse-cta"
-                disabled={!checkQr}
-                onClick={() => goTo(4)}
-              >
-                Próximo: colar credenciais
-                <ArrowRight className="w-4 h-4 ml-2" />
-              </Button>
-            )}
-            {step === 5 && (
               <Button size="lg" className="bg-green-600 text-white" onClick={onScrollToSettings}>
                 Ir para lembretes
                 <ArrowRight className="w-4 h-4 ml-2" />
@@ -760,14 +559,6 @@ export function WhatsAppConnectWizard(props: WhatsAppConnectWizardProps) {
             )}
           </div>
 
-          {step === 2 && !step2Ready && (
-            <p className="text-center text-sm text-muted-foreground">
-              Toque em <strong className="text-green-400">Business</strong> e marque os itens acima.
-            </p>
-          )}
-          {step === 3 && !checkQr && (
-            <p className="text-center text-sm text-muted-foreground">Escaneie o QR e marque a confirmação.</p>
-          )}
           {error ? (
             <div className="p-4 rounded-xl bg-destructive/10 border border-destructive/30 text-destructive text-sm">{error}</div>
           ) : null}
