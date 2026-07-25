@@ -1,83 +1,70 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { META_WHATSAPP_ID_FIELD_COPY } from "@/lib/whatsapp-meta-resolver"
+import { useEffect, useState, type ReactNode } from "react"
+import { GREEN_API_FIELD_COPY } from "@/lib/whatsapp-green-api"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
-  MessageSquare,
   CalendarCheck,
   Clock3,
   Send,
-  Zap,
   CheckCircle2,
   ArrowRight,
   ArrowLeft,
-  Facebook,
-  Settings2,
   ExternalLink,
   Smartphone,
   Pencil,
   Check,
   X,
+  KeyRound,
+  RefreshCw,
+  AlertCircle,
+  Sparkles,
+  MousePointerClick,
+  Crown,
+  Copy,
 } from "lucide-react"
 
-const STEPS = ["Conheça", "Prepare-se", "Conectar", "Pronto"] as const
-
-const REQUIRED_APPS = [
-  {
-    id: "wa-business",
-    name: "WhatsApp Business",
-    description: "Instale no celular do número da barbearia",
-    color: "#25D366",
-    links: [
-      { label: "Google Play", href: "https://play.google.com/store/apps/details?id=com.whatsapp.w4b" },
-      { label: "App Store", href: "https://apps.apple.com/app/whatsapp-business/id1386412985" },
-    ],
-  },
-  {
-    id: "meta-business",
-    name: "Meta Business Suite",
-    description: "Gerencie WhatsApp e anúncios da barbearia",
-    color: "#1877F2",
-    links: [
-      { label: "Google Play", href: "https://play.google.com/store/apps/details?id=com.facebook.pages.app" },
-      { label: "App Store", href: "https://apps.apple.com/app/meta-business-suite/id514643583" },
-      { label: "Versão web", href: "https://business.facebook.com/" },
-    ],
-  },
-  {
-    id: "facebook",
-    name: "Facebook",
-    description: "Use para entrar com sua conta Meta na conexão",
-    color: "#1877F2",
-    links: [
-      { label: "Google Play", href: "https://play.google.com/store/apps/details?id=com.facebook.katana" },
-      { label: "App Store", href: "https://apps.apple.com/app/facebook/id284882215" },
-    ],
-  },
+const STEPS = [
+  { label: "Benefícios", color: "bg-emerald-500" },
+  { label: "Plano", color: "bg-green-500" },
+  { label: "QR Code", color: "bg-lime-500" },
+  { label: "Conectar", color: "bg-teal-500" },
+  { label: "Pronto", color: "bg-emerald-600" },
 ] as const
 
-const PREP_STEPS = [
-  "Baixe os apps abaixo no celular da barbearia (ou acesse a versão web da Meta).",
-  "Instale o WhatsApp Business no aparelho que usa o número que você vai conectar.",
-  "Confira se o número da barbearia está correto (toque em Trocar se precisar).",
-  "Marque os três itens e clique em Continuar.",
-] as const
-
-const CONNECT_STEPS = [
-  "Clique em Conectar WhatsApp — abre a tela oficial da Meta.",
-  "Faça login com Facebook ou conta Meta Business.",
-  "Selecione o número do WhatsApp Business da barbearia.",
-  "Autorize o Trim Time — pronto, mensagens automáticas ativadas.",
+const BENEFITS = [
+  {
+    icon: CalendarCheck,
+    color: "text-emerald-400",
+    bg: "bg-emerald-500/15 border-emerald-500/30",
+    title: "Confirmação automática",
+    desc: "Cliente agenda → recebe WhatsApp na hora.",
+  },
+  {
+    icon: Clock3,
+    color: "text-sky-400",
+    bg: "bg-sky-500/15 border-sky-500/30",
+    title: "Lembrete antes do horário",
+    desc: "1 h, 2 h ou 1 dia antes — você escolhe.",
+  },
+  {
+    icon: Send,
+    color: "text-violet-400",
+    bg: "bg-violet-500/15 border-violet-500/30",
+    title: "Mensagem pós-atendimento",
+    desc: "Agradeça e fidelize depois do corte.",
+  },
 ] as const
 
 export type WhatsAppConnectWizardProps = {
   premium: boolean
   loading: boolean
   connected: boolean
+  readyToSend?: boolean
+  stateLabel?: string | null
   phone: string
   shopName?: string
   shopPhone?: string
@@ -88,19 +75,127 @@ export type WhatsAppConnectWizardProps = {
   onReload: () => Promise<void>
   onScrollToSettings: () => void
   onDisconnect?: () => void
-  /** Salva o telefone da barbearia (WhatsApp) sem sair desta tela. */
   onSaveShopPhone?: (phone: string) => Promise<void>
-  /** Credenciais manuais da Meta Cloud API (Phone Number ID + token). */
-  graphPhoneId?: string
-  accessToken?: string
+  idInstance?: string
+  apiTokenInstance?: string
   onPhoneChange?: (value: string) => void
-  onGraphPhoneIdChange?: (value: string) => void
-  onAccessTokenChange?: (value: string) => void
+  onIdInstanceChange?: (value: string) => void
+  onApiTokenInstanceChange?: (value: string) => void
   onSaveCredentials?: (payload: {
     phone: string
-    graphPhoneId: string
-    accessToken: string
-  }) => void | Promise<void>
+    idInstance: string
+    apiTokenInstance: string
+  }) => boolean | void | Promise<boolean | void>
+}
+
+function WhatsAppIcon({ className = "w-10 h-10" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="currentColor" aria-hidden>
+      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.435 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+    </svg>
+  )
+}
+
+function QrIllustration() {
+  return (
+    <div className="relative mx-auto w-40 h-40 rounded-2xl border-2 border-dashed border-green-500/50 bg-green-500/5 overflow-hidden">
+      <div className="absolute inset-3 grid grid-cols-5 grid-rows-5 gap-1 opacity-80">
+        {Array.from({ length: 25 }).map((_, i) => (
+          <div
+            key={i}
+            className={`rounded-sm ${[0, 1, 2, 4, 5, 6, 10, 14, 18, 19, 20, 22, 23, 24].includes(i) ? "bg-green-500" : "bg-green-500/20"}`}
+          />
+        ))}
+      </div>
+      <div className="wa-qr-scan-line absolute left-2 right-2 h-0.5 bg-green-400 shadow-[0_0_8px_2px_rgba(74,222,128,0.8)]" />
+    </div>
+  )
+}
+
+function ClickCard({
+  href,
+  onClick,
+  pulse = false,
+  icon,
+  title,
+  subtitle,
+  accent = "green",
+}: {
+  href?: string
+  onClick?: () => void
+  pulse?: boolean
+  icon: ReactNode
+  title: string
+  subtitle: string
+  accent?: "green" | "gold" | "sky"
+}) {
+  const colors = {
+    green: "border-green-500/40 bg-green-500/10 hover:bg-green-500/20 hover:border-green-500/60",
+    gold: "border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 hover:border-amber-500/60",
+    sky: "border-sky-500/40 bg-sky-500/10 hover:bg-sky-500/20 hover:border-sky-500/60",
+  }
+  const inner = (
+    <>
+      <div className="flex items-start gap-4">
+        <div className="shrink-0 w-12 h-12 rounded-xl bg-background/80 flex items-center justify-center">{icon}</div>
+        <div className="min-w-0 flex-1 text-left">
+          <p className="text-base font-semibold text-foreground flex items-center gap-2">
+            {title}
+            <MousePointerClick className="w-4 h-4 text-green-400 shrink-0" />
+          </p>
+          <p className="text-sm text-muted-foreground mt-1 leading-relaxed">{subtitle}</p>
+        </div>
+        <ExternalLink className="w-5 h-5 text-green-400 shrink-0 mt-1" />
+      </div>
+    </>
+  )
+  const className = `block w-full rounded-2xl border-2 p-4 transition-all cursor-pointer ${colors[accent]} ${pulse ? "wa-pulse-cta" : ""}`
+  if (href) {
+    return (
+      <a href={href} target="_blank" rel="noopener noreferrer" className={className}>
+        {inner}
+      </a>
+    )
+  }
+  return (
+    <button type="button" onClick={onClick} className={className}>
+      {inner}
+    </button>
+  )
+}
+
+function StepHeader({ step }: { step: number }) {
+  const current = STEPS[step - 1]
+  return (
+    <div className="space-y-4">
+      <div className="relative mx-auto w-20 h-20">
+        <div className="absolute inset-0 rounded-3xl bg-green-500/20 wa-pulse-cta" />
+        <div className="relative w-full h-full rounded-3xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center text-white wa-float-icon shadow-lg shadow-green-500/30">
+          <WhatsAppIcon className="w-11 h-11" />
+        </div>
+      </div>
+      <div className="space-y-1">
+        <p className="text-xs font-bold uppercase tracking-widest text-green-400">
+          Passo {step} de {STEPS.length} · {current.label}
+        </p>
+        <p className="text-2xl sm:text-3xl font-bold text-foreground">WhatsApp automático</p>
+      </div>
+      <div className="flex justify-center gap-1.5 flex-wrap">
+        {STEPS.map((s, i) => {
+          const n = i + 1
+          return (
+            <div
+              key={s.label}
+              className={`h-2 rounded-full transition-all ${
+                n === step ? "w-10 bg-green-500" : n < step ? "w-6 bg-green-500/60" : "w-6 bg-muted"
+              }`}
+              title={s.label}
+            />
+          )
+        })}
+      </div>
+    </div>
+  )
 }
 
 function ShopPhoneEditor({
@@ -123,18 +218,6 @@ function ShopPhoneEditor({
     if (!editing) setDraft(displayPhone)
   }, [displayPhone, editing])
 
-  const startEdit = () => {
-    setDraft(displayPhone)
-    setLocalError(null)
-    setEditing(true)
-  }
-
-  const cancelEdit = () => {
-    setDraft(displayPhone)
-    setLocalError(null)
-    setEditing(false)
-  }
-
   const save = async () => {
     if (!onSaveShopPhone) return
     const trimmed = draft.trim()
@@ -156,363 +239,265 @@ function ShopPhoneEditor({
   }
 
   return (
-    <section className="rounded-xl border border-primary/25 bg-primary/5 p-5 space-y-3">
+    <section className="rounded-2xl border-2 border-green-500/30 bg-gradient-to-br from-green-500/10 to-emerald-500/5 p-5 space-y-3">
       <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-bold">
-            1
-          </span>
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-green-500 flex items-center justify-center text-white">
+            <Smartphone className="w-5 h-5" />
+          </div>
           <p className="text-base font-semibold text-foreground">Número da barbearia</p>
         </div>
         {!editing && onSaveShopPhone ? (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="shrink-0 border-primary/30 text-primary hover:bg-primary/10"
-            onClick={startEdit}
-            title="Trocar número"
-            aria-label="Trocar número da barbearia"
-          >
-            <Pencil className="w-4 h-4 mr-1.5" />
+          <Button type="button" variant="outline" size="sm" onClick={() => setEditing(true)}>
+            <Pencil className="w-4 h-4 mr-1" />
             Trocar
           </Button>
         ) : null}
       </div>
-      {shopName.trim() ? <p className="text-base text-foreground font-medium pl-9">{shopName.trim()}</p> : null}
+      {shopName.trim() ? <p className="text-sm font-medium text-foreground">{shopName.trim()}</p> : null}
       {editing ? (
-        <div className="pl-9 space-y-3">
+        <div className="space-y-3">
           <Input
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             placeholder="(61) 99999-9999"
-            className="bg-input border-border text-foreground text-lg font-semibold"
+            className="text-lg font-semibold"
             autoFocus
           />
-          <p className="text-sm text-muted-foreground">
-            Use o número que vai conectar no WhatsApp Business (de preferência um que não esteja no WhatsApp comum).
-          </p>
           {localError ? <p className="text-sm text-destructive">{localError}</p> : null}
-          <div className="flex flex-wrap gap-2">
+          <div className="flex gap-2">
             <Button type="button" size="sm" disabled={saving} onClick={() => void save()}>
-              <Check className="w-4 h-4 mr-1" />
-              {saving ? "Salvando…" : "Salvar número"}
+              {saving ? "Salvando…" : "Salvar"}
             </Button>
-            <Button type="button" size="sm" variant="outline" disabled={saving} onClick={cancelEdit}>
-              <X className="w-4 h-4 mr-1" />
+            <Button type="button" size="sm" variant="outline" onClick={() => setEditing(false)}>
               Cancelar
             </Button>
           </div>
         </div>
       ) : (
-        <>
-          <p className="text-xl font-bold text-foreground tracking-wide pl-9">{displayPhone || "—"}</p>
-          <p className="text-base text-muted-foreground leading-relaxed pl-9">
-            {shopName.trim()
-              ? "Use este número no WhatsApp Business ao conectar. Toque em Trocar se for outro celular."
-              : "Cadastre o telefone aqui ou toque em Trocar."}
-          </p>
-        </>
+        <p className="text-2xl font-bold text-green-400 tabular-nums">{displayPhone || "Cadastre o número"}</p>
       )}
     </section>
   )
 }
 
-function MetaCredentialsForm({
+function GreenApiCredentialsForm({
   phone,
-  graphPhoneId,
-  accessToken,
+  idInstance,
+  apiTokenInstance,
   busy,
   onPhoneChange,
-  onGraphPhoneIdChange,
-  onAccessTokenChange,
+  onIdInstanceChange,
+  onApiTokenInstanceChange,
   onSaveCredentials,
 }: {
   phone: string
-  graphPhoneId: string
-  accessToken: string
+  idInstance: string
+  apiTokenInstance: string
   busy: boolean
   onPhoneChange?: (value: string) => void
-  onGraphPhoneIdChange?: (value: string) => void
-  onAccessTokenChange?: (value: string) => void
+  onIdInstanceChange?: (value: string) => void
+  onApiTokenInstanceChange?: (value: string) => void
   onSaveCredentials?: (payload: {
     phone: string
-    graphPhoneId: string
-    accessToken: string
-  }) => void | Promise<void>
+    idInstance: string
+    apiTokenInstance: string
+  }) => boolean | void | Promise<boolean | void>
 }) {
   const [localPhone, setLocalPhone] = useState(phone)
-  const [localGraphId, setLocalGraphId] = useState(graphPhoneId)
-  const [localToken, setLocalToken] = useState(accessToken)
-  const [showToken, setShowToken] = useState(true)
+  const [localIdInstance, setLocalIdInstance] = useState(idInstance)
+  const [localToken, setLocalToken] = useState(apiTokenInstance)
+  const [showToken, setShowToken] = useState(false)
 
-  useEffect(() => {
-    setLocalPhone(phone)
-  }, [phone])
-  useEffect(() => {
-    setLocalGraphId(graphPhoneId)
-  }, [graphPhoneId])
-  useEffect(() => {
-    setLocalToken(accessToken)
-  }, [accessToken])
+  useEffect(() => setLocalPhone(phone), [phone])
+  useEffect(() => setLocalIdInstance(idInstance), [idInstance])
+  useEffect(() => setLocalToken(apiTokenInstance), [apiTokenInstance])
 
-  if (!onPhoneChange || !onGraphPhoneIdChange || !onAccessTokenChange || !onSaveCredentials) {
-    return null
-  }
+  if (!onPhoneChange || !onIdInstanceChange || !onApiTokenInstanceChange || !onSaveCredentials) return null
 
-  const save = () => {
+  const save = async () => {
     const payload = {
       phone: localPhone.trim(),
-      graphPhoneId: localGraphId.trim(),
-      accessToken: localToken.trim(),
+      idInstance: localIdInstance.trim(),
+      apiTokenInstance: localToken.trim(),
     }
     onPhoneChange(payload.phone)
-    onGraphPhoneIdChange(payload.graphPhoneId)
-    onAccessTokenChange(payload.accessToken)
-    void onSaveCredentials(payload)
+    onIdInstanceChange(payload.idInstance)
+    onApiTokenInstanceChange(payload.apiTokenInstance)
+    await onSaveCredentials(payload)
   }
 
   return (
-    <section className="w-full rounded-xl border border-primary/30 bg-primary/5 p-5 text-left space-y-4">
-      <div className="space-y-1">
-        <p className="text-base font-semibold text-foreground">Colar dados da Meta (teste)</p>
-        <p className="text-sm text-muted-foreground leading-relaxed">
-          Na Meta: WhatsApp → Etapa 1 → copie o{" "}
-          <strong className="text-foreground">{META_WHATSAPP_ID_FIELD_COPY.phoneNumberIdLabel}</strong> e o{" "}
-          <strong className="text-foreground">Token</strong>. O token começa com{" "}
-          <strong className="text-foreground">EAA</strong>.
-        </p>
-        <p className="text-xs text-amber-800 dark:text-amber-200 leading-relaxed">
-          {META_WHATSAPP_ID_FIELD_COPY.wabaWarning}
-        </p>
+    <section className="w-full rounded-2xl border-2 border-teal-500/30 bg-teal-500/5 p-5 text-left space-y-4">
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-xl bg-teal-500/20 flex items-center justify-center">
+          <KeyRound className="w-5 h-5 text-teal-400" />
+        </div>
+        <div>
+          <p className="font-semibold text-foreground">Cole aqui (copie do console Green API)</p>
+          <p className="text-xs text-muted-foreground">Os nomes são iguais aos do site — sem tradução</p>
+        </div>
       </div>
+
       <div className="space-y-3">
-        <div>
-          <label className="text-sm font-medium text-foreground">Número WhatsApp (exibição)</label>
-          <Input
-            className="mt-1 bg-input border-border text-foreground"
-            value={localPhone}
-            onChange={(e) => {
-              setLocalPhone(e.target.value)
-              onPhoneChange(e.target.value)
-            }}
-            placeholder="5561993465193"
-          />
-        </div>
-        <div>
-          <label className="text-sm font-medium text-foreground">
-            {META_WHATSAPP_ID_FIELD_COPY.phoneNumberIdLabel}
-          </label>
-          <Input
-            className="mt-1 bg-input border-border text-foreground font-mono text-sm"
-            value={localGraphId}
-            onChange={(e) => {
-              setLocalGraphId(e.target.value)
-              onGraphPhoneIdChange(e.target.value)
-            }}
-            placeholder="1260723217113545"
-          />
-          <p className="mt-1 text-xs text-muted-foreground">{META_WHATSAPP_ID_FIELD_COPY.phoneNumberIdHint}</p>
-        </div>
-        <div>
-          <div className="flex items-center justify-between gap-2">
-            <label className="text-sm font-medium text-foreground">Token de acesso</label>
-            <button
-              type="button"
-              className="text-xs text-primary underline"
-              onClick={() => setShowToken((v) => !v)}
-            >
-              {showToken ? "Ocultar" : "Mostrar"}
-            </button>
+        {[
+          {
+            label: "Número WhatsApp",
+            hint: "Com DDI 55 — ex.: 5561999999999",
+            value: localPhone,
+            set: (v: string) => {
+              setLocalPhone(v)
+              onPhoneChange(v)
+            },
+            placeholder: "5561999999999",
+            mono: false,
+            secret: false,
+          },
+          {
+            label: GREEN_API_FIELD_COPY.idInstanceLabel,
+            hint: GREEN_API_FIELD_COPY.idInstanceHint,
+            value: localIdInstance,
+            set: (v: string) => {
+              setLocalIdInstance(v)
+              onIdInstanceChange(v)
+            },
+            placeholder: "1101234567",
+            mono: true,
+            secret: false,
+          },
+          {
+            label: GREEN_API_FIELD_COPY.apiTokenLabel,
+            hint: GREEN_API_FIELD_COPY.apiTokenHint,
+            value: localToken,
+            set: (v: string) => {
+              setLocalToken(v)
+              onApiTokenInstanceChange(v)
+            },
+            placeholder: "d75b3a6637...",
+            mono: true,
+            secret: true,
+          },
+        ].map((field) => (
+          <div key={field.label} className="rounded-xl border border-border/80 bg-background/50 p-3">
+            <label className="text-sm font-bold text-green-400 font-mono">{field.label}</label>
+            <Input
+              type={field.secret && !showToken ? "password" : "text"}
+              className={`mt-2 ${field.mono ? "font-mono text-sm" : ""}`}
+              value={field.value}
+              onChange={(e) => field.set(e.target.value)}
+              placeholder={field.placeholder}
+              inputMode={field.label === GREEN_API_FIELD_COPY.idInstanceLabel ? "numeric" : undefined}
+            />
+            <p className="mt-1.5 text-xs text-muted-foreground flex items-start gap-1">
+              <Copy className="w-3 h-3 shrink-0 mt-0.5" />
+              {field.hint}
+            </p>
           </div>
-          <Input
-            type={showToken ? "text" : "password"}
-            className="mt-1 bg-input border-border text-foreground font-mono text-sm"
-            value={localToken}
-            onChange={(e) => {
-              setLocalToken(e.target.value)
-              onAccessTokenChange(e.target.value)
-            }}
-            placeholder="EAA..."
-            autoComplete="off"
-          />
-          <p className="mt-1 text-xs text-muted-foreground">
-            {localToken.trim().length > 0
-              ? `${localToken.trim().length} caracteres — deve começar com EAA`
-              : "Cole o token aqui (campo vazio)"}
-          </p>
-        </div>
+        ))}
+        {localToken ? (
+          <button type="button" className="text-xs text-primary underline" onClick={() => setShowToken((v) => !v)}>
+            {showToken ? "Ocultar token" : "Mostrar token"}
+          </button>
+        ) : null}
         <Button
           type="button"
-          className="bg-primary text-primary-foreground w-full sm:w-auto"
+          size="lg"
+          className="w-full bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white wa-pulse-cta border-0"
           disabled={busy}
-          onClick={save}
+          onClick={() => void save()}
         >
-          {busy ? "Salvando…" : "Salvar credenciais WhatsApp"}
+          {busy ? "Salvando…" : "Salvar e ativar WhatsApp"}
+          {!busy && <CheckCircle2 className="w-5 h-5 ml-2" />}
         </Button>
       </div>
     </section>
   )
 }
 
-export function WhatsAppConnectWizard({
-  premium,
-  loading,
-  connected,
-  phone,
-  shopName = "",
-  shopPhone = "",
-  busy,
-  error,
-  onClearError,
-  onSetError,
-  onReload,
-  onScrollToSettings,
-  onDisconnect,
-  onSaveShopPhone,
-  graphPhoneId = "",
-  accessToken = "",
-  onPhoneChange,
-  onGraphPhoneIdChange,
-  onAccessTokenChange,
-  onSaveCredentials,
-}: WhatsAppConnectWizardProps) {
-  const [step, setStep] = useState(1)
-  const [checkFb, setCheckFb] = useState(false)
-  const [checkWaBusiness, setCheckWaBusiness] = useState(false)
-  const [checkNumber, setCheckNumber] = useState(false)
-  const [connecting, setConnecting] = useState(false)
+export function WhatsAppConnectWizard(props: WhatsAppConnectWizardProps) {
+  const {
+    premium,
+    loading,
+    connected,
+    readyToSend = false,
+    stateLabel = null,
+    phone,
+    shopName = "",
+    shopPhone = "",
+    busy,
+    error,
+    onClearError,
+    onSetError,
+    onScrollToSettings,
+    onDisconnect,
+    onSaveShopPhone,
+    idInstance = "",
+    apiTokenInstance = "",
+    onPhoneChange,
+    onIdInstanceChange,
+    onApiTokenInstanceChange,
+    onSaveCredentials,
+  } = props
 
-  const metaAppId = process.env.NEXT_PUBLIC_META_APP_ID?.trim()
-  const metaConfigId = process.env.NEXT_PUBLIC_META_EMBEDDED_SIGNUP_CONFIG_ID?.trim()
-  const metaReady = Boolean(metaAppId && metaConfigId)
+  const [step, setStep] = useState(1)
+  const [pickedBusiness, setPickedBusiness] = useState(false)
+  const [createdInstance, setCreatedInstance] = useState(false)
+  const [checkNumber, setCheckNumber] = useState(false)
+  const [checkQr, setCheckQr] = useState(false)
+  const [checkingStatus, setCheckingStatus] = useState(false)
+  const [liveStateLabel, setLiveStateLabel] = useState<string | null>(stateLabel)
+  const [liveReady, setLiveReady] = useState(readyToSend)
+
+  useEffect(() => {
+    setLiveStateLabel(stateLabel)
+    setLiveReady(readyToSend)
+  }, [stateLabel, readyToSend])
 
   const goTo = (n: number) => {
     setStep(n)
     onClearError()
   }
 
-  const stepReady = checkFb && checkWaBusiness && checkNumber
   const displayShopPhone = shopPhone.trim() || phone.trim()
+  const step2Ready = pickedBusiness && createdInstance && checkNumber
 
-  const handleConnectMeta = async () => {
-    if (!premium) {
-      onSetError("A conexão do WhatsApp está disponível no plano Premium.")
-      return
-    }
-    if (!metaReady) {
-      onSetError(
-        "A conexão oficial com a Meta está sendo liberada. Você já pode configurar lembretes e textos das mensagens abaixo."
-      )
-      goTo(4)
-      onScrollToSettings()
-      return
-    }
-
+  const handleCheckStatus = async () => {
+    if (!premium) return
     onClearError()
-    setConnecting(true)
+    setCheckingStatus(true)
     try {
-      await new Promise<void>((resolve, reject) => {
-        if (typeof window === "undefined") {
-          reject(new Error("Ambiente inválido"))
-          return
-        }
-        const w = window as Window & {
-          FB?: {
-            init: (p: { appId: string; cookie: boolean; xfbml: boolean; version: string }) => void
-            login: (
-              cb: (r: { authResponse?: { code?: string } }) => void,
-              opts: Record<string, string | boolean>
-            ) => void
-          }
-          fbAsyncInit?: () => void
-        }
-        const done = () => {
-          if (w.FB) resolve()
-          else reject(new Error("Não foi possível carregar o login da Meta"))
-        }
-        if (w.FB) {
-          done()
-          return
-        }
-        w.fbAsyncInit = () => done()
-        if (!document.getElementById("facebook-jssdk")) {
-          const s = document.createElement("script")
-          s.id = "facebook-jssdk"
-          s.async = true
-          s.defer = true
-          s.crossOrigin = "anonymous"
-          s.src = "https://connect.facebook.net/pt_BR/sdk.js"
-          s.onerror = () => reject(new Error("Erro ao carregar o login da Meta"))
-          document.body.appendChild(s)
-        } else {
-          setTimeout(done, 1500)
-        }
+      const r = await fetch("/api/whatsapp/status", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id_instance: idInstance.trim() || undefined,
+          api_token_instance: apiTokenInstance.trim() || undefined,
+        }),
       })
-
-      const w = window as unknown as {
-        FB: {
-          init: (p: { appId: string; cookie: boolean; xfbml: boolean; version: string }) => void
-          login: (
-            cb: (r: { authResponse?: { code?: string } }) => void,
-            opts: Record<string, string | boolean>
-          ) => void
-        }
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) {
+        onSetError(typeof j.error === "string" ? j.error : "Não foi possível verificar")
+        return
       }
-
-      w.FB.init({
-        appId: metaAppId!,
-        cookie: true,
-        xfbml: true,
-        version: "v21.0",
-      })
-
-      await new Promise<void>((resolve, reject) => {
-        w.FB.login(
-          (response) => {
-            if (!response.authResponse?.code) {
-              reject(new Error("Conexão cancelada. Tente novamente quando quiser."))
-              return
-            }
-            void fetch("/api/whatsapp/meta-signup", {
-              method: "POST",
-              credentials: "include",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ code: response.authResponse.code }),
-            })
-              .then(async (r) => {
-                const j = await r.json().catch(() => ({}))
-                if (!r.ok) {
-                  reject(new Error(typeof j.error === "string" ? j.error : "Não foi possível conectar"))
-                  return
-                }
-                await onReload()
-                resolve()
-              })
-              .catch(() => reject(new Error("Erro de rede ao conectar")))
-          },
-          {
-            config_id: metaConfigId!,
-            response_type: "code",
-            override_default_response_type: true,
-            extras: JSON.stringify({ setup: {} }),
-          }
-        )
-      })
-
-      goTo(4)
-    } catch (e) {
-      onSetError(e instanceof Error ? e.message : "Não foi possível conectar")
+      setLiveStateLabel(typeof j.state_label === "string" ? j.state_label : null)
+      setLiveReady(j.ready_to_send === true)
+      if (j.ready_to_send === true) setCheckQr(true)
+    } catch {
+      onSetError("Erro de rede")
     } finally {
-      setConnecting(false)
+      setCheckingStatus(false)
     }
   }
 
   if (loading) {
     return (
-      <Card className="bg-card border-border">
-        <CardContent className="py-16 text-center">
-          <p className="text-muted-foreground text-base md:text-lg">Carregando…</p>
+      <Card className="border-green-500/20">
+        <CardContent className="py-20 text-center">
+          <div className="wa-float-icon inline-flex w-16 h-16 rounded-2xl bg-green-500/20 items-center justify-center text-green-500 mb-4">
+            <WhatsAppIcon />
+          </div>
+          <p className="text-muted-foreground">Carregando integração…</p>
         </CardContent>
       </Card>
     )
@@ -520,37 +505,50 @@ export function WhatsAppConnectWizard({
 
   if (connected) {
     return (
-      <Card className="bg-card border-green-500/20 overflow-hidden">
-        <div className="h-1.5 bg-green-500" />
-        <CardContent className="pt-8 pb-8 px-6 md:px-10 space-y-5">
-          <div className="flex items-start gap-5">
-            <div className="w-16 h-16 rounded-2xl bg-green-500/10 flex items-center justify-center shrink-0">
-              <CheckCircle2 className="w-8 h-8 text-green-500" />
+      <Card className="overflow-hidden border-2 border-green-500/30">
+        <div className={`h-2 ${liveReady ? "bg-gradient-to-r from-green-500 to-emerald-400" : "bg-amber-500"}`} />
+        <CardContent className="pt-8 pb-8 px-6 space-y-6">
+          <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5 text-center sm:text-left">
+            <div
+              className={`w-20 h-20 rounded-3xl flex items-center justify-center shrink-0 ${
+                liveReady ? "bg-green-500 text-white wa-pulse-cta" : "bg-amber-500/20 text-amber-400"
+              }`}
+            >
+              {liveReady ? <WhatsAppIcon className="w-10 h-10" /> : <AlertCircle className="w-10 h-10" />}
             </div>
-            <div className="flex-1 space-y-2">
-              <p className="text-xl md:text-2xl font-semibold text-foreground">WhatsApp conectado</p>
-              <p className="text-base md:text-lg text-muted-foreground">
-                Número: <span className="text-foreground font-semibold">{phone.trim() || "—"}</span>
+            <div className="space-y-2 flex-1">
+              <p className="text-2xl font-bold text-foreground">
+                {liveReady ? "Tudo pronto!" : "Falta escanear o QR Code"}
               </p>
-              <p className="text-sm md:text-base text-muted-foreground">
-                Seus clientes já podem receber confirmações e lembretes automáticos.
-              </p>
+              <p className="text-green-400 font-semibold text-lg tabular-nums">{phone.trim() || "—"}</p>
+              {liveStateLabel ? <p className="text-sm text-muted-foreground">{liveStateLabel}</p> : null}
             </div>
           </div>
-          <div className="flex flex-wrap gap-3">
-            <Button type="button" variant="outline" onClick={onScrollToSettings}>
-              <Settings2 className="w-5 h-5 mr-2" />
-              Ajustar lembretes e mensagens
-            </Button>
+          <div className="flex flex-wrap gap-3 justify-center sm:justify-start">
+            {!liveReady ? (
+              <>
+                <ClickCard
+                  href={GREEN_API_FIELD_COPY.consoleUrl}
+                  pulse
+                  accent="green"
+                  icon={<WhatsAppIcon className="w-7 h-7 text-green-500" />}
+                  title="Abrir console e escanear QR"
+                  subtitle="Clique aqui → sua instância → botão QR"
+                />
+                <Button variant="outline" disabled={checkingStatus} onClick={() => void handleCheckStatus()}>
+                  <RefreshCw className={`w-4 h-4 mr-2 ${checkingStatus ? "animate-spin" : ""}`} />
+                  Verificar status
+                </Button>
+              </>
+            ) : (
+              <Button className="bg-green-600 hover:bg-green-700 text-white" onClick={onScrollToSettings}>
+                <Sparkles className="w-4 h-4 mr-2" />
+                Ativar lembretes e mensagens
+              </Button>
+            )}
             {onDisconnect ? (
-              <Button
-                type="button"
-                variant="outline"
-                className="text-muted-foreground hover:text-destructive"
-                disabled={busy}
-                onClick={onDisconnect}
-              >
-                {busy ? "…" : "Desconectar"}
+              <Button variant="ghost" className="text-muted-foreground" disabled={busy} onClick={onDisconnect}>
+                Desconectar
               </Button>
             ) : null}
           </div>
@@ -560,72 +558,32 @@ export function WhatsAppConnectWizard({
   }
 
   return (
-    <Card className="bg-card border-border overflow-hidden">
-      <CardContent className="pt-8 pb-10 px-5 sm:px-8 md:px-10">
-        <div className="text-center space-y-7 w-full max-w-3xl mx-auto">
-          {/* Indicador de etapas */}
-          <div className="space-y-3">
-            <p className="text-sm font-semibold uppercase tracking-wide text-primary">
-              Passo {step} de {STEPS.length}
-            </p>
-            <div className="flex gap-3 justify-center">
-              {STEPS.map((label, i) => {
-                const n = i + 1
-                return (
-                  <div key={label} className="flex flex-col items-center gap-1.5 min-w-[4rem]">
-                    <div
-                      className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold transition-colors ${
-                        n < step
-                          ? "bg-green-500 text-white"
-                          : n === step
-                            ? "bg-primary text-primary-foreground"
-                            : "bg-muted text-muted-foreground"
-                      }`}
-                    >
-                      {n < step ? "✓" : n}
-                    </div>
-                    <span className={`text-xs ${n === step ? "text-foreground font-medium" : "text-muted-foreground"}`}>
-                      {label}
-                    </span>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <div className="mx-auto w-16 h-16 rounded-2xl bg-green-500/10 flex items-center justify-center">
-              <MessageSquare className="w-8 h-8 text-green-500" />
-            </div>
-            <div className="space-y-2">
-              <p className="text-2xl font-bold text-foreground">WhatsApp Business</p>
-              <p className="text-base text-muted-foreground leading-relaxed">
-                {step === 1 && "Envie confirmações, lembretes e mensagens automáticas para seus clientes."}
-                {step === 2 && "Baixe os apps, confira o número da barbearia e confirme que está pronto para conectar."}
-                {step === 3 && "Conecte com a Meta em poucos cliques — login seguro, sem copiar códigos."}
-                {step === 4 && "Quase lá! Ajuste lembretes e textos das mensagens na seção abaixo."}
-              </p>
-            </div>
-          </div>
+    <Card className="overflow-hidden border border-green-500/20 bg-gradient-to-b from-green-500/[0.06] to-transparent">
+      <CardContent className="pt-8 pb-10 px-5 sm:px-8">
+        <div className="max-w-2xl mx-auto space-y-8">
+          <StepHeader step={step} />
 
           {step === 1 && (
-            <div className="flex flex-col gap-3 text-left w-full">
-              {[
-                { icon: <CalendarCheck className="w-5 h-5 text-green-500" />, text: "Confirmação de agendamento" },
-                { icon: <Clock3 className="w-5 h-5 text-blue-500" />, text: "Lembretes automáticos" },
-                { icon: <Send className="w-5 h-5 text-primary" />, text: "Mensagens automáticas" },
-                { icon: <Zap className="w-5 h-5 text-amber-500" />, text: "Atendimento automatizado" },
-              ].map((item, i) => (
-                <div key={i} className="flex items-center gap-3 rounded-xl bg-muted/40 border border-border/60 px-4 py-3.5">
-                  {item.icon}
-                  <span className="text-base font-medium text-foreground">{item.text}</span>
-                </div>
-              ))}
+            <div className="space-y-4">
+              <p className="text-center text-muted-foreground">
+                Seus clientes recebem mensagens no WhatsApp da barbearia — automático, sem trabalho manual.
+              </p>
+              <div className="grid gap-3">
+                {BENEFITS.map((b) => (
+                  <div key={b.title} className={`flex items-center gap-4 rounded-2xl border p-4 ${b.bg}`}>
+                    <b.icon className={`w-8 h-8 shrink-0 ${b.color}`} />
+                    <div className="text-left">
+                      <p className="font-semibold text-foreground">{b.title}</p>
+                      <p className="text-sm text-muted-foreground">{b.desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
           {step === 2 && (
-            <div className="w-full text-left space-y-5">
+            <div className="space-y-5 text-left">
               <ShopPhoneEditor
                 shopName={shopName}
                 displayPhone={displayShopPhone}
@@ -633,261 +591,186 @@ export function WhatsAppConnectWizard({
                 onSaved={() => setCheckNumber(false)}
               />
 
-              <section className="rounded-xl border border-border bg-muted/20 p-5 space-y-4">
-                <div className="flex items-center gap-2">
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-bold">
-                    2
-                  </span>
-                  <p className="text-base font-semibold text-foreground flex items-center gap-2">
-                    <Smartphone className="w-5 h-5 text-primary" />
-                    Passo a passo
-                  </p>
-                </div>
-                <ol className="space-y-3 pl-9">
-                  {PREP_STEPS.map((text, i) => (
-                    <li key={text} className="flex gap-3 text-base text-muted-foreground leading-relaxed">
-                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary">
-                        {i + 1}
-                      </span>
-                      <span className="pt-0.5">{text}</span>
-                    </li>
-                  ))}
-                </ol>
-              </section>
+              <p className="text-sm font-semibold text-foreground text-center">Qual plano escolher no Green API?</p>
 
-              <section className="rounded-xl border border-border bg-muted/20 p-5 space-y-4">
-                <div className="flex items-center gap-2">
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-bold">
-                    3
-                  </span>
-                  <p className="text-base font-semibold text-foreground">Apps que você vai usar</p>
+              <div className="grid sm:grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setPickedBusiness(true)}
+                  className={`rounded-2xl border-2 p-4 text-left transition-all ${
+                    pickedBusiness
+                      ? "border-green-500 bg-green-500/15 wa-pulse-cta"
+                      : "border-green-500/40 bg-green-500/5 hover:border-green-500/70"
+                  }`}
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <Crown className="w-5 h-5 text-amber-400" />
+                    <span className="text-xs font-bold uppercase text-green-400">Recomendado</span>
+                  </div>
+                  <p className="font-bold text-foreground">{GREEN_API_FIELD_COPY.planBusinessTitle}</p>
+                  <p className="text-green-400 font-semibold">{GREEN_API_FIELD_COPY.planBusinessPrice}</p>
+                  <p className="text-xs text-muted-foreground mt-2">{GREEN_API_FIELD_COPY.planBusinessDesc}</p>
+                </button>
+                <div className="rounded-2xl border border-border/60 bg-muted/20 p-4 text-left opacity-80">
+                  <p className="font-bold text-foreground">{GREEN_API_FIELD_COPY.planDeveloperTitle}</p>
+                  <p className="text-muted-foreground font-semibold">{GREEN_API_FIELD_COPY.planDeveloperPrice}</p>
+                  <p className="text-xs text-amber-500/90 mt-2">{GREEN_API_FIELD_COPY.planDeveloperDesc}</p>
                 </div>
-                <div className="space-y-3 pl-9">
-                  {REQUIRED_APPS.map((app) => (
-                    <div key={app.id} className="rounded-lg border border-border bg-muted/30 p-4 space-y-3">
-                      <div className="flex items-start gap-3">
-                        <div
-                          className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 text-white text-sm font-bold"
-                          style={{ backgroundColor: app.color }}
-                        >
-                          {app.name.charAt(0)}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-base font-semibold text-foreground">{app.name}</p>
-                          <p className="text-base text-muted-foreground mt-0.5">{app.description}</p>
-                        </div>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {app.links.map((link) => (
-                          <a
-                            key={link.href}
-                            href={link.href}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-sm font-medium text-primary hover:bg-muted/50 transition-colors"
-                          >
-                            {link.label}
-                            <ExternalLink className="w-3.5 h-3.5" />
-                          </a>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </section>
+              </div>
 
-              <section className="rounded-xl border border-border bg-muted/20 p-5 space-y-3">
-                <div className="flex items-center gap-2">
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-bold">
-                    4
-                  </span>
-                  <p className="text-base font-semibold text-foreground">Confirme que está pronto</p>
-                </div>
-                <div className="space-y-2.5 pl-9">
-                  {[
-                    { checked: checkFb, set: setCheckFb, text: "Tenho conta Facebook ou Meta" },
-                    { checked: checkWaBusiness, set: setCheckWaBusiness, text: "Meu número está no WhatsApp Business" },
-                    { checked: checkNumber, set: setCheckNumber, text: "Confirmei que é o número da barbearia acima" },
-                  ].map((item) => (
-                    <label
-                      key={item.text}
-                      className="flex items-start gap-3 cursor-pointer rounded-lg border border-border bg-muted/30 p-4"
-                    >
-                      <Checkbox checked={item.checked} onCheckedChange={(v) => item.set(v === true)} className="mt-0.5 size-5" />
-                      <span className="text-base text-foreground leading-relaxed">{item.text}</span>
-                    </label>
-                  ))}
-                </div>
-              </section>
+              <ClickCard
+                href={GREEN_API_FIELD_COPY.consoleUrl}
+                pulse={!createdInstance}
+                icon={<WhatsAppIcon className="w-7 h-7 text-green-500" />}
+                title="1. Clique — Create an instance (WhatsApp)"
+                subtitle="Escolha WhatsApp: Business → Select. Depois copie idInstance e apiTokenInstance."
+              />
+
+              <label className="flex items-start gap-3 cursor-pointer rounded-xl border border-border p-4 bg-background/40">
+                <Checkbox checked={createdInstance} onCheckedChange={(v) => setCreatedInstance(v === true)} />
+                <span className="text-sm leading-relaxed">
+                  Já criei a instância <strong className="text-green-400">WhatsApp Business</strong> no console
+                </span>
+              </label>
+              <label className="flex items-start gap-3 cursor-pointer rounded-xl border border-border p-4 bg-background/40">
+                <Checkbox checked={checkNumber} onCheckedChange={(v) => setCheckNumber(v === true)} />
+                <span className="text-sm leading-relaxed">Confirmei o número da barbearia acima</span>
+              </label>
             </div>
           )}
 
           {step === 3 && (
-            <div className="w-full space-y-5 text-left">
-              <section className="rounded-xl border border-border bg-muted/30 p-5 space-y-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-[#1877F2]/15 flex items-center justify-center">
-                    <Facebook className="w-5 h-5 text-[#1877F2]" />
-                  </div>
-                  <p className="text-base font-semibold text-foreground">Login oficial da Meta</p>
+            <div className="space-y-5 text-left">
+              <div className="flex flex-col sm:flex-row items-center gap-6 rounded-2xl border-2 border-green-500/30 bg-green-500/5 p-6">
+                <QrIllustration />
+                <div className="space-y-3 flex-1">
+                  <p className="font-semibold text-foreground">Escaneie o QR Code</p>
+                  <ol className="space-y-2 text-sm text-muted-foreground">
+                    <li>1. Abra o console Green API → sua instância</li>
+                    <li>2. Clique em <strong className="text-foreground">QR</strong></li>
+                    <li>3. No celular: WhatsApp → ⋮ → Aparelhos conectados</li>
+                    <li>4. Escaneie até aparecer <strong className="text-green-400">authorized</strong></li>
+                  </ol>
                 </div>
-                <p className="text-base text-muted-foreground leading-relaxed">
-                  Ao clicar, abre a janela da Meta para autorizar o número{" "}
-                  {displayShopPhone ? (
-                    <strong className="text-foreground">{displayShopPhone}</strong>
-                  ) : (
-                    "da barbearia"
-                  )}
-                  . Sem token manual, sem complicação.
-                </p>
-                {onSaveShopPhone ? (
-                  <Button
-                    type="button"
-                    variant="link"
-                    className="h-auto p-0 text-primary text-sm"
-                    onClick={() => goTo(2)}
-                  >
-                    <Pencil className="w-3.5 h-3.5 mr-1 inline" />
-                    Trocar número da barbearia
-                  </Button>
-                ) : null}
-              </section>
+              </div>
 
-              <section className="rounded-xl border border-border bg-muted/20 p-5 space-y-4">
-                <p className="text-base font-semibold text-foreground">O que vai acontecer</p>
-                <ol className="space-y-3">
-                  {CONNECT_STEPS.map((text, i) => (
-                    <li key={text} className="flex gap-3 text-base text-muted-foreground leading-relaxed">
-                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-green-500/15 text-xs font-bold text-green-600 dark:text-green-400">
-                        {i + 1}
-                      </span>
-                      <span className="pt-0.5">{text}</span>
-                    </li>
-                  ))}
-                </ol>
-              </section>
+              <ClickCard
+                href={GREEN_API_FIELD_COPY.consoleUrl}
+                pulse
+                icon={<Smartphone className="w-7 h-7 text-green-500" />}
+                title="Abrir console — escanear QR agora"
+                subtitle="Toque aqui. Não escolha Telegram — só WhatsApp."
+              />
+
+              {liveStateLabel ? (
+                <p className="text-sm text-center text-muted-foreground">
+                  Status: <strong className="text-foreground">{liveStateLabel}</strong>
+                </p>
+              ) : null}
+
+              <label className="flex items-start gap-3 cursor-pointer rounded-xl border-2 border-green-500/30 p-4">
+                <Checkbox checked={checkQr} onCheckedChange={(v) => setCheckQr(v === true)} />
+                <span className="text-sm">Escaneei o QR e o status está <strong className="text-green-400">authorized</strong></span>
+              </label>
+
+              <Button variant="outline" size="sm" disabled={checkingStatus} onClick={() => void handleCheckStatus()}>
+                <RefreshCw className={`w-4 h-4 mr-2 ${checkingStatus ? "animate-spin" : ""}`} />
+                Verificar status
+              </Button>
             </div>
           )}
 
-          {step === 3 && premium ? (
-            <MetaCredentialsForm
+          {step === 4 && premium ? (
+            <GreenApiCredentialsForm
               phone={phone}
-              graphPhoneId={graphPhoneId}
-              accessToken={accessToken}
+              idInstance={idInstance}
+              apiTokenInstance={apiTokenInstance}
               busy={busy}
               onPhoneChange={onPhoneChange}
-              onGraphPhoneIdChange={onGraphPhoneIdChange}
-              onAccessTokenChange={onAccessTokenChange}
-              onSaveCredentials={onSaveCredentials}
+              onIdInstanceChange={onIdInstanceChange}
+              onApiTokenInstanceChange={onApiTokenInstanceChange}
+              onSaveCredentials={async (payload) => {
+                const ok = await onSaveCredentials?.(payload)
+                if (ok === false) return
+                goTo(5)
+              }}
             />
+          ) : step === 4 && !premium ? (
+            <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-6 text-center">
+              <p className="font-semibold text-foreground">Plano Premium necessário</p>
+              <p className="text-sm text-muted-foreground mt-2">
+                <a href="/painel/assinatura" className="text-primary underline font-medium">
+                  Ative o Premium
+                </a>{" "}
+                para conectar o WhatsApp.
+              </p>
+            </div>
           ) : null}
 
-          {step === 4 && (
-            <div className="w-full space-y-4">
-              {premium ? (
-                <MetaCredentialsForm
-                  phone={phone}
-                  graphPhoneId={graphPhoneId}
-                  accessToken={accessToken}
-                  busy={busy}
-                  onPhoneChange={onPhoneChange}
-                  onGraphPhoneIdChange={onGraphPhoneIdChange}
-                  onAccessTokenChange={onAccessTokenChange}
-                  onSaveCredentials={onSaveCredentials}
-                />
-              ) : null}
-              <div className="rounded-xl border border-green-500/30 bg-green-500/5 p-5 text-left">
-                <p className="text-base text-foreground leading-relaxed">
-                  Depois de salvar o token acima, use <strong>Lembretes automáticos</strong> e{" "}
-                  <strong>Textos das mensagens</strong> mais abaixo na página.
-                </p>
+          {step === 5 && (
+            <div className="text-center space-y-4 py-4">
+              <div className="wa-float-icon inline-flex w-24 h-24 rounded-full bg-green-500 items-center justify-center text-white wa-pulse-cta">
+                <CheckCircle2 className="w-12 h-12" />
               </div>
+              <p className="text-xl font-bold text-foreground">WhatsApp configurado!</p>
+              <p className="text-muted-foreground">Agora ative os lembretes e personalize os textos abaixo.</p>
             </div>
           )}
 
-          {/* Botões — sempre visíveis por etapa */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3 pt-1">
-            {step > 1 && step <= 4 && (
-              <Button type="button" variant="outline" onClick={() => goTo(step - 1)} disabled={busy || connecting}>
+          <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
+            {step > 1 && (
+              <Button variant="outline" onClick={() => goTo(step - 1)} disabled={busy}>
                 <ArrowLeft className="w-4 h-4 mr-1" />
                 Voltar
               </Button>
             )}
-
             {step === 1 && (
-              <Button type="button" size="lg" className="bg-green-600 hover:bg-green-700 text-white px-8" onClick={() => goTo(2)}>
-                Começar configuração
+              <Button size="lg" className="bg-green-600 hover:bg-green-700 text-white wa-pulse-cta" onClick={() => goTo(2)}>
+                Começar
                 <ArrowRight className="w-4 h-4 ml-2" />
               </Button>
             )}
-
             {step === 2 && (
               <Button
-                type="button"
                 size="lg"
-                className="bg-green-600 hover:bg-green-700 text-white px-8"
-                disabled={!stepReady}
+                className="bg-green-600 hover:bg-green-700 text-white"
+                disabled={!step2Ready}
                 onClick={() => goTo(3)}
               >
-                Continuar
+                Próximo: QR Code
                 <ArrowRight className="w-4 h-4 ml-2" />
               </Button>
             )}
-
             {step === 3 && (
-              <>
-                <Button
-                  type="button"
-                  size="lg"
-                  className="bg-green-600 hover:bg-green-700 text-white px-8"
-                  disabled={busy || connecting}
-                  onClick={() => void handleConnectMeta()}
-                >
-                  {connecting ? "Conectando…" : "Conectar WhatsApp"}
-                  {!connecting && <Zap className="w-4 h-4 ml-2" />}
-                </Button>
-                <Button type="button" size="lg" variant="outline" disabled={busy || connecting} onClick={() => goTo(4)}>
-                  Já tenho token — colar agora
-                  <ArrowRight className="w-4 h-4 ml-2" />
-                </Button>
-              </>
+              <Button
+                size="lg"
+                className="bg-green-600 hover:bg-green-700 text-white wa-pulse-cta"
+                disabled={!checkQr}
+                onClick={() => goTo(4)}
+              >
+                Próximo: colar credenciais
+                <ArrowRight className="w-4 h-4 ml-2" />
+              </Button>
             )}
-
-            {step === 4 && (
-              <Button type="button" size="lg" className="bg-primary text-primary-foreground px-8" onClick={onScrollToSettings}>
-                <Settings2 className="w-4 h-4 mr-2" />
+            {step === 5 && (
+              <Button size="lg" className="bg-green-600 text-white" onClick={onScrollToSettings}>
                 Ir para lembretes
+                <ArrowRight className="w-4 h-4 ml-2" />
               </Button>
             )}
           </div>
 
-          {step === 2 && !stepReady && (
-            <p className="text-base text-muted-foreground">Marque os três itens para continuar.</p>
+          {step === 2 && !step2Ready && (
+            <p className="text-center text-sm text-muted-foreground">
+              Toque em <strong className="text-green-400">Business</strong> e marque os itens acima.
+            </p>
           )}
-
-          {!premium && step >= 3 && (
-            <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-5 py-4 w-full text-left">
-              <p className="text-base font-semibold text-foreground">Plano Premium</p>
-              <p className="text-base text-muted-foreground mt-1">
-                A conexão do WhatsApp exige Premium.{" "}
-                <a href="/painel/assinatura" className="text-primary underline font-medium">
-                  Ver planos
-                </a>
-              </p>
-            </div>
+          {step === 3 && !checkQr && (
+            <p className="text-center text-sm text-muted-foreground">Escaneie o QR e marque a confirmação.</p>
           )}
-
-          {error && (
-            <div className="p-4 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-base w-full text-left">
-              {error}
-            </div>
-          )}
-
-          {error && error.includes("Meta") && step === 3 && (
-            <Button type="button" variant="link" className="text-primary" onClick={() => { goTo(4); onScrollToSettings() }}>
-              Continuar e configurar mensagens abaixo
-            </Button>
-          )}
+          {error ? (
+            <div className="p-4 rounded-xl bg-destructive/10 border border-destructive/30 text-destructive text-sm">{error}</div>
+          ) : null}
         </div>
       </CardContent>
     </Card>

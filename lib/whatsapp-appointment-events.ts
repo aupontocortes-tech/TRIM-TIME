@@ -14,7 +14,6 @@ import {
   isWhatsAppIntegrationReady,
   type WhatsAppSendResult,
 } from "@/lib/whatsapp-send-unified"
-import { metaTemplateBodyParamsFromVars } from "@/lib/whatsapp-meta-templates"
 
 const APPOINTMENT_INCLUDE = {
   client: true,
@@ -83,8 +82,6 @@ export async function trySendWhatsAppAppointmentConfirmation(
       integration: integration!,
       toDigits: digits,
       body,
-      metaTemplateName: ns?.whatsapp_meta_template_confirmation,
-      metaTemplateBodyParams: metaTemplateBodyParamsFromVars(vars),
     })
     await prisma.notificationLog.create({
       data: {
@@ -138,8 +135,6 @@ export async function trySendWhatsAppAppointmentPostService(
       integration: integration!,
       toDigits: digits,
       body,
-      metaTemplateName: ns?.whatsapp_meta_template_post_service,
-      metaTemplateBodyParams: metaTemplateBodyParamsFromVars(vars),
     })
     await prisma.notificationLog.create({
       data: {

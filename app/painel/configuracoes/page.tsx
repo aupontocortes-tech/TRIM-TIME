@@ -109,7 +109,6 @@ import { cn } from "@/lib/utils"
 import { planSalesButtonVariant, planSalesTheme } from "@/lib/plan-sales-theme"
 import { BarberPhotoAdjust } from "@/components/barber-photo-adjust"
 import { WhatsAppConnectWizard } from "@/components/painel/whatsapp-connect-wizard"
-import { META_WHATSAPP_ID_FIELD_COPY } from "@/lib/whatsapp-meta-resolver"
 import { ChangePasswordForm } from "@/components/account/change-password-form"
 import { DeleteAccountSection } from "@/components/account/delete-account-section"
 import {
@@ -374,6 +373,8 @@ export default function ConfiguracoesPage() {
   const [waPhone, setWaPhone] = useState("")
   const [waGraphPhoneId, setWaGraphPhoneId] = useState("")
   const [waManualToken, setWaManualToken] = useState("")
+  const [waReadyToSend, setWaReadyToSend] = useState(false)
+  const [waStateLabel, setWaStateLabel] = useState<string | null>(null)
   const [waConnected, setWaConnected] = useState(false)
   const [waBusy, setWaBusy] = useState(false)
   const [waPlanBlocked, setWaPlanBlocked] = useState(false)
@@ -667,12 +668,22 @@ export default function ConfiguracoesPage() {
       setWaPlanBlocked(false)
       if (j && typeof j.phone_number === "string") {
         setWaPhone(j.phone_number)
-        setWaGraphPhoneId(typeof j.graph_phone_number_id === "string" ? j.graph_phone_number_id : "")
+        const idInst =
+          typeof j.id_instance === "string"
+            ? j.id_instance
+            : typeof j.graph_phone_number_id === "string"
+              ? j.graph_phone_number_id
+              : ""
+        setWaGraphPhoneId(idInst)
         setWaConnected(j.connected === true)
+        setWaReadyToSend(j.ready_to_send === true)
+        setWaStateLabel(typeof j.state_label === "string" ? j.state_label : null)
       } else {
         setWaPhone("")
         setWaGraphPhoneId("")
         setWaConnected(false)
+        setWaReadyToSend(false)
+        setWaStateLabel(null)
       }
     } catch {
       setWaError("Erro de rede")
@@ -1402,27 +1413,25 @@ export default function ConfiguracoesPage() {
 
   const handleSaveWaCredentials = async (payload?: {
     phone?: string
+    idInstance?: string
+    apiTokenInstance?: string
     graphPhoneId?: string
     accessToken?: string
-  }) => {
+  }): Promise<boolean> => {
     const phone = (payload?.phone ?? waPhone).trim()
-    const graphId = (payload?.graphPhoneId ?? waGraphPhoneId).trim()
-    const token = (payload?.accessToken ?? waManualToken).trim()
+    const idInstance = (payload?.idInstance ?? payload?.graphPhoneId ?? waGraphPhoneId).trim()
+    const apiTokenInstance = (payload?.apiTokenInstance ?? payload?.accessToken ?? waManualToken).trim()
     const missing: string[] = []
     if (!phone) missing.push("número")
-    if (!graphId) missing.push("identificador do número de telefone")
-    if (!token) missing.push("token de acesso")
+    if (!idInstance) missing.push("idInstance")
+    if (!apiTokenInstance) missing.push("apiTokenInstance")
     if (missing.length > 0) {
       setWaError(`Preencha: ${missing.join(", ")}.`)
-      return
-    }
-    if (!token.startsWith("EAA")) {
-      setWaError("Token inválido. Cole o token completo da Meta (começa com EAA).")
-      return
+      return false
     }
     setWaPhone(phone)
-    setWaGraphPhoneId(graphId)
-    setWaManualToken(token)
+    setWaGraphPhoneId(idInstance)
+    setWaManualToken(apiTokenInstance)
     setWaBusy(true)
     setWaError(null)
     setWaSaveInfo(null)
@@ -1433,27 +1442,30 @@ export default function ConfiguracoesPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           phone_number: phone,
-          graph_phone_number_id: graphId,
-          api_token: token,
+          id_instance: idInstance,
+          api_token_instance: apiTokenInstance,
         }),
       })
       const j = await r.json().catch(() => ({}))
       if (!r.ok) {
         setWaError(typeof j.error === "string" ? j.error : "Erro ao salvar credenciais")
-        return
+        return false
       }
-      if (j.meta_id_corrected_from_waba === true && typeof j.meta_phone_number_id_saved === "string") {
-        setWaGraphPhoneId(j.meta_phone_number_id_saved)
+      if (j.green_api_authorized === false && typeof j.state_label === "string") {
         setWaSaveInfo(
-          `Você colou o ID da conta Business; salvamos o identificador correto do número: ${j.meta_phone_number_id_saved}`
+          `Credenciais salvas. Próximo passo: ${j.state_label} — escaneie o QR Code no console Green API.`
         )
       } else {
         setWaSaveInfo(null)
       }
+      setWaReadyToSend(j.ready_to_send === true)
+      setWaStateLabel(typeof j.state_label === "string" ? j.state_label : null)
       setWaManualToken("")
       await loadWhatsapp()
+      return true
     } catch {
       setWaError("Erro de rede")
+      return false
     } finally {
       setWaBusy(false)
     }
@@ -4449,99 +4461,30 @@ export default function ConfiguracoesPage() {
             </Button>
           </div>
           <p className="text-sm text-muted-foreground max-w-2xl">
-            WhatsApp Business (API, templates e modo simples) ficou na aba{" "}
+            WhatsApp Business (Green API) ficou na aba{" "}
             <strong className="text-foreground">Integração</strong>.
           </p>
         </TabsContent>
 
         <TabsContent value="integracao" className="space-y-6">
-
-          {whatsappIntegrationFeature ? (
-            <Card id="wa-manual-credentials" className="bg-card border-border border-primary/30">
-              <CardHeader>
-                <CardTitle className="text-foreground text-base">
-                  Colar token e identificador da Meta
-                </CardTitle>
-                <CardDescription className="text-muted-foreground space-y-2">
-                  <span className="block">
-                    Use os dados de <strong className="text-foreground">WhatsApp → Etapa 1. Experimente</strong> no Meta for
-                    Developers.
-                  </span>
-                  <span className="block text-amber-800 dark:text-amber-200">
-                    {META_WHATSAPP_ID_FIELD_COPY.wabaWarning}
-                  </span>
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4 max-w-xl">
-                <Field>
-                  <FieldLabel>Número WhatsApp (exibição)</FieldLabel>
-                  <Input
-                    className="mt-1 bg-input border-border text-foreground"
-                    value={waPhone}
-                    onChange={(e) => setWaPhone(e.target.value)}
-                    placeholder="5561993465193"
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel>{META_WHATSAPP_ID_FIELD_COPY.phoneNumberIdLabel}</FieldLabel>
-                  <Input
-                    className="mt-1 bg-input border-border text-foreground font-mono text-sm"
-                    value={waGraphPhoneId}
-                    onChange={(e) => setWaGraphPhoneId(e.target.value)}
-                    placeholder="1260723217113545"
-                  />
-                  <p className="mt-1.5 text-xs text-muted-foreground leading-relaxed">
-                    {META_WHATSAPP_ID_FIELD_COPY.phoneNumberIdHint}
-                  </p>
-                </Field>
-                <Field>
-                  <FieldLabel>Token de acesso (Meta)</FieldLabel>
-                  <Input
-                    type="password"
-                    className="mt-1 bg-input border-border text-foreground font-mono text-sm"
-                    value={waManualToken}
-                    onChange={(e) => setWaManualToken(e.target.value)}
-                    placeholder="EAA..."
-                    autoComplete="off"
-                  />
-                </Field>
-                <Button
-                  type="button"
-                  className="bg-primary text-primary-foreground"
-                  disabled={waBusy}
-                  onClick={() => void handleSaveWaCredentials()}
-                >
-                  {waBusy ? "Salvando…" : "Salvar credenciais WhatsApp"}
-                </Button>
-                {waSaveInfo ? (
-                  <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-200 text-sm">
-                    {waSaveInfo}
-                  </div>
-                ) : null}
-                {waError ? (
-                  <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
-                    {waError}
-                  </div>
-                ) : null}
-              </CardContent>
-            </Card>
-          ) : (
+          {!whatsappIntegrationFeature ? (
             <Card className="bg-card border-amber-500/30">
               <CardHeader>
                 <CardTitle className="text-foreground text-base">WhatsApp (Premium)</CardTitle>
                 <CardDescription className="text-muted-foreground">
-                  Os campos de token e identificador do número só aparecem no plano Premium. Vá em{" "}
-                  <strong className="text-foreground">Configurações → Plano</strong> e ative Premium (ou conta de
-                  teste / Super Admin).
+                  A integração WhatsApp automática está no plano Premium. Vá em{" "}
+                  <strong className="text-foreground">Configurações → Plano</strong> e ative Premium.
                 </CardDescription>
               </CardHeader>
             </Card>
-          )}
+          ) : null}
 
           <WhatsAppConnectWizard
             premium={whatsappIntegrationFeature}
             loading={waLoading}
             connected={waApiConnected}
+            readyToSend={waReadyToSend}
+            stateLabel={waStateLabel}
             phone={waPhone}
             shopName={barbearia.nome || barbershop?.name || ""}
             shopPhone={barbearia.telefone || barbershop?.phone || ""}
@@ -4553,11 +4496,11 @@ export default function ConfiguracoesPage() {
             onScrollToSettings={scrollToWaSettings}
             onDisconnect={() => void handleWaDisconnect()}
             onSaveShopPhone={handleSaveShopPhoneForWhatsApp}
-            graphPhoneId={waGraphPhoneId}
-            accessToken={waManualToken}
+            idInstance={waGraphPhoneId}
+            apiTokenInstance={waManualToken}
             onPhoneChange={setWaPhone}
-            onGraphPhoneIdChange={setWaGraphPhoneId}
-            onAccessTokenChange={setWaManualToken}
+            onIdInstanceChange={setWaGraphPhoneId}
+            onApiTokenInstanceChange={setWaManualToken}
             onSaveCredentials={handleSaveWaCredentials}
           />
 
@@ -4579,9 +4522,8 @@ export default function ConfiguracoesPage() {
                 O cliente recebe um aviso no WhatsApp antes do horário marcado.
               </CardDescription>
               <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
-                Confirmação de agendamento (inclui remarcação na Agenda e pelo link público) usa o mesmo envio da Meta
-                (template). Se o texto livre falhar, o Trim Time envia o template{" "}
-                <strong className="text-foreground">hello_world</strong> — igual ao teste da Etapa 1.
+                Confirmação, lembretes e pós-atendimento são enviados como texto livre via Green API — personalize os
+                modelos abaixo.
               </p>
                 </CardHeader>
                 <CardContent className="space-y-5 max-w-xl">

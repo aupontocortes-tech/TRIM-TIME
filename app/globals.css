@@ -604,3 +604,50 @@
 .trimplay-gameover-title {
   animation: trimplay-go-title 0.85s ease-out 0.35s both;
 }
+
+/* WhatsApp integration wizard */
+@keyframes wa-pulse-ring {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(37, 211, 102, 0.45);
+  }
+  50% {
+    box-shadow: 0 0 0 14px rgba(37, 211, 102, 0);
+  }
+}
+
+@keyframes wa-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes wa-qr-scan {
+  0% {
+    top: 8%;
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    top: 88%;
+    opacity: 0.3;
+  }
+}
+
+.wa-pulse-cta {
+  animation: wa-pulse-ring 2.2s ease-in-out infinite;
+}
+
+.wa-float-icon {
+  animation: wa-float 3s ease-in-out infinite;
+}
+
+.wa-qr-scan-line {
+  animation: wa-qr-scan 2.5s ease-in-out infinite;
+}

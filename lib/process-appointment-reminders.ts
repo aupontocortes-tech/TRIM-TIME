@@ -11,7 +11,6 @@ import {
 import { renderNotificationTemplate } from "@/lib/notification-template"
 import { sendWebPushToClient } from "@/lib/web-push-send"
 import { sendWhatsAppNotification, type WhatsAppSendResult } from "@/lib/whatsapp-send-unified"
-import { metaTemplateBodyParamsFromVars } from "@/lib/whatsapp-meta-templates"
 import { sendClientNotificationEmail, type ClientEmailSendResult } from "@/lib/client-notification-email"
 import { hasFeature } from "@/lib/plans"
 import { resolveEffectivePlanForBarbershop } from "@/lib/barbershop-effective-plan-server"
@@ -167,8 +166,6 @@ export async function processAppointmentReminders(): Promise<ReminderRunStats> {
           integration: waIntegration,
           toDigits: digits,
           body: waBody,
-          metaTemplateName: ns.whatsapp_meta_template_reminder,
-          metaTemplateBodyParams: metaTemplateBodyParamsFromVars(vars),
         })
         payload.whatsapp = waResult
         if (waResult.ok) stats.whatsapp_ok++

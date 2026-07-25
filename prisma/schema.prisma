@@ -557,9 +557,9 @@ model WhatsAppIntegration {
   barbershopId String   @unique @map("barbershop_id") @db.Uuid
   barbershop   Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
   phoneNumber  String   @map("phone_number")
-  apiProvider  String   @default("meta") @map("api_provider")
+  apiProvider  String   @default("green_api") @map("api_provider")
   apiToken     String?  @map("api_token")
-  /// Phone Number ID da Meta (Graph API) para enviar mensagens.
+  /// idInstance da Green API (reutiliza coluna legada graph_phone_number_id).
   graphPhoneNumberId String? @map("graph_phone_number_id")
   connectedAt  DateTime @default(now()) @map("connected_at") @db.Timestamptz
   updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz

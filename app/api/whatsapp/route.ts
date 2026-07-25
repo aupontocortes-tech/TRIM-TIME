@@ -3,7 +3,10 @@ import { requireBarbershopId } from "@/lib/tenant"
 import { hasFeature, getUpgradeMessage } from "@/lib/plans"
 import { resolveEffectivePlanForActiveSession } from "@/lib/barbershop-effective-plan-server"
 import { prisma } from "@/lib/prisma"
-import { resolveGraphPhoneNumberIdForSave } from "@/lib/whatsapp-meta-resolver"
+import {
+  GREEN_API_STATE_LABELS,
+  validateGreenApiCredentials,
+} from "@/lib/whatsapp-green-api"
 
 function friendlyPrismaError(message: string): string {
   if (
@@ -25,12 +28,16 @@ function formatRow(row: {
   graphPhoneNumberId: string | null
   connectedAt: Date
   apiToken: string | null
+  apiProvider: string
 }) {
+  const connected = Boolean(row.apiToken?.trim() && row.graphPhoneNumberId?.trim())
   return {
     id: row.id,
     phone_number: row.phoneNumber,
+    id_instance: row.graphPhoneNumberId ?? null,
     graph_phone_number_id: row.graphPhoneNumberId ?? null,
-    connected: Boolean(row.apiToken?.trim() && row.graphPhoneNumberId?.trim()),
+    api_provider: row.apiProvider,
+    connected,
     connected_at: row.connectedAt.toISOString(),
   }
 }
@@ -41,6 +48,7 @@ const SELECT_FIELDS = {
   graphPhoneNumberId: true,
   connectedAt: true,
   apiToken: true,
+  apiProvider: true,
 } as const
 
 export async function GET() {
@@ -58,7 +66,28 @@ export async function GET() {
       select: SELECT_FIELDS,
     })
     if (!row) return NextResponse.json(null)
-    return NextResponse.json(formatRow(row))
+
+    const base = formatRow(row)
+    if (!base.connected || !row.apiToken?.trim() || !row.graphPhoneNumberId?.trim()) {
+      return NextResponse.json(base)
+    }
+
+    const live = await validateGreenApiCredentials(row.graphPhoneNumberId, row.apiToken)
+    if (!live.ok) {
+      return NextResponse.json({
+        ...base,
+        state_instance: null,
+        state_label: live.error,
+        ready_to_send: false,
+      })
+    }
+
+    return NextResponse.json({
+      ...base,
+      state_instance: live.stateInstance,
+      state_label: GREEN_API_STATE_LABELS[live.stateInstance] ?? live.stateInstance,
+      ready_to_send: live.readyToSend,
+    })
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Não autorizado"
     return NextResponse.json(
@@ -74,7 +103,9 @@ export async function POST(request: Request) {
     const body = await request.json() as {
       disconnect?: boolean
       phone_number?: string
+      id_instance?: string | null
       graph_phone_number_id?: string | null
+      api_token_instance?: string | null
       api_token?: string | null
     }
 
@@ -105,48 +136,71 @@ export async function POST(request: Request) {
       )
     }
 
-    if (!body.phone_number?.trim()) {
-      return NextResponse.json({ error: "Número é obrigatório" }, { status: 400 })
+    const idInstance = (body.id_instance ?? body.graph_phone_number_id)?.trim() || null
+    const apiTokenInstance = (body.api_token_instance ?? body.api_token)?.trim() || null
+    const phoneInput = body.phone_number?.trim() || ""
+
+    if (!idInstance || !apiTokenInstance) {
+      return NextResponse.json(
+        { error: "Informe idInstance e apiTokenInstance da Green API." },
+        { status: 400 }
+      )
     }
 
-    const phoneNumber = body.phone_number.trim()
-    const graphIdInput = body.graph_phone_number_id?.trim() || null
-    const token = body.api_token?.trim() || null
-
-    if (!graphIdInput || !token) {
-      return NextResponse.json({ error: "Informe o identificador do número e o token da Meta." }, { status: 400 })
+    if (!/^\d+$/.test(idInstance)) {
+      return NextResponse.json(
+        { error: "idInstance deve conter apenas números (copie do console Green API)." },
+        { status: 400 }
+      )
     }
 
-    const resolved = await resolveGraphPhoneNumberIdForSave(graphIdInput, token)
-    if (!resolved.ok) {
-      return NextResponse.json({ error: resolved.error }, { status: 400 })
+    const validated = await validateGreenApiCredentials(idInstance, apiTokenInstance)
+    if (!validated.ok) {
+      return NextResponse.json({ error: validated.error }, { status: 400 })
     }
 
-    const graphId = resolved.phoneNumberId
-    const displayPhone = resolved.displayPhone?.replace(/\D/g, "")
-    const phoneToStore = displayPhone && displayPhone.length >= 10 ? displayPhone : phoneNumber
+    const phoneFromApi = validated.phone?.replace(/\D/g, "")
+    const phoneToStore =
+      phoneFromApi && phoneFromApi.length >= 10
+        ? phoneFromApi
+        : phoneInput.replace(/\D/g, "").length >= 10
+          ? phoneInput.replace(/\D/g, "")
+          : phoneInput.trim()
+
+    if (!phoneToStore) {
+      return NextResponse.json(
+        {
+          error:
+            "Informe o número WhatsApp da barbearia ou autorize a instância no console Green API (QR Code) antes de salvar.",
+        },
+        { status: 400 }
+      )
+    }
 
     const row = await prisma.whatsAppIntegration.upsert({
       where: { barbershopId },
       create: {
         barbershopId,
         phoneNumber: phoneToStore,
-        apiProvider: "meta",
-        apiToken: token,
-        graphPhoneNumberId: graphId,
+        apiProvider: "green_api",
+        apiToken: apiTokenInstance,
+        graphPhoneNumberId: idInstance,
       },
       update: {
         phoneNumber: phoneToStore,
-        graphPhoneNumberId: graphId,
-        ...(token ? { apiToken: token } : {}),
+        apiProvider: "green_api",
+        graphPhoneNumberId: idInstance,
+        apiToken: apiTokenInstance,
       },
       select: SELECT_FIELDS,
     })
 
     return NextResponse.json({
       ...formatRow(row),
-      meta_id_corrected_from_waba: resolved.correctedFromWaba,
-      meta_phone_number_id_saved: graphId,
+      state_instance: validated.stateInstance,
+      state_label: GREEN_API_STATE_LABELS[validated.stateInstance] ?? validated.stateInstance,
+      ready_to_send: validated.readyToSend,
+      green_api_authorized: validated.readyToSend,
     })
   } catch (e) {
     console.error("[whatsapp POST]", e)
