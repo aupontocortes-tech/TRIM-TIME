@@ -19,6 +19,8 @@ import {
   Sparkles,
   MousePointerClick,
   Copy,
+  Unplug,
+  Phone,
 } from "lucide-react"
 
 const STEPS = [
@@ -66,7 +68,9 @@ export type WhatsAppConnectWizardProps = {
   onSetError: (message: string) => void
   onReload: () => Promise<void>
   onScrollToSettings: () => void
-  onDisconnect?: () => void
+  onDisconnect?: () => void | Promise<void>
+  /** Após desconectar, abre direto o passo de colar credenciais. */
+  startAtConnectStep?: boolean
   onSaveShopPhone?: (phone: string) => Promise<void>
   idInstance?: string
   apiTokenInstance?: string
@@ -323,6 +327,7 @@ export function WhatsAppConnectWizard(props: WhatsAppConnectWizardProps) {
     onSetError,
     onScrollToSettings,
     onDisconnect,
+    startAtConnectStep = false,
     onSaveShopPhone,
     idInstance = "",
     apiTokenInstance = "",
@@ -332,7 +337,7 @@ export function WhatsAppConnectWizard(props: WhatsAppConnectWizardProps) {
     onSaveCredentials,
   } = props
 
-  const [step, setStep] = useState(1)
+  const [step, setStep] = useState(startAtConnectStep ? 2 : 1)
   const [checkingStatus, setCheckingStatus] = useState(false)
   const [liveStateLabel, setLiveStateLabel] = useState<string | null>(stateLabel)
   const [liveReady, setLiveReady] = useState(readyToSend)
@@ -433,12 +438,38 @@ export function WhatsAppConnectWizard(props: WhatsAppConnectWizardProps) {
                 Ativar lembretes e mensagens
               </Button>
             )}
-            {onDisconnect ? (
-              <Button variant="ghost" className="text-muted-foreground" disabled={busy} onClick={onDisconnect}>
-                Desconectar
-              </Button>
-            ) : null}
           </div>
+
+          {onDisconnect ? (
+            <section className="rounded-2xl border-2 border-amber-500/35 bg-amber-500/5 p-5 space-y-4 text-left">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center shrink-0">
+                  <Phone className="w-5 h-5 text-amber-400" />
+                </div>
+                <div className="space-y-1">
+                  <p className="font-semibold text-foreground">Quer usar outro número?</p>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    Desconecte aqui, escaneie o QR no Green API com o novo WhatsApp e cole as credenciais de novo.
+                  </p>
+                </div>
+              </div>
+              <ol className="text-sm text-muted-foreground space-y-1.5 pl-1">
+                <li>1. Clique em <strong className="text-foreground">Desconectar e trocar número</strong></li>
+                <li>2. No Green API: QR com o novo celular (ou nova instância)</li>
+                <li>3. Cole idInstance, token e o novo número → Salvar</li>
+              </ol>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full sm:w-auto border-amber-500/50 text-amber-100 hover:bg-amber-500/15 hover:text-foreground"
+                disabled={busy}
+                onClick={() => void onDisconnect()}
+              >
+                <Unplug className="w-4 h-4 mr-2" />
+                {busy ? "Desconectando…" : "Desconectar e trocar número"}
+              </Button>
+            </section>
+          ) : null}
         </CardContent>
       </Card>
     )

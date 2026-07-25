@@ -378,6 +378,8 @@ export default function ConfiguracoesPage() {
   const [waConnected, setWaConnected] = useState(false)
   const [waBusy, setWaBusy] = useState(false)
   const [waPlanBlocked, setWaPlanBlocked] = useState(false)
+  const [waWizardKey, setWaWizardKey] = useState(0)
+  const [waStartAtConnectStep, setWaStartAtConnectStep] = useState(false)
   const [notifWaConfirmTpl, setNotifWaConfirmTpl] = useState(DEFAULT_WHATSAPP_CONFIRMATION)
   const [notifWaPostTpl, setNotifWaPostTpl] = useState(DEFAULT_WHATSAPP_POST_SERVICE)
   const [notifCustomReminderHours, setNotifCustomReminderHours] = useState("")
@@ -678,6 +680,7 @@ export default function ConfiguracoesPage() {
         setWaConnected(j.connected === true)
         setWaReadyToSend(j.ready_to_send === true)
         setWaStateLabel(typeof j.state_label === "string" ? j.state_label : null)
+        if (j.connected === true) setWaStartAtConnectStep(false)
       } else {
         setWaPhone("")
         setWaGraphPhoneId("")
@@ -1388,7 +1391,13 @@ export default function ConfiguracoesPage() {
   )
 
   const handleWaDisconnect = async () => {
-    if (!confirm("Desconectar o WhatsApp? As mensagens automáticas vão parar de ser enviadas.")) return
+    if (
+      !confirm(
+        "Desconectar este WhatsApp?\n\nAs mensagens automáticas param. Depois você pode escanear outro número no Green API e colar as credenciais de novo."
+      )
+    ) {
+      return
+    }
     setWaBusy(true)
     setWaError(null)
     try {
@@ -1403,6 +1412,12 @@ export default function ConfiguracoesPage() {
         setWaError(typeof j.error === "string" ? j.error : "Erro ao desconectar")
         return
       }
+      setWaGraphPhoneId("")
+      setWaManualToken("")
+      setWaReadyToSend(false)
+      setWaStateLabel(null)
+      setWaStartAtConnectStep(true)
+      setWaWizardKey((k) => k + 1)
       await loadWhatsapp()
     } catch {
       setWaError("Erro de rede")
@@ -1460,6 +1475,7 @@ export default function ConfiguracoesPage() {
       }
       setWaReadyToSend(j.ready_to_send === true)
       setWaStateLabel(typeof j.state_label === "string" ? j.state_label : null)
+      if (j.connected === true) setWaStartAtConnectStep(false)
       setWaManualToken("")
       await loadWhatsapp()
       return true
@@ -4480,6 +4496,7 @@ export default function ConfiguracoesPage() {
           ) : null}
 
           <WhatsAppConnectWizard
+            key={waWizardKey}
             premium={whatsappIntegrationFeature}
             loading={waLoading}
             connected={waApiConnected}
@@ -4490,6 +4507,7 @@ export default function ConfiguracoesPage() {
             shopPhone={barbearia.telefone || barbershop?.phone || ""}
             busy={waBusy}
             error={waError}
+            startAtConnectStep={waStartAtConnectStep}
             onClearError={() => setWaError(null)}
             onSetError={setWaError}
             onReload={loadWhatsapp}
