@@ -109,6 +109,7 @@ import { cn } from "@/lib/utils"
 import { planSalesButtonVariant, planSalesTheme } from "@/lib/plan-sales-theme"
 import { BarberPhotoAdjust } from "@/components/barber-photo-adjust"
 import { WhatsAppConnectWizard } from "@/components/painel/whatsapp-connect-wizard"
+import { GREEN_API_FIELD_COPY } from "@/lib/whatsapp-green-api"
 import { ChangePasswordForm } from "@/components/account/change-password-form"
 import { DeleteAccountSection } from "@/components/account/delete-account-section"
 import {
@@ -1447,7 +1448,13 @@ export default function ConfiguracoesPage() {
     if (!idInstance) missing.push("idInstance")
     if (!apiTokenInstance) missing.push("apiTokenInstance")
     if (missing.length > 0) {
-      setWaError(`Preencha: ${missing.join(", ")}.`)
+      const needsGreenApi =
+        missing.includes("idInstance") || missing.includes("apiTokenInstance")
+      setWaError(
+        needsGreenApi
+          ? `Cole ${GREEN_API_FIELD_COPY.idInstanceLabel} e ${GREEN_API_FIELD_COPY.apiTokenLabel} do console Green API (${GREEN_API_FIELD_COPY.consoleUrl}) nos campos acima e clique em «Salvar e ativar WhatsApp».`
+          : `Preencha: ${missing.join(", ")}.`
+      )
       return false
     }
     setWaPhone(phone)
