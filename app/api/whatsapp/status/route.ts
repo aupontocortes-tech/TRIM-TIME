@@ -23,15 +23,18 @@ export async function POST(request: Request) {
     const body = (await request.json().catch(() => ({}))) as {
       id_instance?: string
       api_token_instance?: string
+      green_api_base_url?: string
+      api_url?: string
     }
 
     let idInstance = body.id_instance?.trim()
     let apiTokenInstance = body.api_token_instance?.trim()
+    const explicitBaseUrl = (body.green_api_base_url ?? body.api_url)?.trim() || null
 
     if (!idInstance || !apiTokenInstance) {
       const row = await prisma.whatsAppIntegration.findUnique({
         where: { barbershopId },
-        select: { graphPhoneNumberId: true, apiToken: true },
+        select: { graphPhoneNumberId: true, apiToken: true, greenApiBaseUrl: true },
       })
       idInstance = row?.graphPhoneNumberId?.trim()
       apiTokenInstance = row?.apiToken?.trim()
@@ -44,7 +47,11 @@ export async function POST(request: Request) {
       )
     }
 
-    const result = await validateGreenApiCredentials(idInstance, apiTokenInstance)
+    const result = await validateGreenApiCredentials(
+      idInstance,
+      apiTokenInstance,
+      explicitBaseUrl
+    )
     if (!result.ok) {
       return NextResponse.json({ error: result.error }, { status: 400 })
     }

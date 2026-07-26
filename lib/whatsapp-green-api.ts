@@ -1,7 +1,8 @@
 import type { WhatsAppIntegration } from "@prisma/client"
 import { whatsappDigitsForCloudApi } from "@/lib/whatsapp-phone"
 
-export const GREEN_API_BASE_URL = "https://api.green-api.com"
+/** Fallback quando a URL da instância ainda não foi resolvida. */
+export const GREEN_API_BASE_URL = "https://api.greenapi.com"
 
 export type GreenApiStateInstance =
   | "authorized"
@@ -35,6 +36,7 @@ export type ValidateGreenApiCredentialsResult =
       stateInstance: GreenApiStateInstance
       phone?: string
       readyToSend: boolean
+      baseUrl: string
     }
   | { ok: false; error: string }
 
@@ -46,6 +48,9 @@ export const GREEN_API_FIELD_COPY = {
   apiTokenLabel: "apiTokenInstance",
   apiTokenHint:
     "Na mesma tela, copie apiTokenInstance — é a chave secreta da instância (não compartilhe).",
+  apiUrlLabel: "apiUrl",
+  apiUrlHint:
+    "Opcional: copie apiUrl do console (ex.: https://7107.api.greenapi.com). Se deixar vazio, detectamos automaticamente.",
   consoleUrl: "https://console.green-api.com/",
   signupUrl: "https://green-api.com/en/docs/before-start/",
   qrHint:
@@ -70,11 +75,33 @@ export const GREEN_API_STATE_LABELS: Record<string, string> = {
 
 export type WhatsAppIntegrationGreenFields = Pick<
   WhatsAppIntegration,
-  "apiToken" | "graphPhoneNumberId" | "phoneNumber"
+  "apiToken" | "graphPhoneNumberId" | "phoneNumber" | "greenApiBaseUrl"
 >
 
-function greenApiUrl(path: string, idInstance: string, apiTokenInstance: string): string {
-  return `${GREEN_API_BASE_URL}/waInstance${idInstance.trim()}/${path}/${apiTokenInstance.trim()}`
+export function normalizeGreenApiBaseUrl(url: string): string {
+  return url.trim().replace(/\/+$/, "")
+}
+
+/** Candidatos de apiUrl — a Green API usa host por instância (ex.: 7107.api.greenapi.com). */
+export function greenApiBaseUrlCandidates(idInstance: string, explicit?: string | null): string[] {
+  const id = idInstance.trim()
+  const out: string[] = []
+  if (explicit?.trim()) out.push(normalizeGreenApiBaseUrl(explicit))
+  if (id.length >= 4) {
+    out.push(`https://${id.slice(0, 4)}.api.greenapi.com`)
+  }
+  out.push("https://api.greenapi.com")
+  out.push("https://api.green-api.com")
+  return [...new Set(out)]
+}
+
+function greenApiUrl(
+  baseUrl: string,
+  path: string,
+  idInstance: string,
+  apiTokenInstance: string
+): string {
+  return `${normalizeGreenApiBaseUrl(baseUrl)}/waInstance${idInstance.trim()}/${path}/${apiTokenInstance.trim()}`
 }
 
 export function greenApiChatIdFromDigits(digits: string): string | null {
@@ -88,17 +115,49 @@ export function isGreenApiIntegrationReady(integration: WhatsAppIntegrationGreen
   return Boolean(integration.phoneNumber?.trim())
 }
 
+export async function resolveGreenApiBaseUrl(
+  idInstance: string,
+  apiTokenInstance: string,
+  explicit?: string | null
+): Promise<string | null> {
+  const id = idInstance.trim()
+  const token = apiTokenInstance.trim()
+  if (!id || !token) return null
+
+  for (const base of greenApiBaseUrlCandidates(id, explicit)) {
+    try {
+      const res = await fetch(greenApiUrl(base, "getWaSettings", id, token), { method: "GET" })
+      if (res.ok) return base
+    } catch {
+      /* tenta próximo host */
+    }
+  }
+  return null
+}
+
 export async function getGreenApiWaSettings(
   idInstance: string,
-  apiTokenInstance: string
-): Promise<{ ok: true; settings: GreenApiWaSettings } | { ok: false; error: string; status?: number }> {
+  apiTokenInstance: string,
+  baseUrl?: string | null
+): Promise<{ ok: true; settings: GreenApiWaSettings; baseUrl: string } | { ok: false; error: string; status?: number }> {
   const id = idInstance.trim()
   const token = apiTokenInstance.trim()
   if (!id || !token) {
     return { ok: false, error: "Informe idInstance e apiTokenInstance." }
   }
+
+  const resolved =
+    baseUrl?.trim() || (await resolveGreenApiBaseUrl(id, token))
+  if (!resolved) {
+    return {
+      ok: false,
+      error:
+        "Não foi possível contactar a Green API. Confira idInstance, apiTokenInstance e apiUrl no console.",
+    }
+  }
+
   try {
-    const res = await fetch(greenApiUrl("getWaSettings", id, token), { method: "GET" })
+    const res = await fetch(greenApiUrl(resolved, "getWaSettings", id, token), { method: "GET" })
     const json = (await res.json().catch(() => ({}))) as GreenApiWaSettings & { error?: string }
     if (!res.ok) {
       return {
@@ -107,7 +166,7 @@ export async function getGreenApiWaSettings(
         status: res.status,
       }
     }
-    return { ok: true, settings: json }
+    return { ok: true, settings: json, baseUrl: resolved }
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "fetch_failed" }
   }
@@ -115,9 +174,10 @@ export async function getGreenApiWaSettings(
 
 export async function validateGreenApiCredentials(
   idInstance: string,
-  apiTokenInstance: string
+  apiTokenInstance: string,
+  explicitBaseUrl?: string | null
 ): Promise<ValidateGreenApiCredentialsResult> {
-  const result = await getGreenApiWaSettings(idInstance, apiTokenInstance)
+  const result = await getGreenApiWaSettings(idInstance, apiTokenInstance, explicitBaseUrl)
   if (!result.ok) return { ok: false, error: result.error }
   const state = result.settings.stateInstance ?? "unknown"
   return {
@@ -125,11 +185,12 @@ export async function validateGreenApiCredentials(
     stateInstance: state,
     phone: result.settings.phone?.replace(/\D/g, ""),
     readyToSend: state === "authorized",
+    baseUrl: result.baseUrl,
   }
 }
 
 export async function sendGreenApiText(params: {
-  integration: Pick<WhatsAppIntegration, "apiToken" | "graphPhoneNumberId"> | null
+  integration: Pick<WhatsAppIntegration, "apiToken" | "graphPhoneNumberId" | "greenApiBaseUrl"> | null
   toDigits: string
   body: string
 }): Promise<GreenApiSendResult> {
@@ -143,9 +204,16 @@ export async function sendGreenApiText(params: {
   const chatId = greenApiChatIdFromDigits(toDigits)
   if (!chatId) return { ok: false, skipped: "client_no_phone" }
 
+  const baseUrl =
+    integration?.greenApiBaseUrl?.trim() ||
+    (await resolveGreenApiBaseUrl(idInstance, apiTokenInstance))
+  if (!baseUrl) {
+    return { ok: false, error: "green_api_base_url_unresolved" }
+  }
+
   const message = body.slice(0, 20000)
   try {
-    const res = await fetch(greenApiUrl("sendMessage", idInstance, apiTokenInstance), {
+    const res = await fetch(greenApiUrl(baseUrl, "sendMessage", idInstance, apiTokenInstance), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ chatId, message }),

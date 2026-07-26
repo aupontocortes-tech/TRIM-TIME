@@ -372,6 +372,7 @@ export default function ConfiguracoesPage() {
   const [waSaveInfo, setWaSaveInfo] = useState<string | null>(null)
   const [waPhone, setWaPhone] = useState("")
   const [waGraphPhoneId, setWaGraphPhoneId] = useState("")
+  const [waGreenApiBaseUrl, setWaGreenApiBaseUrl] = useState("")
   const [waManualToken, setWaManualToken] = useState("")
   const [waReadyToSend, setWaReadyToSend] = useState(false)
   const [waStateLabel, setWaStateLabel] = useState<string | null>(null)
@@ -677,6 +678,7 @@ export default function ConfiguracoesPage() {
               ? j.graph_phone_number_id
               : ""
         setWaGraphPhoneId(idInst)
+        setWaGreenApiBaseUrl(typeof j.green_api_base_url === "string" ? j.green_api_base_url : "")
         setWaConnected(j.connected === true)
         setWaReadyToSend(j.ready_to_send === true)
         setWaStateLabel(typeof j.state_label === "string" ? j.state_label : null)
@@ -684,6 +686,7 @@ export default function ConfiguracoesPage() {
       } else {
         setWaPhone("")
         setWaGraphPhoneId("")
+        setWaGreenApiBaseUrl("")
         setWaConnected(false)
         setWaReadyToSend(false)
         setWaStateLabel(null)
@@ -1413,6 +1416,7 @@ export default function ConfiguracoesPage() {
         return
       }
       setWaGraphPhoneId("")
+      setWaGreenApiBaseUrl("")
       setWaManualToken("")
       setWaReadyToSend(false)
       setWaStateLabel(null)
@@ -1430,12 +1434,14 @@ export default function ConfiguracoesPage() {
     phone?: string
     idInstance?: string
     apiTokenInstance?: string
+    greenApiBaseUrl?: string
     graphPhoneId?: string
     accessToken?: string
   }): Promise<boolean> => {
     const phone = (payload?.phone ?? waPhone).trim()
     const idInstance = (payload?.idInstance ?? payload?.graphPhoneId ?? waGraphPhoneId).trim()
     const apiTokenInstance = (payload?.apiTokenInstance ?? payload?.accessToken ?? waManualToken).trim()
+    const greenApiBaseUrl = (payload?.greenApiBaseUrl ?? waGreenApiBaseUrl).trim()
     const missing: string[] = []
     if (!phone) missing.push("número")
     if (!idInstance) missing.push("idInstance")
@@ -1446,6 +1452,7 @@ export default function ConfiguracoesPage() {
     }
     setWaPhone(phone)
     setWaGraphPhoneId(idInstance)
+    setWaGreenApiBaseUrl(greenApiBaseUrl)
     setWaManualToken(apiTokenInstance)
     setWaBusy(true)
     setWaError(null)
@@ -1459,6 +1466,7 @@ export default function ConfiguracoesPage() {
           phone_number: phone,
           id_instance: idInstance,
           api_token_instance: apiTokenInstance,
+          green_api_base_url: greenApiBaseUrl || undefined,
         }),
       })
       const j = await r.json().catch(() => ({}))
@@ -4516,9 +4524,11 @@ export default function ConfiguracoesPage() {
             onSaveShopPhone={handleSaveShopPhoneForWhatsApp}
             idInstance={waGraphPhoneId}
             apiTokenInstance={waManualToken}
+            greenApiBaseUrl={waGreenApiBaseUrl}
             onPhoneChange={setWaPhone}
             onIdInstanceChange={setWaGraphPhoneId}
             onApiTokenInstanceChange={setWaManualToken}
+            onGreenApiBaseUrlChange={setWaGreenApiBaseUrl}
             onSaveCredentials={handleSaveWaCredentials}
           />
 

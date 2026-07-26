@@ -10,7 +10,7 @@ export type WhatsAppSendResult = GreenApiSendResult
 
 export type WhatsAppIntegrationForSend = Pick<
   WhatsAppIntegration,
-  "apiToken" | "graphPhoneNumberId" | "phoneNumber"
+  "apiToken" | "graphPhoneNumberId" | "phoneNumber" | "greenApiBaseUrl"
 >
 
 export function isWhatsAppIntegrationReady(integration: WhatsAppIntegrationForSend | null): boolean {

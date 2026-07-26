@@ -561,6 +561,8 @@ model WhatsAppIntegration {
   apiToken     String?  @map("api_token")
   /// idInstance da Green API (reutiliza coluna legada graph_phone_number_id).
   graphPhoneNumberId String? @map("graph_phone_number_id")
+  /// apiUrl do console Green API (ex.: https://7107.api.greenapi.com).
+  greenApiBaseUrl    String? @map("green_api_base_url")
   connectedAt  DateTime @default(now()) @map("connected_at") @db.Timestamptz
   updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz
 

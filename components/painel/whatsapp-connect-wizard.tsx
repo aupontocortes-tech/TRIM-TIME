@@ -81,7 +81,10 @@ export type WhatsAppConnectWizardProps = {
     phone: string
     idInstance: string
     apiTokenInstance: string
+    greenApiBaseUrl?: string
   }) => boolean | void | Promise<boolean | void>
+  greenApiBaseUrl?: string
+  onGreenApiBaseUrlChange?: (value: string) => void
 }
 
 function WhatsAppIcon({ className = "w-10 h-10" }: { className?: string }) {
@@ -182,33 +185,40 @@ function GreenApiCredentialsForm({
   phone,
   idInstance,
   apiTokenInstance,
+  greenApiBaseUrl = "",
   busy,
   onPhoneChange,
   onIdInstanceChange,
   onApiTokenInstanceChange,
+  onGreenApiBaseUrlChange,
   onSaveCredentials,
 }: {
   phone: string
   idInstance: string
   apiTokenInstance: string
+  greenApiBaseUrl?: string
   busy: boolean
   onPhoneChange?: (value: string) => void
   onIdInstanceChange?: (value: string) => void
   onApiTokenInstanceChange?: (value: string) => void
+  onGreenApiBaseUrlChange?: (value: string) => void
   onSaveCredentials?: (payload: {
     phone: string
     idInstance: string
     apiTokenInstance: string
+    greenApiBaseUrl?: string
   }) => boolean | void | Promise<boolean | void>
 }) {
   const [localPhone, setLocalPhone] = useState(phone)
   const [localIdInstance, setLocalIdInstance] = useState(idInstance)
   const [localToken, setLocalToken] = useState(apiTokenInstance)
+  const [localBaseUrl, setLocalBaseUrl] = useState(greenApiBaseUrl)
   const [showToken, setShowToken] = useState(false)
 
   useEffect(() => setLocalPhone(phone), [phone])
   useEffect(() => setLocalIdInstance(idInstance), [idInstance])
   useEffect(() => setLocalToken(apiTokenInstance), [apiTokenInstance])
+  useEffect(() => setLocalBaseUrl(greenApiBaseUrl), [greenApiBaseUrl])
 
   if (!onPhoneChange || !onIdInstanceChange || !onApiTokenInstanceChange || !onSaveCredentials) return null
 
@@ -217,10 +227,12 @@ function GreenApiCredentialsForm({
       phone: localPhone.trim(),
       idInstance: localIdInstance.trim(),
       apiTokenInstance: localToken.trim(),
+      greenApiBaseUrl: localBaseUrl.trim() || undefined,
     }
     onPhoneChange(payload.phone)
     onIdInstanceChange(payload.idInstance)
     onApiTokenInstanceChange(payload.apiTokenInstance)
+    onGreenApiBaseUrlChange?.(localBaseUrl.trim())
     await onSaveCredentials(payload)
   }
 
@@ -273,6 +285,18 @@ function GreenApiCredentialsForm({
             placeholder: "d75b3a6637...",
             mono: true,
             secret: true,
+          },
+          {
+            label: GREEN_API_FIELD_COPY.apiUrlLabel,
+            hint: GREEN_API_FIELD_COPY.apiUrlHint,
+            value: localBaseUrl,
+            set: (v: string) => {
+              setLocalBaseUrl(v)
+              onGreenApiBaseUrlChange?.(v)
+            },
+            placeholder: "https://7107.api.greenapi.com",
+            mono: true,
+            secret: false,
           },
         ].map((field) => (
           <div key={field.label} className="rounded-xl border border-border/80 bg-background/50 p-3">
@@ -331,9 +355,11 @@ export function WhatsAppConnectWizard(props: WhatsAppConnectWizardProps) {
     onSaveShopPhone,
     idInstance = "",
     apiTokenInstance = "",
+    greenApiBaseUrl = "",
     onPhoneChange,
     onIdInstanceChange,
     onApiTokenInstanceChange,
+    onGreenApiBaseUrlChange,
     onSaveCredentials,
   } = props
 
@@ -520,10 +546,12 @@ export function WhatsAppConnectWizard(props: WhatsAppConnectWizardProps) {
                 phone={phone}
                 idInstance={idInstance}
                 apiTokenInstance={apiTokenInstance}
+                greenApiBaseUrl={greenApiBaseUrl}
                 busy={busy}
                 onPhoneChange={onPhoneChange}
                 onIdInstanceChange={onIdInstanceChange}
                 onApiTokenInstanceChange={onApiTokenInstanceChange}
+                onGreenApiBaseUrlChange={onGreenApiBaseUrlChange}
                 onSaveCredentials={async (payload) => {
                   const ok = await onSaveCredentials?.(payload)
                   if (ok === false) return

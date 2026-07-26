@@ -5,13 +5,16 @@ import { resolveEffectivePlanForActiveSession } from "@/lib/barbershop-effective
 import { prisma } from "@/lib/prisma"
 import {
   GREEN_API_STATE_LABELS,
+  resolveGreenApiBaseUrl,
   validateGreenApiCredentials,
 } from "@/lib/whatsapp-green-api"
 
 function friendlyPrismaError(message: string): string {
   if (
     message.includes("Unknown field") &&
-    (message.includes("WhatsAppIntegration") || message.includes("graphPhoneNumberId"))
+    (message.includes("WhatsAppIntegration") ||
+      message.includes("graphPhoneNumberId") ||
+      message.includes("greenApiBaseUrl"))
   ) {
     return (
       "O Prisma Client está desatualizado. " +
@@ -26,6 +29,7 @@ function formatRow(row: {
   id: string
   phoneNumber: string
   graphPhoneNumberId: string | null
+  greenApiBaseUrl: string | null
   connectedAt: Date
   apiToken: string | null
   apiProvider: string
@@ -36,6 +40,7 @@ function formatRow(row: {
     phone_number: row.phoneNumber,
     id_instance: row.graphPhoneNumberId ?? null,
     graph_phone_number_id: row.graphPhoneNumberId ?? null,
+    green_api_base_url: row.greenApiBaseUrl ?? null,
     api_provider: row.apiProvider,
     connected,
     connected_at: row.connectedAt.toISOString(),
@@ -46,10 +51,31 @@ const SELECT_FIELDS = {
   id: true,
   phoneNumber: true,
   graphPhoneNumberId: true,
+  greenApiBaseUrl: true,
   connectedAt: true,
   apiToken: true,
   apiProvider: true,
 } as const
+
+async function ensureGreenApiBaseUrl(
+  barbershopId: string,
+  idInstance: string,
+  apiToken: string,
+  storedBaseUrl: string | null | undefined
+): Promise<string | null> {
+  if (storedBaseUrl?.trim()) return storedBaseUrl.trim()
+  const resolved = await resolveGreenApiBaseUrl(idInstance, apiToken)
+  if (!resolved) return null
+  try {
+    await prisma.whatsAppIntegration.update({
+      where: { barbershopId },
+      data: { greenApiBaseUrl: resolved },
+    })
+  } catch (e) {
+    console.warn("[whatsapp GET] não foi possível salvar greenApiBaseUrl:", e)
+  }
+  return resolved
+}
 
 export async function GET() {
   try {
@@ -72,7 +98,18 @@ export async function GET() {
       return NextResponse.json(base)
     }
 
-    const live = await validateGreenApiCredentials(row.graphPhoneNumberId, row.apiToken)
+    const baseUrl = await ensureGreenApiBaseUrl(
+      barbershopId,
+      row.graphPhoneNumberId,
+      row.apiToken,
+      row.greenApiBaseUrl
+    )
+
+    const live = await validateGreenApiCredentials(
+      row.graphPhoneNumberId,
+      row.apiToken,
+      baseUrl ?? row.greenApiBaseUrl
+    )
     if (!live.ok) {
       return NextResponse.json({
         ...base,
@@ -107,6 +144,8 @@ export async function POST(request: Request) {
       graph_phone_number_id?: string | null
       api_token_instance?: string | null
       api_token?: string | null
+      green_api_base_url?: string | null
+      api_url?: string | null
     }
 
     if (body.disconnect === true) {
@@ -117,7 +156,7 @@ export async function POST(request: Request) {
       if (exists) {
         await prisma.whatsAppIntegration.update({
           where: { barbershopId },
-          data: { apiToken: null, graphPhoneNumberId: null },
+          data: { apiToken: null, graphPhoneNumberId: null, greenApiBaseUrl: null },
         })
       }
       const row = await prisma.whatsAppIntegration.findUnique({
@@ -139,6 +178,7 @@ export async function POST(request: Request) {
     const idInstance = (body.id_instance ?? body.graph_phone_number_id)?.trim() || null
     const apiTokenInstance = (body.api_token_instance ?? body.api_token)?.trim() || null
     const phoneInput = body.phone_number?.trim() || ""
+    const explicitBaseUrl = (body.green_api_base_url ?? body.api_url)?.trim() || null
 
     if (!idInstance || !apiTokenInstance) {
       return NextResponse.json(
@@ -154,10 +194,12 @@ export async function POST(request: Request) {
       )
     }
 
-    const validated = await validateGreenApiCredentials(idInstance, apiTokenInstance)
+    const validated = await validateGreenApiCredentials(idInstance, apiTokenInstance, explicitBaseUrl)
     if (!validated.ok) {
       return NextResponse.json({ error: validated.error }, { status: 400 })
     }
+
+    const greenApiBaseUrl = validated.baseUrl
 
     const phoneFromApi = validated.phone?.replace(/\D/g, "")
     const phoneToStore =
@@ -185,12 +227,14 @@ export async function POST(request: Request) {
         apiProvider: "green_api",
         apiToken: apiTokenInstance,
         graphPhoneNumberId: idInstance,
+        greenApiBaseUrl,
       },
       update: {
         phoneNumber: phoneToStore,
         apiProvider: "green_api",
         graphPhoneNumberId: idInstance,
         apiToken: apiTokenInstance,
+        greenApiBaseUrl,
       },
       select: SELECT_FIELDS,
     })
