@@ -5,6 +5,7 @@ import type { Client } from "@/lib/db/types"
 import { prisma } from "@/lib/prisma"
 import { assertValidProfilePhotoDataUrl } from "@/lib/photo-data-url"
 import { cpfDigits } from "@/lib/cpf"
+import { normalizeClientPhoneForStorage } from "@/lib/format-phone-br"
 
 function mapClient(c: {
   id: string
@@ -59,7 +60,9 @@ export async function PATCH(
       if (!n) return NextResponse.json({ error: "Nome não pode ser vazio" }, { status: 400 })
       update.name = n
     }
-    if (body.phone !== undefined) update.phone = body.phone?.trim() || null
+    if (body.phone !== undefined) {
+      update.phone = normalizeClientPhoneForStorage(body.phone?.trim()) ?? null
+    }
     if (body.email !== undefined) {
       const e = String(body.email).trim().toLowerCase()
       update.email = e || null

@@ -12,6 +12,7 @@ import { cpfDigits } from "@/lib/cpf"
 import { trySendWhatsAppAppointmentConfirmation } from "@/lib/whatsapp-appointment-events"
 import { trySendEmailAppointmentConfirmation } from "@/lib/email-appointment-events"
 import { trySendPushAppointmentConfirmation } from "@/lib/push-appointment-events"
+import { normalizeClientPhoneForStorage } from "@/lib/format-phone-br"
 import { parseAppointmentDate, utcDayRangeForYmd } from "@/lib/appointment-prisma-helpers"
 import { expireStaleAppointmentsForBarbershop } from "@/lib/appointment-expiry"
 import { clientHasBlockingAppointmentOnDay } from "@/lib/client-same-day-appointment"
@@ -314,7 +315,7 @@ export async function POST(
     }
 
     const nome = String(clientPayload.nome ?? client?.name ?? "").trim()
-    const telefone = String(clientPayload.telefone ?? client?.phone ?? "").trim()
+    const telefone = normalizeClientPhoneForStorage(String(clientPayload.telefone ?? client?.phone ?? "").trim()) ?? ""
     const email = String(clientPayload.email ?? client?.email ?? "").trim().toLowerCase()
     const cpfPayload = String(clientPayload.cpf ?? "").trim()
     let cpfUpdate: string | null | undefined = undefined

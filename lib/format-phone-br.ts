@@ -15,3 +15,12 @@ export function formatPhoneBr(value: string): string {
   if (numbers.length <= 7) return `(${numbers.slice(0, 2)}) ${numbers.slice(2)}`
   return `(${numbers.slice(0, 2)}) ${numbers.slice(2, 7)}-${numbers.slice(7, 11)}`
 }
+
+/** Normaliza telefone ao salvar no banco (evita DDI 55 corrompido na máscara). */
+export function normalizeClientPhoneForStorage(raw: string | null | undefined): string | null {
+  const trimmed = String(raw ?? "").trim()
+  if (!trimmed) return null
+  const digits = stripBrazilPhoneDigits(trimmed)
+  if (digits.length < 10) return null
+  return formatPhoneBr(trimmed)
+}

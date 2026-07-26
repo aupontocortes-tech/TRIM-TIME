@@ -218,9 +218,11 @@ export async function sendGreenApiText(params: {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ chatId, message }),
     })
-    const json = (await res.json().catch(() => ({}))) as { idMessage?: string; error?: string }
+    const json = (await res.json().catch(() => ({}))) as { idMessage?: string; error?: string; message?: string }
     if (!res.ok) {
-      return { ok: false, error: json.error || (await res.text().catch(() => res.statusText)), status: res.status }
+      const detail =
+        json.message || json.error || (typeof json === "object" ? JSON.stringify(json) : res.statusText)
+      return { ok: false, error: detail, status: res.status }
     }
     return { ok: true, status: res.status, delivery: "text", idMessage: json.idMessage }
   } catch (e) {

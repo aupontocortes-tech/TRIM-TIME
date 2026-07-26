@@ -13,6 +13,7 @@ import {
   requireSelectedUnitForClientCreate,
 } from "@/lib/unit-context"
 import { ensureClientsUnitSchemaReady } from "@/lib/appointment-db-schema"
+import { normalizeClientPhoneForStorage } from "@/lib/format-phone-br"
 
 function mapClient(c: {
   id: string
@@ -118,7 +119,7 @@ export async function POST(request: Request) {
       }
     }
 
-    const phoneTrim = body.phone?.trim() ?? ""
+    const phoneTrim = normalizeClientPhoneForStorage(body.phone?.trim()) ?? ""
     if (phoneTrim) {
       const dup = await findClientByPhoneDigits(barbershopId, phoneTrim)
       if (dup) {
