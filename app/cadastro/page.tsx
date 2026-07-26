@@ -13,6 +13,7 @@ import { SignupProgress } from "@/components/onboarding/signup-progress"
 import type { SignupFlowStep } from "@/lib/onboarding"
 import { TRIAL_DAYS, TRIAL_OFFER_HEADLINE } from "@/lib/plans"
 import { PainelOAuthButtons } from "@/components/auth/painel-oauth-buttons"
+import { formatPhoneBr } from "@/lib/format-phone-br"
 
 function CadastroPageContent() {
   const router = useRouter()
@@ -274,13 +275,6 @@ function CadastroPageContent() {
   const signupFlowStep: SignupFlowStep =
     barbeariaStep === "dados" ? "dados" : barbeariaStep === "otp" ? "otp" : "barbearia"
 
-  const formatPhone = (value: string) => {
-    const numbers = value.replace(/\D/g, "")
-    if (numbers.length <= 2) return numbers
-    if (numbers.length <= 7) return `(${numbers.slice(0, 2)}) ${numbers.slice(2)}`
-    return `(${numbers.slice(0, 2)}) ${numbers.slice(2, 7)}-${numbers.slice(7, 11)}`
-  }
-
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4 py-12">
       {/* Background decoration */}
@@ -406,7 +400,7 @@ function CadastroPageContent() {
                       type="tel"
                       placeholder="(00) 00000-0000"
                       value={formData.telefone}
-                      onChange={(e) => setFormData({ ...formData, telefone: formatPhone(e.target.value) })}
+                      onChange={(e) => setFormData({ ...formData, telefone: formatPhoneBr(e.target.value) })}
                       className="bg-input border-border text-foreground placeholder:text-muted-foreground"
                     />
                   </Field>
@@ -488,7 +482,7 @@ function CadastroPageContent() {
                       type="tel"
                       placeholder="(00) 00000-0000"
                       value={formData.telefone}
-                      onChange={(e) => setFormData({ ...formData, telefone: formatPhone(e.target.value) })}
+                      onChange={(e) => setFormData({ ...formData, telefone: formatPhoneBr(e.target.value) })}
                       required
                       className="bg-input border-border text-foreground placeholder:text-muted-foreground"
                     />

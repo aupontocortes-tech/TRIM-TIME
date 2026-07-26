@@ -11,7 +11,8 @@ export function normalizeWhatsappPhoneDigits(raw: string): string {
 export function whatsappDigitsForCloudApi(raw: string): string | null {
   const d = normalizeWhatsappPhoneDigits(raw)
   if (d.length < 10) return null
-  if (d.startsWith("55") && d.length >= 12) return d
+  // Já inclui DDI 55 — nunca prefixar de novo (ex.: "(55) 61993-4651" → 55619934651)
+  if (d.startsWith("55")) return d.length >= 11 ? d : null
   if (d.length === 10 || d.length === 11) return `55${d}`
   if (d.length >= 12) return d
   return null

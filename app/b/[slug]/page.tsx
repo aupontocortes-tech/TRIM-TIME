@@ -41,6 +41,7 @@ import {
 } from "@/lib/cliente-booking-saved-profile"
 import { formatCpfDisplay, cpfDigits } from "@/lib/cpf"
 import { clientPhoneDigits, clientPhonesMatch } from "@/lib/client-phone-utils"
+import { formatPhoneBr } from "@/lib/format-phone-br"
 import { openingHoursFromSettings } from "@/lib/barbershop-settings-ui"
 import type { BarbershopBookingRules, BarbershopSettings } from "@/lib/db/types"
 import { compressImageToJpegDataUrl } from "@/lib/client-image-compress"
@@ -829,13 +830,6 @@ export default function BarbeariaPage() {
     }
     setTrimPlayCliente(payload)
   }, [agendamentoConfirmado, clienteLogado, dadosCliente.nome, slug])
-
-  const formatPhone = (value: string) => {
-    const numbers = value.replace(/\D/g, "")
-    if (numbers.length <= 2) return value
-    if (numbers.length <= 7) return `(${numbers.slice(0, 2)}) ${numbers.slice(2)}`
-    return `(${numbers.slice(0, 2)}) ${numbers.slice(2, 7)}-${numbers.slice(7, 11)}`
-  }
 
   const formatCpfInput = (value: string) =>
     formatCpfDisplay(value.replace(/\D/g, "").slice(0, 11))
@@ -1936,7 +1930,7 @@ export default function BarbeariaPage() {
                   <Label className="text-foreground">Telefone (WhatsApp)</Label>
                   <Input
                     value={formCadastro.telefone}
-                    onChange={(e) => setFormCadastro((p) => ({ ...p, telefone: formatPhone(e.target.value) }))}
+                    onChange={(e) => setFormCadastro((p) => ({ ...p, telefone: formatPhoneBr(e.target.value) }))}
                     placeholder="(00) 00000-0000"
                     className="mt-1 bg-card border-border"
                     inputMode="tel"
@@ -3137,7 +3131,7 @@ export default function BarbeariaPage() {
                   id="telefone"
                   placeholder="(00) 00000-0000"
                   value={dadosCliente.telefone}
-                  onChange={(e) => setDadosCliente(prev => ({ ...prev, telefone: formatPhone(e.target.value) }))}
+                  onChange={(e) => setDadosCliente(prev => ({ ...prev, telefone: formatPhoneBr(e.target.value) }))}
                   className="mt-1 bg-card border-border focus:border-primary"
                 />
               </div>

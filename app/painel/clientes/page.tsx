@@ -30,6 +30,7 @@ import { clientsListUrl } from "@/lib/clients-list-url"
 import { computeClientLoyaltyStatus, parseLoyaltyProgram } from "@/lib/loyalty-program"
 import { hasFeature } from "@/lib/plans"
 import { LoyaltyCard } from "@/components/loyalty/loyalty-card"
+import { formatPhoneBr } from "@/lib/format-phone-br"
 
 type ClienteEnriquecido = {
   id: string
@@ -45,13 +46,6 @@ type ClienteEnriquecido = {
   historico: { id: string; data: string; servico: string; profissional: string; valor: number }[]
   loyaltyPoints: number
   loyaltyStatus: LoyaltyClientStatus | null
-}
-
-function formatPhone(value: string) {
-  const numbers = value.replace(/\D/g, "")
-  if (numbers.length <= 2) return value
-  if (numbers.length <= 7) return `(${numbers.slice(0, 2)}) ${numbers.slice(2)}`
-  return `(${numbers.slice(0, 2)}) ${numbers.slice(2, 7)}-${numbers.slice(7, 11)}`
 }
 
 export default function ClientesPage() {
@@ -293,7 +287,7 @@ export default function ClientesPage() {
                 <Input
                   id="novo-telefone"
                   value={formNovoCliente.telefone}
-                  onChange={(e) => setFormNovoCliente((prev) => ({ ...prev, telefone: formatPhone(e.target.value) }))}
+                  onChange={(e) => setFormNovoCliente((prev) => ({ ...prev, telefone: formatPhoneBr(e.target.value) }))}
                   placeholder="(00) 00000-0000"
                   className="mt-1 bg-input border-border text-foreground"
                 />
