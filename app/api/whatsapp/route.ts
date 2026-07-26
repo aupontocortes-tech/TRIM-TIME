@@ -22,6 +22,16 @@ function friendlyPrismaError(message: string): string {
       "depois inicie de novo com `npm run dev`."
     )
   }
+  if (
+    message.includes("does not exist in the current database") &&
+    (message.includes("green_api_base_url") || message.includes("greenApiBaseUrl"))
+  ) {
+    return (
+      "Falta a coluna green_api_base_url no banco. " +
+      "Rode `node scripts/apply-whatsapp-green-api-base-url.mjs` ou aplique a migration " +
+      "035_whatsapp_green_api_base_url.sql no Supabase, depois reinicie o servidor."
+    )
+  }
   return message
 }
 
