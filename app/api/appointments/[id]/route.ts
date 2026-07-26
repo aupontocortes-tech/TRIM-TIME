@@ -399,7 +399,7 @@ export async function PATCH(
       enriched.status !== "completed" &&
       body.status !== "canceled"
     ) {
-      void trySendWhatsAppAppointmentConfirmation(barbershopId, id, { allowResend: true })
+      await trySendWhatsAppAppointmentConfirmation(barbershopId, id, { allowResend: true })
     }
     if (body.status === "completed" && beforeApi.status !== "completed") {
       void trySendWhatsAppAppointmentPostService(barbershopId, id)

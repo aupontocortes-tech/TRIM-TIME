@@ -190,7 +190,7 @@ export async function POST(
     })
 
     if (created.length > 0) {
-      void trySendWhatsAppAppointmentConfirmation(shop.id, created[0]!.id)
+      await trySendWhatsAppAppointmentConfirmation(shop.id, created[0]!.id)
       void trySendEmailAppointmentConfirmation(shop.id, created[0]!.id)
       void trySendPushAppointmentConfirmation(shop.id, created[0]!.id)
     }

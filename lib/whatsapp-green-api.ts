@@ -201,15 +201,44 @@ export async function sendGreenApiText(params: {
     return { ok: false, skipped: "whatsapp_not_configured" }
   }
 
-  const chatId = greenApiChatIdFromDigits(toDigits)
-  if (!chatId) return { ok: false, skipped: "client_no_phone" }
-
   const baseUrl =
     integration?.greenApiBaseUrl?.trim() ||
     (await resolveGreenApiBaseUrl(idInstance, apiTokenInstance))
   if (!baseUrl) {
     return { ok: false, error: "green_api_base_url_unresolved" }
   }
+
+  const phoneNumber = whatsappDigitsForCloudApi(toDigits)
+  if (!phoneNumber) return { ok: false, skipped: "client_no_phone" }
+
+  let chatId = greenApiChatIdFromDigits(toDigits)
+  try {
+    const checkRes = await fetch(greenApiUrl(baseUrl, "checkWhatsapp", idInstance, apiTokenInstance), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phoneNumber: Number(phoneNumber) }),
+    })
+    const checkJson = (await checkRes.json().catch(() => ({}))) as {
+      existsWhatsapp?: boolean
+      chatId?: string
+    }
+    if (checkRes.ok && checkJson.existsWhatsapp === false) {
+      return {
+        ok: false,
+        skipped: "whatsapp_number_not_registered",
+        error:
+          `O telefone ${phoneNumber} não está registrado no WhatsApp. ` +
+          "Confira se o cliente não digitou um dígito a mais ou a menos.",
+      }
+    }
+    if (checkJson.chatId?.trim()) {
+      chatId = checkJson.chatId.trim()
+    }
+  } catch {
+    /* segue com chatId @c.us */
+  }
+
+  if (!chatId) return { ok: false, skipped: "client_no_phone" }
 
   const message = body.slice(0, 20000)
   try {
@@ -218,10 +247,18 @@ export async function sendGreenApiText(params: {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ chatId, message }),
     })
-    const json = (await res.json().catch(() => ({}))) as { idMessage?: string; error?: string; message?: string }
-    if (!res.ok) {
+    const json = (await res.json().catch(() => ({}))) as {
+      idMessage?: string
+      error?: string
+      message?: string
+      invokeStatus?: { description?: string }
+    }
+    if (!res.ok || res.status === 466) {
       const detail =
-        json.message || json.error || (typeof json === "object" ? JSON.stringify(json) : res.statusText)
+        json.invokeStatus?.description ||
+        json.message ||
+        json.error ||
+        (typeof json === "object" ? JSON.stringify(json) : res.statusText)
       return { ok: false, error: detail, status: res.status }
     }
     return { ok: true, status: res.status, delivery: "text", idMessage: json.idMessage }

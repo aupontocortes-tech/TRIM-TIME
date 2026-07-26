@@ -197,7 +197,7 @@ export async function POST(request: Request) {
         },
       })
     )
-    void trySendWhatsAppAppointmentConfirmation(barbershopId, created.id)
+    await trySendWhatsAppAppointmentConfirmation(barbershopId, created.id)
     void trySendEmailAppointmentConfirmation(barbershopId, created.id)
     void trySendPushAppointmentConfirmation(barbershopId, created.id)
     return NextResponse.json(
