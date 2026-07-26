@@ -26,13 +26,8 @@ dotenv.config({ path: path.join(root, ".env.local") })
 
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }) })
 
-/** Tenta reconstruir 55 + DDD + número a partir do valor corrompido no banco. */
-function recoverFullBrazilDigits(storedPhone) {
-  const d = storedPhone.replace(/\D/g, "")
-  if (!d.startsWith("55") || d.length !== 11) return null
-  // Padrão conhecido: usuário digitou 13 dígitos; formatPhone guardou 11 começando com 55.
-  // Não dá para recuperar 100% — só casos onde o DDD real é 61 e faltam "46" no meio.
-  if (d === "55619934651") return "5561993464651"
+/** Não recupera automaticamente — 4651 vs 5193 não dá para adivinhar. Corrija manualmente no painel. */
+function recoverFullBrazilDigits(_storedPhone) {
   return null
 }
 
