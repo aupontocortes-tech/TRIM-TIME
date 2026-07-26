@@ -28,6 +28,12 @@ export type GreenApiSendResult = {
   status?: number
   delivery?: "text"
   idMessage?: string
+  /** Metadados do checkWhatsapp (diagnóstico). */
+  checkWhatsapp?: {
+    existsWhatsapp?: boolean
+    chatId?: string
+    fromCache?: boolean
+  }
 }
 
 export type ValidateGreenApiCredentialsResult =
@@ -70,7 +76,7 @@ export const GREEN_API_STATE_LABELS: Record<string, string> = {
   blocked: "Instância bloqueada — verifique no console Green API",
   sleepMode: "Celular offline — ligue o aparelho e aguarde até 5 minutos",
   suspended: "Conta com restrições temporárias de envio",
-  yellowCard: "Conta com restrições (status antigo)",
+  yellowCard: "Restrição temporária de envio (yellowCard) — aguarde ou verifique no console Green API",
 }
 
 export type WhatsAppIntegrationGreenFields = Pick<
@@ -208,31 +214,55 @@ export async function sendGreenApiText(params: {
     return { ok: false, error: "green_api_base_url_unresolved" }
   }
 
+  const waState = await getGreenApiWaSettings(idInstance, apiTokenInstance, baseUrl)
+  if (waState.ok) {
+    const state = waState.settings.stateInstance
+    if (state && state !== "authorized") {
+      const label = GREEN_API_STATE_LABELS[state] ?? `Status da instância: ${state}`
+      return { ok: false, error: label, skipped: "whatsapp_instance_not_ready" }
+    }
+  }
+
   const phoneNumber = whatsappDigitsForCloudApi(toDigits)
   if (!phoneNumber) return { ok: false, skipped: "client_no_phone" }
 
   let chatId = greenApiChatIdFromDigits(toDigits)
+  let checkMeta: GreenApiSendResult["checkWhatsapp"]
   try {
-    const checkRes = await fetch(greenApiUrl(baseUrl, "checkWhatsapp", idInstance, apiTokenInstance), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ phoneNumber: Number(phoneNumber) }),
-    })
-    const checkJson = (await checkRes.json().catch(() => ({}))) as {
-      existsWhatsapp?: boolean
-      chatId?: string
+    const runCheck = async (force?: boolean) => {
+      const checkRes = await fetch(greenApiUrl(baseUrl, "checkWhatsapp", idInstance, apiTokenInstance), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(force ? { phoneNumber, force: true } : { phoneNumber }),
+      })
+      return (await checkRes.json().catch(() => ({}))) as {
+        existsWhatsapp?: boolean
+        chatId?: string
+        fromCache?: boolean
+        message?: string
+      }
     }
-    if (checkRes.ok && checkJson.existsWhatsapp === false) {
+
+    let checkJson = await runCheck(false)
+    if (checkJson.existsWhatsapp === false && checkJson.fromCache !== false) {
+      checkJson = await runCheck(true)
+    }
+    checkMeta = {
+      existsWhatsapp: checkJson.existsWhatsapp,
+      chatId: checkJson.chatId,
+      fromCache: checkJson.fromCache,
+    }
+
+    if (checkJson.chatId?.trim()) {
+      chatId = checkJson.chatId.trim()
+    } else if (checkJson.existsWhatsapp === false) {
       return {
         ok: false,
         skipped: "whatsapp_number_not_registered",
         error:
-          `O telefone ${phoneNumber} não está registrado no WhatsApp. ` +
-          "Confira se o cliente não digitou um dígito a mais ou a menos.",
+          "Este número não está registrado no WhatsApp (confirmado pela Green API). Confira em Ajustes → Conta do WhatsApp se o número é o mesmo do cadastro.",
+        checkWhatsapp: checkMeta,
       }
-    }
-    if (checkJson.chatId?.trim()) {
-      chatId = checkJson.chatId.trim()
     }
   } catch {
     /* segue com chatId @c.us */
@@ -259,9 +289,9 @@ export async function sendGreenApiText(params: {
         json.message ||
         json.error ||
         (typeof json === "object" ? JSON.stringify(json) : res.statusText)
-      return { ok: false, error: detail, status: res.status }
+      return { ok: false, error: detail, status: res.status, checkWhatsapp: checkMeta }
     }
-    return { ok: true, status: res.status, delivery: "text", idMessage: json.idMessage }
+    return { ok: true, status: res.status, delivery: "text", idMessage: json.idMessage, checkWhatsapp: checkMeta }
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "fetch_failed" }
   }
