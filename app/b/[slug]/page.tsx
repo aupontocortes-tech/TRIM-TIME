@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { InputOTP, InputOTPGroup, InputOTPSlot, REGEXP_ONLY_DIGITS } from "@/components/ui/input-otp"
 import { Label } from "@/components/ui/label"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { barberPhotoImageStyle } from "@/lib/barber-photo-style"
 import {
@@ -39,6 +40,11 @@ import {
   loadSavedClientProfile,
   saveSavedClientProfile,
 } from "@/lib/cliente-booking-saved-profile"
+import {
+  clearSavedClientLogin,
+  loadSavedClientLogin,
+  saveSavedClientLogin,
+} from "@/lib/cliente-login-remember"
 import { formatCpfDisplay, cpfDigits } from "@/lib/cpf"
 import { clientPhoneDigits, clientPhonesMatch } from "@/lib/client-phone-utils"
 import { formatPhoneBr } from "@/lib/format-phone-br"
@@ -318,6 +324,7 @@ export default function BarbeariaPage() {
   const [otpUiNow, setOtpUiNow] = useState(() => Date.now())
 
   const [formLogin, setFormLogin] = useState({ email: "", senha: "" })
+  const [rememberLogin, setRememberLogin] = useState(false)
   /** Alternativa ao e-mail+senha: código de 6 dígitos no e-mail. */
   const [loginWithEmailCode, setLoginWithEmailCode] = useState(false)
   const [showSenhaLogin, setShowSenhaLogin] = useState(false)
@@ -340,6 +347,13 @@ export default function BarbeariaPage() {
   )
 
   useLocalReminders(authPhase === "logado")
+
+  useEffect(() => {
+    const saved = loadSavedClientLogin()
+    if (!saved) return
+    setFormLogin({ email: saved.email, senha: saved.senha })
+    setRememberLogin(true)
+  }, [])
 
   /** Atualiza a grade quando o relógio avança (só etapa Horário + data = hoje). */
   const [bookingClockTick, setBookingClockTick] = useState(0)
@@ -1169,6 +1183,11 @@ export default function BarbeariaPage() {
           fotoPosicao: 50,
         })
         setAuthPhase("logado")
+        if (rememberLogin) {
+          saveSavedClientLogin(email, formLogin.senha)
+        } else {
+          clearSavedClientLogin()
+        }
         return
       }
 
@@ -2348,6 +2367,19 @@ export default function BarbeariaPage() {
                     >
                       Esqueceu a senha?
                     </button>
+                    <div className="flex items-center gap-2 mt-3">
+                      <Checkbox
+                        id="client-login-remember"
+                        checked={rememberLogin}
+                        onCheckedChange={(checked) => setRememberLogin(checked === true)}
+                      />
+                      <Label
+                        htmlFor="client-login-remember"
+                        className="text-sm text-muted-foreground font-normal cursor-pointer leading-snug"
+                      >
+                        Lembrar e-mail e senha neste aparelho
+                      </Label>
+                    </div>
                   </div>
                 ) : null}
                 <Button
