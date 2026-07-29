@@ -13,15 +13,38 @@ import {
   ArrowRight,
   ArrowLeft,
   ExternalLink,
-  KeyRound,
   RefreshCw,
   AlertCircle,
   Sparkles,
   MousePointerClick,
-  Copy,
   Unplug,
   Phone,
 } from "lucide-react"
+
+const CONNECT_GUIDE_STEPS = [
+  "Crie conta no Green API e clique em Create instance",
+  "Instale o WhatsApp no celular da barbearia e ative o chip",
+  "No Green API: Link with QR code → escaneie no WhatsApp (Aparelhos conectados)",
+  "Espere status authorized (verde) → copie os 3 dados abaixo → Salvar",
+] as const
+
+function ConnectGuideBox() {
+  return (
+    <section className="rounded-2xl border-2 border-green-500/40 bg-green-500/10 p-4 space-y-3">
+      <p className="text-sm font-bold text-foreground">Como conectar — 4 passos</p>
+      <ol className="space-y-2">
+        {CONNECT_GUIDE_STEPS.map((text, i) => (
+          <li key={text} className="flex gap-3 text-sm">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-green-500 text-xs font-bold text-white">
+              {i + 1}
+            </span>
+            <span className="text-muted-foreground leading-snug pt-0.5">{text}</span>
+          </li>
+        ))}
+      </ol>
+    </section>
+  )
+}
 
 const STEPS = [
   { label: "Benefícios", color: "bg-emerald-500" },
@@ -214,6 +237,7 @@ function GreenApiCredentialsForm({
   const [localToken, setLocalToken] = useState(apiTokenInstance)
   const [localBaseUrl, setLocalBaseUrl] = useState(greenApiBaseUrl)
   const [showToken, setShowToken] = useState(false)
+  const [showOptionalApiUrl, setShowOptionalApiUrl] = useState(Boolean(greenApiBaseUrl.trim()))
 
   useEffect(() => setLocalPhone(phone), [phone])
   useEffect(() => setLocalIdInstance(idInstance), [idInstance])
@@ -236,95 +260,163 @@ function GreenApiCredentialsForm({
     await onSaveCredentials(payload)
   }
 
+  const requiredFields = [
+    {
+      step: 1,
+      label: "Número WhatsApp",
+      short: "Número do chip (55 + DDD + celular, só dígitos)",
+      value: localPhone,
+      set: (v: string) => {
+        setLocalPhone(v)
+        onPhoneChange(v)
+      },
+      placeholder: "5561999999999",
+      mono: false,
+      secret: false,
+      inputMode: "numeric" as const,
+      done: localPhone.trim().length >= 10,
+    },
+    {
+      step: 2,
+      label: GREEN_API_FIELD_COPY.idInstanceLabel,
+      short: "Copie do Green API — número da instância",
+      value: localIdInstance,
+      set: (v: string) => {
+        setLocalIdInstance(v)
+        onIdInstanceChange(v)
+      },
+      placeholder: "1101234567",
+      mono: true,
+      secret: false,
+      inputMode: "numeric" as const,
+      done: localIdInstance.trim().length > 0,
+    },
+    {
+      step: 3,
+      label: GREEN_API_FIELD_COPY.apiTokenLabel,
+      short: "Copie da mesma tela — token secreto",
+      value: localToken,
+      set: (v: string) => {
+        setLocalToken(v)
+        onApiTokenInstanceChange(v)
+      },
+      placeholder: "d75b3a6637...",
+      mono: true,
+      secret: true,
+      inputMode: undefined,
+      done: localToken.trim().length > 0,
+    },
+  ] as const
+
+  const filledCount = requiredFields.filter((f) => f.done).length
+
+  const canSave =
+    localPhone.trim().length >= 10 &&
+    localIdInstance.trim().length > 0 &&
+    localToken.trim().length > 0
+
   return (
-    <section className="w-full rounded-2xl border-2 border-teal-500/30 bg-teal-500/5 p-5 text-left space-y-4">
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-xl bg-teal-500/20 flex items-center justify-center">
-          <KeyRound className="w-5 h-5 text-teal-400" />
-        </div>
-        <div>
-          <p className="font-semibold text-foreground">Cole aqui (copie do console Green API)</p>
-          <p className="text-xs text-muted-foreground">Os nomes são iguais aos do site — sem tradução</p>
-        </div>
+    <section className="w-full rounded-2xl border-2 border-green-500/50 bg-green-500/[0.07] p-5 text-left space-y-4">
+      <div className="space-y-1">
+        <p className="text-xs font-bold uppercase tracking-widest text-green-400">Obrigatório</p>
+        <p className="text-lg font-bold text-foreground">Cole os 3 dados aqui</p>
+        <p className="text-sm text-muted-foreground">
+          Só depois do QR escaneado e status <strong className="text-foreground">authorized</strong> no Green API.
+        </p>
+      </div>
+
+      <div className="flex items-center gap-2 rounded-lg bg-background/80 px-3 py-2 text-xs">
+        <span className="font-semibold text-foreground">{filledCount}/3</span>
+        <span className="text-muted-foreground">campos preenchidos</span>
+        {canSave ? (
+          <CheckCircle2 className="w-4 h-4 text-green-500 ml-auto shrink-0" aria-hidden />
+        ) : null}
       </div>
 
       <div className="space-y-3">
-        {[
-          {
-            label: "Número WhatsApp",
-            hint: "Com DDI 55 — ex.: 5561999999999",
-            value: localPhone,
-            set: (v: string) => {
-              setLocalPhone(v)
-              onPhoneChange(v)
-            },
-            placeholder: "5561999999999",
-            mono: false,
-            secret: false,
-          },
-          {
-            label: GREEN_API_FIELD_COPY.idInstanceLabel,
-            hint: GREEN_API_FIELD_COPY.idInstanceHint,
-            value: localIdInstance,
-            set: (v: string) => {
-              setLocalIdInstance(v)
-              onIdInstanceChange(v)
-            },
-            placeholder: "1101234567",
-            mono: true,
-            secret: false,
-          },
-          {
-            label: GREEN_API_FIELD_COPY.apiTokenLabel,
-            hint: GREEN_API_FIELD_COPY.apiTokenHint,
-            value: localToken,
-            set: (v: string) => {
-              setLocalToken(v)
-              onApiTokenInstanceChange(v)
-            },
-            placeholder: "d75b3a6637...",
-            mono: true,
-            secret: true,
-          },
-          {
-            label: GREEN_API_FIELD_COPY.apiUrlLabel,
-            hint: GREEN_API_FIELD_COPY.apiUrlHint,
-            value: localBaseUrl,
-            set: (v: string) => {
-              setLocalBaseUrl(v)
-              onGreenApiBaseUrlChange?.(v)
-            },
-            placeholder: "https://7107.api.greenapi.com",
-            mono: true,
-            secret: false,
-          },
-        ].map((field) => (
-          <div key={field.label} className="rounded-xl border border-border/80 bg-background/50 p-3">
-            <label className="text-sm font-bold text-green-400 font-mono">{field.label}</label>
+        {requiredFields.map((field) => (
+          <div
+            key={field.label}
+            className={`rounded-xl border-2 p-3 shadow-sm transition-colors ${
+              field.done
+                ? "border-green-500/50 bg-green-500/5"
+                : "border-green-500/30 bg-background/70"
+            }`}
+          >
+            <div className="flex flex-wrap items-center gap-2 mb-1.5">
+              <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-green-500 text-sm font-bold text-white">
+                {field.step}
+              </span>
+              <label htmlFor={`wa-field-${field.step}`} className="text-base font-bold text-foreground font-mono">
+                {field.label}
+              </label>
+              {field.done ? (
+                <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" aria-label="Preenchido" />
+              ) : null}
+            </div>
+            <p className="text-sm text-green-400/90 mb-2 pl-9">{field.short}</p>
             <Input
+              id={`wa-field-${field.step}`}
               type={field.secret && !showToken ? "password" : "text"}
-              className={`mt-2 ${field.mono ? "font-mono text-sm" : ""}`}
+              className={`${field.mono ? "font-mono text-sm" : ""} border-green-500/20 focus-visible:ring-green-500/40`}
               value={field.value}
               onChange={(e) => field.set(e.target.value)}
               placeholder={field.placeholder}
-              inputMode={field.label === GREEN_API_FIELD_COPY.idInstanceLabel ? "numeric" : undefined}
+              inputMode={field.inputMode}
+              aria-required
             />
-            <p className="mt-1.5 text-xs text-muted-foreground flex items-start gap-1">
-              <Copy className="w-3 h-3 shrink-0 mt-0.5" />
-              {field.hint}
-            </p>
           </div>
         ))}
+
+        <div className="rounded-xl border border-dashed border-muted-foreground/30 bg-background/30 p-3">
+          <button
+            type="button"
+            className="flex w-full items-center justify-between gap-2 text-left text-sm text-muted-foreground hover:text-foreground"
+            onClick={() => setShowOptionalApiUrl((v) => !v)}
+          >
+            <span>
+              <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide mr-2">
+                Opcional
+              </span>
+              {GREEN_API_FIELD_COPY.apiUrlLabel} — pode deixar em branco
+            </span>
+            <span className="text-xs shrink-0">{showOptionalApiUrl ? "Ocultar" : "Mostrar"}</span>
+          </button>
+          {showOptionalApiUrl ? (
+            <div className="mt-3 pt-3 border-t border-border/60">
+              <label className="text-sm font-bold text-muted-foreground font-mono">{GREEN_API_FIELD_COPY.apiUrlLabel}</label>
+              <Input
+                type="text"
+                className="mt-2 font-mono text-sm"
+                value={localBaseUrl}
+                onChange={(e) => {
+                  setLocalBaseUrl(e.target.value)
+                  onGreenApiBaseUrlChange?.(e.target.value)
+                }}
+                placeholder="https://7107.api.greenapi.com"
+              />
+              <p className="mt-1.5 text-xs text-muted-foreground">
+                Só preencha se o salvamento falhar. Na maioria dos casos detectamos sozinhos.
+              </p>
+            </div>
+          ) : null}
+        </div>
+
         {localToken ? (
           <button type="button" className="text-xs text-primary underline" onClick={() => setShowToken((v) => !v)}>
             {showToken ? "Ocultar token" : "Mostrar token"}
           </button>
         ) : null}
+        {!canSave && !busy ? (
+          <p className="text-sm text-center text-muted-foreground">
+            Falta preencher {3 - filledCount} campo{3 - filledCount === 1 ? "" : "s"}.
+          </p>
+        ) : null}
         <Button
           type="button"
           size="lg"
           className="w-full bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white wa-pulse-cta border-0"
-          disabled={busy}
+          disabled={busy || !canSave}
           onClick={() => void save()}
         >
           {busy ? "Salvando…" : "Salvar e ativar WhatsApp"}
@@ -528,18 +620,14 @@ export function WhatsAppConnectWizard(props: WhatsAppConnectWizardProps) {
 
           {step === 2 && premium ? (
             <div className="space-y-5 text-left">
-              <p className="text-center text-sm text-muted-foreground">
-                Cole <strong className="text-foreground">idInstance</strong> e{" "}
-                <strong className="text-foreground">apiTokenInstance</strong> do console Green API. No site: Developer
-                (grátis, teste) ou Business (com clientes).
-              </p>
+              <ConnectGuideBox />
 
               <ClickCard
                 href={GREEN_API_FIELD_COPY.consoleUrl}
                 pulse
                 icon={<WhatsAppIcon className="w-7 h-7 text-green-500" />}
-                title="Abrir console Green API"
-                subtitle="Create instance → copie idInstance e apiTokenInstance. QR na mesma instância."
+                title="Abrir Green API"
+                subtitle="Passo 1–3: crie instância, escaneie QR, espere authorized"
               />
 
               <GreenApiCredentialsForm
