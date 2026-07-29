@@ -18,6 +18,22 @@ export function whatsappDigitsForCloudApi(raw: string): string | null {
   return null
 }
 
+/**
+ * Candidatos para checkWhatsapp (BR): celular com/sem o 9 após o DDD.
+ * WhatsApp antigo pode estar no formato 55+DDD+8 dígitos; cadastro novo usa 9+8.
+ */
+export function brWhatsappCheckCandidates(raw: string): string[] {
+  const primary = whatsappDigitsForCloudApi(raw)
+  if (!primary) return []
+  const out = [primary]
+  if (primary.startsWith("55") && primary.length === 13 && primary[4] === "9") {
+    out.push(primary.slice(0, 4) + primary.slice(5))
+  } else if (primary.startsWith("55") && primary.length === 12) {
+    out.push(primary.slice(0, 4) + "9" + primary.slice(4))
+  }
+  return [...new Set(out)]
+}
+
 /** Dígitos com DDI 55 para wa.me (Brasil). */
 export function whatsappDigitsForWaMe(raw: string): string | null {
   return whatsappDigitsForCloudApi(raw)

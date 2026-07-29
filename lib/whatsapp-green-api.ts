@@ -1,5 +1,5 @@
 import type { WhatsAppIntegration } from "@prisma/client"
-import { whatsappDigitsForCloudApi } from "@/lib/whatsapp-phone"
+import { brWhatsappCheckCandidates, whatsappDigitsForCloudApi } from "@/lib/whatsapp-phone"
 
 /** Fallback quando a URL da instância ainda não foi resolvida. */
 export const GREEN_API_BASE_URL = "https://api.greenapi.com"
@@ -223,13 +223,14 @@ export async function sendGreenApiText(params: {
     }
   }
 
-  const phoneNumber = whatsappDigitsForCloudApi(toDigits)
-  if (!phoneNumber) return { ok: false, skipped: "client_no_phone" }
+  const phoneCandidates = brWhatsappCheckCandidates(toDigits)
+  if (phoneCandidates.length === 0) return { ok: false, skipped: "client_no_phone" }
 
-  let chatId = greenApiChatIdFromDigits(toDigits)
+  let chatId: string | null = greenApiChatIdFromDigits(toDigits)
   let checkMeta: GreenApiSendResult["checkWhatsapp"]
+  let resolvedPhone: string | null = null
   try {
-    const runCheck = async (force?: boolean) => {
+    const runCheck = async (phoneNumber: string, force?: boolean) => {
       const checkRes = await fetch(greenApiUrl(baseUrl, "checkWhatsapp", idInstance, apiTokenInstance), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -243,19 +244,29 @@ export async function sendGreenApiText(params: {
       }
     }
 
-    let checkJson = await runCheck(false)
-    if (checkJson.existsWhatsapp === false && checkJson.fromCache !== false) {
-      checkJson = await runCheck(true)
-    }
-    checkMeta = {
-      existsWhatsapp: checkJson.existsWhatsapp,
-      chatId: checkJson.chatId,
-      fromCache: checkJson.fromCache,
+    for (const phoneNumber of phoneCandidates) {
+      let checkJson = await runCheck(phoneNumber, false)
+      if (checkJson.existsWhatsapp === false && checkJson.fromCache !== false) {
+        checkJson = await runCheck(phoneNumber, true)
+      }
+      checkMeta = {
+        existsWhatsapp: checkJson.existsWhatsapp,
+        chatId: checkJson.chatId,
+        fromCache: checkJson.fromCache,
+      }
+      if (checkJson.chatId?.trim()) {
+        chatId = checkJson.chatId.trim()
+        resolvedPhone = phoneNumber
+        break
+      }
+      if (checkJson.existsWhatsapp === true) {
+        resolvedPhone = phoneNumber
+        chatId = greenApiChatIdFromDigits(phoneNumber)
+        break
+      }
     }
 
-    if (checkJson.chatId?.trim()) {
-      chatId = checkJson.chatId.trim()
-    } else if (checkJson.existsWhatsapp === false) {
+    if (!resolvedPhone && checkMeta?.existsWhatsapp === false) {
       return {
         ok: false,
         skipped: "whatsapp_number_not_registered",
