@@ -62,6 +62,12 @@ export type BarbershopNotificationSettings = {
   email_reminder_template?: string
   email_confirmation_template?: string
   email_post_service_template?: string
+  /** Vaga liberada na lista de espera (WhatsApp). */
+  whatsapp_waitlist_slot_template?: string
+  /** Vaga liberada na lista de espera (e-mail). */
+  email_waitlist_slot_template?: string
+  /** Vaga liberada na lista de espera (push no app). */
+  app_waitlist_slot_template?: string
   /**
    * Nome da template oficial Meta (opcional). Quando preenchido, o backend pode priorizar
    * envio por template aprovado em vez de texto livre (evolução futura).

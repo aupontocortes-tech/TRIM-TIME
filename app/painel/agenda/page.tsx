@@ -72,6 +72,8 @@ type AgendaItem = {
   valor: number
   status: Appointment["status"]
   profissional: string
+  /** Nome da unidade (visão “Todas as unidades”). */
+  unidade?: string
   raw: Appointment
 }
 
@@ -169,7 +171,7 @@ function agendaValorExibicao(appointment: Appointment): number {
   return Math.round((svcSum + retailSum) * 100) / 100
 }
 
-function mapAgendaItem(appointment: Appointment): AgendaItem {
+function mapAgendaItem(appointment: Appointment, unitName?: string | null): AgendaItem {
   const lines = appointment.service_lines ?? []
   let servicoNome: string
   let desc: string
@@ -211,6 +213,7 @@ function mapAgendaItem(appointment: Appointment): AgendaItem {
     valor: agendaValorExibicao(appointment),
     status: appointment.status,
     profissional: appointment.barber?.name ?? "Profissional",
+    unidade: unitName?.trim() || undefined,
     raw: appointment,
   }
 }
@@ -297,7 +300,7 @@ export default function AgendaPage() {
     plan && hasFeature(plan, "loyalty_program")
       ? parseLoyaltyProgram(barbershop?.settings ?? null)
       : null
-  const needsUnitPick = units.length > 1 && !selectedUnitId
+  const isNetworkView = units.length > 1 && !selectedUnitId
   const [secaoAgenda, setSecaoAgenda] = useState<"agenda" | "lista_espera">("agenda")
   const [waitlistRows, setWaitlistRows] = useState<WaitingListItem[]>([])
   const [waitlistLoading, setWaitlistLoading] = useState(false)
@@ -392,24 +395,14 @@ export default function AgendaPage() {
     }
   }, [waitlistView])
 
+  const unitNameById = useMemo(
+    () => new Map(units.map((u) => [u.id, u.name])),
+    [units]
+  )
+
   const carregarDependencias = async () => {
-    if (needsUnitPick) {
-      setBarbers([])
-      setClients([])
-      const [servicesRes, retailRes] = await Promise.all([
-        fetch("/api/services", { credentials: "include", cache: "no-store" }),
-        fetch("/api/retail-products", { credentials: "include", cache: "no-store" }),
-      ])
-      const [servicesData, retailData] = await Promise.all([
-        servicesRes.ok ? servicesRes.json() : [],
-        retailRes.ok ? retailRes.json() : [],
-      ])
-      setServices(Array.isArray(servicesData) ? (servicesData as Service[]) : [])
-      setRetailProducts(Array.isArray(retailData) ? (retailData as RetailProduct[]) : [])
-      return
-    }
     const [barbersRes, servicesRes, clientsRes, retailRes] = await Promise.all([
-      fetch(barbersListUrl(selectedUnitId, unitScopeVersion), {
+      fetch(barbersListUrl(isNetworkView ? null : selectedUnitId, unitScopeVersion), {
         credentials: "include",
         cache: "no-store",
       }),
@@ -457,16 +450,11 @@ export default function AgendaPage() {
   }, [])
 
   const carregarAgendamentos = async () => {
-    if (needsUnitPick) {
-      setAgendamentos([])
-      setLoading(false)
-      setError("")
-      return
-    }
     setLoading(true)
     setError("")
     try {
       const params = new URLSearchParams()
+      if (isNetworkView) params.set("network", "1")
       if (visao === "dia") {
         params.set("date", toYMD(dataSelecionada))
       } else if (visao === "semana") {
@@ -498,7 +486,12 @@ export default function AgendaPage() {
           }
           return true
         })
-        .map(mapAgendaItem)
+        .map((a) =>
+          mapAgendaItem(
+            a,
+            a.unit_id ? unitNameById.get(a.unit_id) ?? null : null
+          )
+        )
       list.sort((a, b) => {
         const da = a.raw.date ?? ""
         const db = b.raw.date ?? ""
@@ -516,11 +509,11 @@ export default function AgendaPage() {
 
   useEffect(() => {
     void carregarDependencias()
-  }, [selectedUnitId, unitScopeVersion])
+  }, [selectedUnitId, unitScopeVersion, isNetworkView])
 
   useEffect(() => {
     void carregarAgendamentos()
-  }, [dataSelecionada, filtroProf, barbersForUnit, visao, selectedUnitId, unitsLoading, needsUnitPick])
+  }, [dataSelecionada, filtroProf, barbersForUnit, visao, selectedUnitId, unitsLoading, isNetworkView, unitNameById])
 
   const mudarDia = (dias: number) => {
     const novaData = new Date(dataSelecionada)
@@ -592,7 +585,7 @@ export default function AgendaPage() {
         setFeedback("Horário remarcado com sucesso.")
       else setFeedback("Agendamento atualizado com sucesso.")
       await carregarAgendamentos()
-      if (payload.status === "completed" && !needsUnitPick) {
+      if (payload.status === "completed") {
         try {
           const clientsRes = await fetch(clientsListUrl(selectedUnitId), {
             credentials: "include",
@@ -605,7 +598,14 @@ export default function AgendaPage() {
         }
       }
       if (agendamentoSelecionado?.id === appointmentId) {
-        setAgendamentoSelecionado(mapAgendaItem(data as Appointment))
+        setAgendamentoSelecionado(
+          mapAgendaItem(
+            data as Appointment,
+            (data as Appointment).unit_id
+              ? unitNameById.get((data as Appointment).unit_id!) ?? null
+              : null
+          )
+        )
       }
       return true
     } catch {
@@ -815,6 +815,7 @@ export default function AgendaPage() {
       }
 
       const service = services.find((item) => item.id === novoForm.serviceId)
+      const barber = barbers.find((item) => item.id === novoForm.barberId)
       const appointmentRes = await fetch("/api/appointments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -823,6 +824,7 @@ export default function AgendaPage() {
           client_id: clientId,
           barber_id: novoForm.barberId,
           service_id: novoForm.serviceId,
+          unit_id: isNetworkView ? barber?.unit_id ?? undefined : undefined,
           date: toYMD(dataSelecionada),
           time: novoForm.time,
           total_price: service ? Number(service.price) : undefined,
@@ -1141,10 +1143,10 @@ export default function AgendaPage() {
         </div>
       ) : null}
 
-      {!unitsLoading && needsUnitPick ? (
+      {!unitsLoading && isNetworkView ? (
         <div className="rounded-lg border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-foreground">
-          Selecione uma unidade em <strong>Unidade ativa</strong> na barra lateral. Cada loja tem agenda e equipe
-          próprias — no Financeiro, use <strong>Todas as unidades</strong> para ver o faturamento geral.
+          <strong>Todas as unidades</strong> — agendamentos de todas as lojas juntos. Para criar agendamento,
+          escolha o profissional da unidade desejada.
         </div>
       ) : null}
       {!unitsLoading && selectedUnitId && nomeUnidadeAtiva ? (
@@ -1350,6 +1352,11 @@ export default function AgendaPage() {
                               <span className="text-xs text-muted-foreground px-2 py-0.5 bg-secondary rounded">
                                 {agendamento.profissional}
                               </span>
+                              {agendamento.unidade ? (
+                                <span className="text-xs text-primary px-2 py-0.5 bg-primary/10 rounded">
+                                  {agendamento.unidade}
+                                </span>
+                              ) : null}
                             </div>
                             <p className="text-sm text-muted-foreground">{agendamento.servico}</p>
                           </div>
@@ -1417,6 +1424,11 @@ export default function AgendaPage() {
                       <span className="text-xs text-muted-foreground px-2 py-0.5 bg-secondary rounded">
                         {agendamento.profissional}
                       </span>
+                      {agendamento.unidade ? (
+                        <span className="text-xs text-primary px-2 py-0.5 bg-primary/10 rounded">
+                          {agendamento.unidade}
+                        </span>
+                      ) : null}
                     </div>
                     <p className="text-sm text-muted-foreground">{agendamento.servico}</p>
                     {agendamento.servicoDescricao ? (

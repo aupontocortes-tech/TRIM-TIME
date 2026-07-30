@@ -13,6 +13,10 @@ export type NotificationTemplateVars = {
   maps: string
   /** Nome do profissional do agendamento. */
   barbeiro: string
+  /** Link para confirmar vaga da lista de espera (WhatsApp / e-mail). */
+  link_confirmar?: string
+  /** Minutos para aceitar a vaga (lista de espera). */
+  prazo_minutos?: string
 }
 
 export const NOTIFICATION_TEMPLATE_VARIABLE_HELP = [
@@ -25,6 +29,8 @@ export const NOTIFICATION_TEMPLATE_VARIABLE_HELP = [
   { tag: "{{endereco}}", desc: "Endereço da unidade" },
   { tag: "{{maps}}", desc: "Link do Google Maps (se cadastrado)" },
   { tag: "{{barbeiro}}", desc: "Nome do profissional" },
+  { tag: "{{link_confirmar}}", desc: "Link para confirmar vaga (lista de espera)" },
+  { tag: "{{prazo_minutos}}", desc: "Minutos para aceitar a vaga" },
 ] as const
 
 /** Normaliza sinônimos usados nos modelos ({{nome}}, {{hora}}). */

@@ -103,6 +103,9 @@ import {
   DEFAULT_WHATSAPP_CONFIRMATION,
   DEFAULT_WHATSAPP_POST_SERVICE,
   DEFAULT_WHATSAPP_REMINDER,
+  DEFAULT_WHATSAPP_WAITLIST_SLOT,
+  DEFAULT_EMAIL_WAITLIST_SLOT,
+  DEFAULT_APP_WAITLIST_SLOT,
 } from "@/lib/notification-default-templates"
 import { barbersListUrl } from "@/lib/barbers-list-url"
 import { cn } from "@/lib/utils"
@@ -384,6 +387,9 @@ export default function ConfiguracoesPage() {
   const [waStartAtConnectStep, setWaStartAtConnectStep] = useState(false)
   const [notifWaConfirmTpl, setNotifWaConfirmTpl] = useState(DEFAULT_WHATSAPP_CONFIRMATION)
   const [notifWaPostTpl, setNotifWaPostTpl] = useState(DEFAULT_WHATSAPP_POST_SERVICE)
+  const [notifWaWaitlistTpl, setNotifWaWaitlistTpl] = useState(DEFAULT_WHATSAPP_WAITLIST_SLOT)
+  const [notifEmailWaitlistTpl, setNotifEmailWaitlistTpl] = useState(DEFAULT_EMAIL_WAITLIST_SLOT)
+  const [notifAppWaitlistTpl, setNotifAppWaitlistTpl] = useState(DEFAULT_APP_WAITLIST_SLOT)
   const [notifCustomReminderHours, setNotifCustomReminderHours] = useState("")
   const [notifMetaTplConfirm, setNotifMetaTplConfirm] = useState("")
   const [notifMetaTplReminder, setNotifMetaTplReminder] = useState("")
@@ -484,6 +490,9 @@ export default function ConfiguracoesPage() {
       setNotifEmailPostTpl(DEFAULT_EMAIL_POST_SERVICE)
       setNotifWaConfirmTpl(DEFAULT_WHATSAPP_CONFIRMATION)
       setNotifWaPostTpl(DEFAULT_WHATSAPP_POST_SERVICE)
+      setNotifWaWaitlistTpl(DEFAULT_WHATSAPP_WAITLIST_SLOT)
+      setNotifEmailWaitlistTpl(DEFAULT_EMAIL_WAITLIST_SLOT)
+      setNotifAppWaitlistTpl(DEFAULT_APP_WAITLIST_SLOT)
       setNotifCustomReminderHours("")
       setNotifMetaTplConfirm("")
       setNotifMetaTplReminder("")
@@ -509,6 +518,17 @@ export default function ConfiguracoesPage() {
     )
     setNotifWaPostTpl(
       ns.whatsapp_post_service_template?.trim() ? ns.whatsapp_post_service_template : DEFAULT_WHATSAPP_POST_SERVICE
+    )
+    setNotifWaWaitlistTpl(
+      ns.whatsapp_waitlist_slot_template?.trim()
+        ? ns.whatsapp_waitlist_slot_template
+        : DEFAULT_WHATSAPP_WAITLIST_SLOT
+    )
+    setNotifEmailWaitlistTpl(
+      ns.email_waitlist_slot_template?.trim() ? ns.email_waitlist_slot_template : DEFAULT_EMAIL_WAITLIST_SLOT
+    )
+    setNotifAppWaitlistTpl(
+      ns.app_waitlist_slot_template?.trim() ? ns.app_waitlist_slot_template : DEFAULT_APP_WAITLIST_SLOT
     )
     const cm = ns.reminder_custom_minutes
     setNotifCustomReminderHours(
@@ -1542,6 +1562,9 @@ export default function ConfiguracoesPage() {
               whatsapp_reminder_template: notifWaTpl.trim() || DEFAULT_WHATSAPP_REMINDER,
               whatsapp_confirmation_template: notifWaConfirmTpl.trim() || DEFAULT_WHATSAPP_CONFIRMATION,
               whatsapp_post_service_template: notifWaPostTpl.trim() || DEFAULT_WHATSAPP_POST_SERVICE,
+              whatsapp_waitlist_slot_template: notifWaWaitlistTpl.trim() || DEFAULT_WHATSAPP_WAITLIST_SLOT,
+              email_waitlist_slot_template: notifEmailWaitlistTpl.trim() || DEFAULT_EMAIL_WAITLIST_SLOT,
+              app_waitlist_slot_template: notifAppWaitlistTpl.trim() || DEFAULT_APP_WAITLIST_SLOT,
               email_reminder_template: notifEmailTpl.trim() || DEFAULT_EMAIL_REMINDER,
               email_confirmation_template: notifEmailConfirmTpl.trim() || DEFAULT_EMAIL_CONFIRMATION,
               email_post_service_template: notifEmailPostTpl.trim() || DEFAULT_EMAIL_POST_SERVICE,
@@ -4481,6 +4504,59 @@ export default function ConfiguracoesPage() {
             </Card>
           ) : null}
 
+          {waitlistFeature ? (
+            <Card className="bg-card border-border">
+              <CardHeader>
+                <CardTitle className="text-foreground flex items-center gap-2">
+                  <Bell className="w-4 h-4 text-primary" />
+                  Lista de espera — vaga disponível
+                </CardTitle>
+                <CardDescription className="text-muted-foreground">
+                  Quando um horário é liberado, o próximo cliente da fila recebe este aviso. Se não confirmar no prazo
+                  configurado em <strong className="text-foreground">Horários</strong>, a vaga passa para o próximo.
+                  Com WhatsApp conectado na aba <strong className="text-foreground">Integração</strong> e lembretes por
+                  WhatsApp ativos, a mensagem é enviada automaticamente pelo WhatsApp.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-5 max-w-2xl">
+                <Field>
+                  <FieldLabel>Mensagem no WhatsApp</FieldLabel>
+                  <Textarea
+                    className="mt-1 bg-input border-border text-foreground min-h-[100px]"
+                    value={notifWaWaitlistTpl}
+                    onChange={(e) => setNotifWaWaitlistTpl(e.target.value)}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel>Mensagem no app (push)</FieldLabel>
+                  <Textarea
+                    className="mt-1 bg-input border-border text-foreground min-h-[80px]"
+                    value={notifAppWaitlistTpl}
+                    onChange={(e) => setNotifAppWaitlistTpl(e.target.value)}
+                  />
+                </Field>
+                {emailNotificationsFeature ? (
+                  <Field>
+                    <FieldLabel>Mensagem por e-mail</FieldLabel>
+                    <Textarea
+                      className="mt-1 bg-input border-border text-foreground min-h-[80px]"
+                      value={notifEmailWaitlistTpl}
+                      onChange={(e) => setNotifEmailWaitlistTpl(e.target.value)}
+                    />
+                  </Field>
+                ) : null}
+                <p className="text-xs text-muted-foreground">
+                  Variáveis:{" "}
+                  {NOTIFICATION_TEMPLATE_VARIABLE_HELP.map((v) => (
+                    <code key={v.tag} className="text-foreground/90 mr-1">
+                      {v.tag}
+                    </code>
+                  ))}
+                </p>
+              </CardContent>
+            </Card>
+          ) : null}
+
           <div className="flex flex-wrap gap-3">
             <Button
               type="button"
@@ -4492,8 +4568,9 @@ export default function ConfiguracoesPage() {
             </Button>
           </div>
           <p className="text-sm text-muted-foreground max-w-2xl">
-            WhatsApp Business (Green API) ficou na aba{" "}
-            <strong className="text-foreground">Integração</strong>.
+            Conexão do WhatsApp (Green API) fica na aba{" "}
+            <strong className="text-foreground">Integração</strong>. Os textos da lista de espera e lembretes ficam
+            aqui em <strong className="text-foreground">Notificações</strong>.
           </p>
         </TabsContent>
 

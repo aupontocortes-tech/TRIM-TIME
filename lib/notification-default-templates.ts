@@ -28,3 +28,12 @@ export const DEFAULT_EMAIL_CONFIRMATION =
 
 export const DEFAULT_EMAIL_POST_SERVICE =
   "Obrigado pela preferência, {{nome_cliente}}! Esperamos você novamente na {{unidade}}."
+
+export const DEFAULT_WHATSAPP_WAITLIST_SLOT =
+  "Olá {{nome_cliente}}! Uma vaga abriu para {{data}} às {{horario}} — {{servico}} com {{barbeiro}}.\n\nConfirme em até {{prazo_minutos}} minutos:\n{{link_confirmar}}"
+
+export const DEFAULT_EMAIL_WAITLIST_SLOT =
+  "Olá {{nome_cliente}}! Uma vaga abriu para {{data}} às {{horario}} — {{servico}} com {{barbeiro}}.\n\nConfirme em até {{prazo_minutos}} minutos:\n{{link_confirmar}}"
+
+export const DEFAULT_APP_WAITLIST_SLOT =
+  "Vaga disponível: {{data}} às {{horario}} — {{servico}} com {{barbeiro}}. Confirme em até {{prazo_minutos}} min!"

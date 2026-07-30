@@ -10,11 +10,19 @@ import { sendClientNotificationEmail } from "@/lib/client-notification-email"
 import { sendWhatsAppByProvider } from "@/lib/whatsapp-send-unified"
 import { hasFeature } from "@/lib/plans"
 import { resolveEffectivePlanForBarbershop } from "@/lib/barbershop-effective-plan-server"
-import type { BarbershopNotificationSettings } from "@/lib/db/types"
 import {
   expireOldWaitingItemsWithoutDate,
   expirePastDesiredDateWaitlistItems,
 } from "@/lib/waitlist-query"
+import {
+  DEFAULT_APP_WAITLIST_SLOT,
+  DEFAULT_EMAIL_WAITLIST_SLOT,
+  DEFAULT_WHATSAPP_WAITLIST_SLOT,
+} from "@/lib/notification-default-templates"
+import { renderNotificationTemplate } from "@/lib/notification-template"
+import { buildWaitlistSlotNotificationVars } from "@/lib/waitlist-notification-vars"
+import { buildWaitlistConfirmUrl } from "@/lib/waitlist-confirm-token"
+import { isWhatsAppIntegrationReady } from "@/lib/whatsapp-send-unified"
 
 export const WAITLIST_DEFAULT_ACCEPT_MINUTES = 15
 
@@ -155,27 +163,64 @@ export async function notifyNextWaitingForFreedSlot(
     select: { pushSubscription: true, name: true, email: true, phone: true },
   })
 
-  const barbershop = await prisma.barbershop.findUnique({
-    where: { id: barbershopId },
-    select: { name: true, slug: true, settings: true },
+  const [barbershop, barber, service] = await Promise.all([
+    prisma.barbershop.findUnique({
+      where: { id: barbershopId },
+      select: { name: true, slug: true, settings: true },
+    }),
+    prisma.barber.findUnique({
+      where: { id: freed.barberId },
+      select: { name: true },
+    }),
+    prisma.service.findUnique({
+      where: { id: freed.serviceId },
+      select: { name: true },
+    }),
+  ])
+
+  const settings = (barbershop?.settings as BarbershopSettings | null) ?? null
+  const deadlineMinutes = getWaitlistAcceptDeadlineMinutes(settings)
+  const ns = settings?.notification_settings
+  const slug = barbershop?.slug ?? ""
+  const timeStr = normalizeWaitlistTime(freed.time)
+  const confirmUrl = slug ? buildWaitlistConfirmUrl(slug, next.id) : ""
+  const openUrl = slug ? `/b/${slug}` : "/"
+
+  const templateVars = buildWaitlistSlotNotificationVars({
+    clientName: client?.name ?? "",
+    barbershopName: barbershop?.name ?? "Barbearia",
+    slug,
+    itemId: next.id,
+    barberName: barber?.name ?? "Profissional",
+    serviceName: service?.name ?? "Serviço",
+    dateYmd: freed.date,
+    time: timeStr,
+    deadlineMinutes,
   })
 
-  const timeStr = normalizeWaitlistTime(freed.time)
-  const openUrl = barbershop?.slug ? `/b/${barbershop.slug}` : "/"
-  const waitlistBody = `Olá ${client?.name ?? ""}! Uma vaga abriu para ${timeStr} em ${freed.date}. Confirme em até 30 min!`
+  const waBody = renderNotificationTemplate(
+    ns?.whatsapp_waitlist_slot_template?.trim() || DEFAULT_WHATSAPP_WAITLIST_SLOT,
+    templateVars
+  )
+  const emailBody = renderNotificationTemplate(
+    ns?.email_waitlist_slot_template?.trim() || DEFAULT_EMAIL_WAITLIST_SLOT,
+    templateVars
+  )
+  const appBody = renderNotificationTemplate(
+    ns?.app_waitlist_slot_template?.trim() || DEFAULT_APP_WAITLIST_SLOT,
+    templateVars
+  )
 
   let pushResult: { ok: boolean; error?: string; skipped?: string } = { ok: false, skipped: "no_subscription" }
-  if (client?.pushSubscription) {
+  if (client?.pushSubscription && ns?.notify_app !== false) {
     pushResult = await sendWebPushToClient(client.pushSubscription, {
       title: "Vaga disponível! 🎉",
-      body: `Uma vaga abriu para ${timeStr} em ${freed.date}. Confirme em até 30 min!`,
-      url: openUrl,
+      body: appBody,
+      url: confirmUrl || openUrl,
     })
   }
 
   const plan = await resolveEffectivePlanForBarbershop(barbershopId)
-  const ns = (barbershop?.settings as { notification_settings?: BarbershopNotificationSettings } | null)
-    ?.notification_settings
 
   let emailResult: { ok: boolean; error?: string; skipped?: string } = {
     ok: false,
@@ -190,7 +235,7 @@ export async function notifyNextWaitingForFreedSlot(
     emailResult = await sendClientNotificationEmail({
       to: client.email.trim(),
       subject: `Vaga disponível — ${barbershop?.name ?? "Barbearia"}`,
-      bodyText: waitlistBody,
+      bodyText: emailBody,
       barbershopName: barbershop?.name,
     })
   }
@@ -202,11 +247,13 @@ export async function notifyNextWaitingForFreedSlot(
   if (plan && hasFeature(plan, "whatsapp_integration") && ns?.notify_whatsapp === true) {
     const integration = await prisma.whatsAppIntegration.findUnique({ where: { barbershopId } })
     const digits = (client?.phone ?? "").replace(/\D/g, "")
-    if (digits.length >= 10) {
+    if (!isWhatsAppIntegrationReady(integration)) {
+      whatsappResult = { ok: false, skipped: "whatsapp_not_connected" }
+    } else if (digits.length >= 10) {
       whatsappResult = await sendWhatsAppByProvider({
         integration,
         toDigits: digits,
-        body: waitlistBody,
+        body: waBody,
       })
     } else {
       whatsappResult = { ok: false, skipped: "client_no_phone" }

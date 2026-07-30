@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef, useCallback } from "react"
 import Link from "next/link"
-import { useParams } from "next/navigation"
+import { useParams, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -266,6 +266,7 @@ type CurrentPublicAppointmentPayload = {
 
 export default function BarbeariaPage() {
   const params = useParams()
+  const searchParams = useSearchParams()
   const slug = (params?.slug as string) || "trim-time"
   const storageSuffix = `_${slug}`
   const otpVerifyBusyRef = useRef(false)
@@ -300,6 +301,9 @@ export default function BarbeariaPage() {
   const [bookingLoading, setBookingLoading] = useState(false)
   const [erroAgendamento, setErroAgendamento] = useState("")
   const [waitlistDialogOpen, setWaitlistDialogOpen] = useState(false)
+  const [waitlistLinkBusy, setWaitlistLinkBusy] = useState(false)
+  const [waitlistLinkMessage, setWaitlistLinkMessage] = useState<string | null>(null)
+  const waitlistLinkHandledRef = useRef(false)
   const [trimPlayStage, setTrimPlayStage] = useState<"intro" | "splash" | "game">("intro")
   const [trimPlayCliente, setTrimPlayCliente] = useState<null | { id: string; nome: string }>(null)
   const [pushReminderMsg, setPushReminderMsg] = useState<string | null>(null)
@@ -345,6 +349,43 @@ export default function BarbeariaPage() {
     !!publicMeta?.waitlist_enabled,
     authPhase === "logado"
   )
+
+  useEffect(() => {
+    const token = searchParams.get("wl_confirm")?.trim()
+    if (!token || waitlistLinkHandledRef.current || !publicMeta?.waitlist_enabled) return
+    waitlistLinkHandledRef.current = true
+    setWaitlistLinkBusy(true)
+    setWaitlistLinkMessage(null)
+    void fetch(`/api/public/barbershops/${encodeURIComponent(slug)}/waitlist/confirm`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token }),
+    })
+      .then(async (r) => {
+        const j = (await r.json().catch(() => ({}))) as {
+          error?: string
+          appointment_ids?: string[]
+        }
+        if (typeof window !== "undefined") {
+          window.history.replaceState({}, "", window.location.pathname)
+        }
+        if (!r.ok) {
+          setErroAgendamento(j.error || "Não foi possível confirmar este horário.")
+          return
+        }
+        setWaitlistLinkMessage(
+          "Horário confirmado! Você receberá os detalhes por WhatsApp ou no app."
+        )
+        setErroAgendamento("")
+      })
+      .catch(() => {
+        setErroAgendamento("Erro ao confirmar o horário.")
+      })
+      .finally(() => {
+        setWaitlistLinkBusy(false)
+      })
+  }, [searchParams, publicMeta?.waitlist_enabled, slug])
 
   useLocalReminders(authPhase === "logado")
 
@@ -3121,6 +3162,17 @@ export default function BarbeariaPage() {
               {erroAgendamento ? (
                 <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">
                   {erroAgendamento}
+                </div>
+              ) : null}
+              {waitlistLinkBusy ? (
+                <div className="rounded-lg border border-border bg-muted/40 p-3 text-sm text-foreground flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                  Confirmando horário da lista de espera…
+                </div>
+              ) : null}
+              {waitlistLinkMessage ? (
+                <div className="rounded-lg border border-green-500/30 bg-green-500/10 p-3 text-sm text-foreground">
+                  {waitlistLinkMessage}
                 </div>
               ) : null}
               {waitlist.item && publicMeta?.waitlist_enabled ? (

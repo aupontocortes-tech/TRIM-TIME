@@ -33,6 +33,7 @@ type UseWaitlistReturn = {
   error: string
   join: (payload: JoinPayload) => Promise<boolean>
   accept: () => Promise<{ ok: boolean; appointmentIds?: string[] }>
+  acceptWithToken: (token: string) => Promise<{ ok: boolean; appointmentIds?: string[]; error?: string }>
   cancel: () => Promise<boolean>
   clearError: () => void
   restoring: boolean
@@ -154,6 +155,39 @@ export function useWaitlist(
     }
   }, [apiBase, item?.id])
 
+  const acceptWithToken = useCallback(
+    async (token: string): Promise<{ ok: boolean; appointmentIds?: string[]; error?: string }> => {
+      setAcceptBusy(true)
+      setError("")
+      try {
+        const r = await fetch(`${apiBase}/confirm`, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token }),
+        })
+        const j = (await r.json().catch(() => ({}))) as {
+          error?: string
+          appointment_ids?: string[]
+        }
+        if (!r.ok) {
+          const msg = j.error || "Não foi possível confirmar o horário."
+          setError(msg)
+          return { ok: false, error: msg }
+        }
+        setItem(null)
+        return { ok: true, appointmentIds: j.appointment_ids }
+      } catch {
+        const msg = "Erro ao confirmar o horário."
+        setError(msg)
+        return { ok: false, error: msg }
+      } finally {
+        setAcceptBusy(false)
+      }
+    },
+    [apiBase]
+  )
+
   const cancelItem = useCallback(async (): Promise<boolean> => {
     if (!item?.id) return false
     setCancelBusy(true)
@@ -189,6 +223,7 @@ export function useWaitlist(
     error,
     join,
     accept,
+    acceptWithToken,
     cancel: cancelItem,
     clearError,
     restoring,
