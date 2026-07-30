@@ -15,6 +15,7 @@ import {
   shouldPromptPlanChoice,
 } from "@/lib/subscription"
 import { getPlanCatalog } from "@/lib/plan-catalog"
+import { buildBillingAccountSummary } from "@/lib/billing-account-summary"
 import { getBarbershopIdFromRequest } from "@/lib/tenant"
 import { prisma } from "@/lib/prisma"
 import type { Subscription } from "@/lib/db/types"
@@ -30,6 +31,8 @@ function toSubscriptionApi(sub: {
   asaasSubscriptionId: string | null
   billingType: string | null
   cardSetupAt: Date | null
+  creditCardLast4: string | null
+  creditCardBrand: string | null
   postTrialChoice: string | null
   graceAccessUntil: Date | null
   createdAt: Date
@@ -47,6 +50,8 @@ function toSubscriptionApi(sub: {
     trial_end: sub.trialEnd?.toISOString() ?? null,
     next_payment: sub.nextPayment?.toISOString() ?? null,
     card_setup_at: sub.cardSetupAt?.toISOString() ?? null,
+    credit_card_last4: sub.creditCardLast4,
+    credit_card_brand: sub.creditCardBrand,
     post_trial_choice: (sub.postTrialChoice as Subscription["post_trial_choice"]) ?? null,
     grace_access_until: sub.graceAccessUntil?.toISOString() ?? null,
     asaas_customer_id: sub.asaasCustomerId,
@@ -97,9 +102,28 @@ export async function GET() {
     const needsDecision = exempt ? false : needsTrialDecision(subscription)
     const inGrace = exempt ? false : isInPostDeclineGracePeriod(subscription)
 
+    const payment_account =
+      subscription && effectivePlan
+        ? buildBillingAccountSummary({
+            subscription: {
+              plan: subscription.plan,
+              status: subscription.status,
+              trial_end: subscription.trial_end,
+              next_payment: subscription.next_payment,
+              card_setup_at: subscription.card_setup_at,
+              billing_type: subscription.billing_type,
+              credit_card_last4: subscription.credit_card_last4,
+              credit_card_brand: subscription.credit_card_brand,
+            },
+            effectivePlan,
+            catalog,
+          })
+        : null
+
     return NextResponse.json({
       subscription,
       effective_plan: effectivePlan,
+      payment_account,
       billing_exempt: exempt,
       trial_active: trialActive,
       trial_expired: isTrialExpired(subscription),

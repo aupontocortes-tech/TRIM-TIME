@@ -335,6 +335,9 @@ model Subscription {
   billingType         String?            @map("billing_type")
   /// Cartão cadastrado no Asaas (obrigatório durante o trial com billing ativo).
   cardSetupAt         DateTime?          @map("card_setup_at") @db.Timestamptz
+  /// Final do cartão (4 dígitos) — exibido no painel para o cliente.
+  creditCardLast4     String?            @map("credit_card_last4") @db.VarChar(4)
+  creditCardBrand     String?            @map("credit_card_brand")
   /// Após o trial: accepted = contratou; declined = recusou (sem cobrança).
   postTrialChoice     String?            @map("post_trial_choice")
   /// Após recusar contratar: login limitado até esta data (conta preservada).

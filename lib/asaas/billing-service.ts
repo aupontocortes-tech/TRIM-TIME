@@ -57,6 +57,17 @@ function addDays(d: Date, days: number): Date {
   return next
 }
 
+function cardMetaFromAsaasToken(token: {
+  creditCardNumber?: string | null
+  creditCardBrand?: string | null
+}): { creditCardLast4: string | null; creditCardBrand: string | null } {
+  const digits = (token.creditCardNumber ?? "").replace(/\D/g, "")
+  return {
+    creditCardLast4: digits.length >= 4 ? digits.slice(-4) : null,
+    creditCardBrand: token.creditCardBrand?.trim() || null,
+  }
+}
+
 /** Cobrança só após aceite: data distante para validar cartão sem debitar no trial. */
 function deferredChargeDate(): string {
   const d = new Date()
@@ -803,6 +814,7 @@ export async function changeSubscriptionCardInApp(
       cardSetupAt: new Date(),
       asaasCustomerId: customerId,
       billingType: sub.billingType ?? "CREDIT_CARD",
+      ...cardMetaFromAsaasToken(token),
     },
   })
 
@@ -898,6 +910,7 @@ export async function registerCardInApp(
         cardSetupAt: new Date(),
         postTrialChoice: "accepted",
         plan,
+        ...cardMetaFromAsaasToken(token),
       },
     })
     await onBarbershopPlanChanged(barbershopId, plan)
@@ -990,6 +1003,7 @@ export async function registerCardInApp(
         status: "active",
         trialEnd: null,
         nextPayment: addMonths(new Date(), 1),
+        ...cardMetaFromAsaasToken(token),
       },
     })
     await onBarbershopPlanChanged(barbershopId, plan)

@@ -7,6 +7,8 @@ import { useBarbershop } from "@/hooks/use-barbershop"
 import { useUnits } from "@/hooks/use-units"
 import { usePlanCatalog } from "@/hooks/use-plan-catalog"
 import { formatPlanPricePerMonth } from "@/lib/format-plan-price"
+import type { BillingAccountSummary } from "@/lib/billing-account-summary"
+import { BillingAccountSummaryCard } from "@/components/billing/billing-account-summary"
 import { hasFeature, PLAN_FEATURES, PLAN_LABELS } from "@/lib/plans"
 import type {
   Barber,
@@ -428,6 +430,8 @@ export default function ConfiguracoesPage() {
   const [subscriptionBusy, setSubscriptionBusy] = useState(false)
   const [subscriptionError, setSubscriptionError] = useState<string | null>(null)
   const [subscriptionOk, setSubscriptionOk] = useState<string | null>(null)
+  const [paymentAccount, setPaymentAccount] = useState<BillingAccountSummary | null>(null)
+  const [paymentAccountLoading, setPaymentAccountLoading] = useState(false)
   /** Modal com lista completa de benefícios do plano (card inteiro é clicável). */
   const [planDetailOpen, setPlanDetailOpen] = useState<SubscriptionPlan | null>(null)
 
@@ -1909,6 +1913,31 @@ export default function ConfiguracoesPage() {
   const showInternalAccountHints =
     barbershop?.role === "super_admin" || isLocalDevOrigin(origin)
   const subscriptionCanceled = subscription?.status === "canceled"
+
+  useEffect(() => {
+    if (activeTab !== "plano" || !managedByBilling) {
+      setPaymentAccount(null)
+      return
+    }
+    let cancelled = false
+    setPaymentAccountLoading(true)
+    fetch("/api/billing", { credentials: "include", cache: "no-store" })
+      .then(async (r) => {
+        const j = await r.json().catch(() => ({}))
+        if (!cancelled && r.ok) {
+          setPaymentAccount(j.payment_account ?? null)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setPaymentAccount(null)
+      })
+      .finally(() => {
+        if (!cancelled) setPaymentAccountLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [activeTab, managedByBilling, subscription?.updated_at, subscription?.status])
   const planCards: SubscriptionPlan[] = ["basic", "pro", "premium"]
   const normalizedShopName = (barbershop?.name ?? "")
     .normalize("NFD")
@@ -3805,6 +3834,12 @@ export default function ConfiguracoesPage() {
                     {subscriptionOk}
                   </div>
                 )}
+
+                {managedByBilling && paymentAccount ? (
+                  <BillingAccountSummaryCard summary={paymentAccount} compact />
+                ) : managedByBilling && paymentAccountLoading ? (
+                  <p className="text-sm text-muted-foreground">Carregando dados de pagamento...</p>
+                ) : null}
 
                 <p className="text-xs text-muted-foreground">
                   Clique em qualquer lugar do card do plano para ver a lista completa do que está incluso.

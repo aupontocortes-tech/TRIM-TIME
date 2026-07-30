@@ -165,6 +165,9 @@ export interface Subscription {
   trial_end: string | null
   next_payment: string | null
   card_setup_at?: string | null
+  credit_card_last4?: string | null
+  credit_card_brand?: string | null
+  billing_type?: string | null
   post_trial_choice?: PostTrialChoice | null
   grace_access_until?: string | null
   created_at: string

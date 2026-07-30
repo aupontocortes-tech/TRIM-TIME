@@ -14,6 +14,9 @@ import { SignupBillingFlow } from "@/components/billing/signup-billing-flow"
 import { TrialCardForm } from "@/components/billing/trial-card-form"
 import { PlanPicker } from "@/components/billing/plan-picker"
 import { PixPaymentPanel } from "@/components/billing/pix-payment-panel"
+import { BillingAccountSummaryCard } from "@/components/billing/billing-account-summary"
+import { BILLING_CLIENT_MESSAGES } from "@/lib/billing-account-summary"
+import type { BillingAccountSummary } from "@/lib/billing-account-summary"
 import { TRIAL_DAYS } from "@/lib/plans"
 import { formatPlanPrice, formatPlanPricePerMonth } from "@/lib/format-plan-price"
 
@@ -58,9 +61,9 @@ function AssinaturaContent() {
   const [needsDecision, setNeedsDecision] = useState(false)
   const [cardComplete, setCardComplete] = useState(false)
   const [billingEnabled, setBillingEnabled] = useState(false)
-  const [billingEnvironment, setBillingEnvironment] = useState<"sandbox" | "production" | "">("")
   const [pixEnabled, setPixEnabled] = useState(false)
   const [billingExempt, setBillingExempt] = useState(false)
+  const [paymentAccount, setPaymentAccount] = useState<BillingAccountSummary | null>(null)
   const [trialActive, setTrialActive] = useState(false)
   const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan>(
     validPlanFromUrl ?? "pro"
@@ -97,11 +100,9 @@ function AssinaturaContent() {
       setNeedsDecision(!!j.needs_trial_decision)
       setCardComplete(!!j.card_setup_complete)
       setBillingEnabled(!!j.billing?.enabled)
-      setBillingEnvironment(
-        j.billing?.environment === "production" ? "production" : "sandbox"
-      )
       setPixEnabled(!!j.billing?.pix_enabled)
       setBillingExempt(!!j.billing_exempt)
+      setPaymentAccount(j.payment_account ?? null)
       setTrialActive(!!j.trial_active)
       if (!validPlanFromUrl && j.subscription?.plan) {
         setSelectedPlan(j.subscription.plan)
@@ -162,7 +163,7 @@ function AssinaturaContent() {
         setErr(j.error || "Erro ao cancelar teste")
         return
       }
-      setMsg("Teste cancelado. Não haverá cobrança automática no seu cartão.")
+      setMsg(BILLING_CLIENT_MESSAGES.trialCanceled)
       void load()
     } catch {
       setErr("Erro de rede")
@@ -192,9 +193,9 @@ function AssinaturaContent() {
         return
       }
       if (action === "decline") {
-        setMsg("Você optou por não continuar. Nenhuma cobrança foi feita.")
+        setMsg(BILLING_CLIENT_MESSAGES.trialDeclined)
       } else {
-        setMsg("Cobrança agendada no cartão cadastrado. O plano ativa após a confirmação do pagamento.")
+        setMsg(BILLING_CLIENT_MESSAGES.checkoutProcessing)
       }
       void load()
     } catch {
@@ -239,14 +240,14 @@ function AssinaturaContent() {
           pixCopyPaste: j.pixCopyPaste ?? null,
           pixQrCode: j.pixQrCode ?? null,
         })
-        setMsg("Pague o PIX abaixo. O plano ativa após a confirmação. Todo mês você receberá um novo PIX para a mensalidade.")
+        setMsg("Pague o PIX abaixo. Após a confirmação, sua assinatura será ativada. Todo mês você receberá um novo código PIX para a mensalidade.")
         void load()
         return
       }
       if (billingType === "CREDIT_CARD") {
-        setMsg("Cobrança enviada ao cartão cadastrado. Aguarde a confirmação do pagamento.")
+        setMsg(BILLING_CLIENT_MESSAGES.checkoutConfirmed)
       } else {
-        setMsg("Assinatura criada. Aguarde a confirmação do pagamento.")
+        setMsg(BILLING_CLIENT_MESSAGES.checkoutProcessing)
       }
       void load()
     } catch {
@@ -271,7 +272,7 @@ function AssinaturaContent() {
         setErr(j.error || "Erro ao alterar plano")
         return
       }
-      setMsg("Plano atualizado. Cobrança processada no cartão cadastrado.")
+      setMsg(BILLING_CLIENT_MESSAGES.planUpdated)
       void load()
     } catch {
       setErr("Erro de rede")
@@ -291,7 +292,7 @@ function AssinaturaContent() {
         setErr(j.error || "Erro ao cancelar")
         return
       }
-      setMsg("Assinatura cancelada.")
+      setMsg(BILLING_CLIENT_MESSAGES.subscriptionCanceled)
       void load()
     } catch {
       setErr("Erro de rede")
@@ -341,37 +342,22 @@ function AssinaturaContent() {
           <p className="text-sm text-muted-foreground">
             {isOnboardingCheckout
               ? "Escolha seu plano e cadastre o cartão para liberar o painel."
-              : pixEnabled
-                ? "Plano mensal — cartão (débito automático) ou PIX."
-                : "Plano mensal — pagamento por cartão de crédito (débito automático)."}
+              : "Consulte plano, cartão cadastrado, valor mensal e data da próxima cobrança."}
           </p>
-          {billingEnabled && !billingExempt ? (
-            <p
-              className={`text-xs font-medium mt-1 ${
-                billingEnvironment === "production"
-                  ? "text-emerald-600 dark:text-emerald-400"
-                  : "text-amber-600 dark:text-amber-400"
-              }`}
-            >
-              {billingEnvironment === "production"
-                ? "Cobrança real (Asaas produção) — o cartão será debitado de verdade."
-                : "Modo teste (Asaas sandbox) — aprova no app, mas não debita no banco."}
-            </p>
-          ) : null}
         </div>
       </div>
 
       {billingExempt ? (
         <div className="text-sm rounded-lg border border-border bg-muted/40 px-4 py-3">
-          Conta da <strong>equipe da plataforma</strong> ou <strong>de testes</strong>: uso sem cobrança pela plataforma e sem obrigação de cartão. Barbearias
-          normais seguem o período de teste no plano Pro ({trialLengthDays} dias com cartão cadastrado) e pagamento pelo Asaas.
+          Sua conta possui <strong>acesso completo sem cobrança</strong> pela plataforma Trim Time. Não é necessário
+          cadastrar cartão nem realizar pagamentos mensais.
         </div>
       ) : null}
 
       {paid ? (
         <div className="flex items-center gap-2 text-sm text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 rounded-lg p-3">
           <CheckCircle2 className="w-5 h-5 shrink-0" />
-          Pagamento recebido ou em processamento. O acesso será liberado em instantes.
+          {BILLING_CLIENT_MESSAGES.paymentConfirmed}
         </div>
       ) : null}
 
@@ -380,10 +366,10 @@ function AssinaturaContent() {
           <div className="flex items-center gap-2 text-sm text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 border rounded-lg p-3">
             <CheckCircle2 className="w-5 h-5 shrink-0" />
             {status === "canceled"
-              ? "Cartão cadastrado. Escolha um plano abaixo para contratar de novo."
+              ? "Cartão cadastrado. Escolha um plano abaixo para contratar novamente."
               : subscription?.status === "past_due"
-                ? "Cartão cadastrado. Aguardando confirmação do pagamento para liberar o plano contratado."
-                : `Cartão cadastrado. Teste grátis no plano Pro por ${trialLengthDays} dias — cobrança automática após o teste, salvo se você cancelar antes.`}
+                ? "Cartão cadastrado. Estamos aguardando a confirmação do pagamento para manter seu plano ativo."
+                : BILLING_CLIENT_MESSAGES.cardRegistered}
           </div>
           {(setupCard || isOnboardingCheckout) && (
             <Button asChild className="w-full">
@@ -527,6 +513,10 @@ function AssinaturaContent() {
         </div>
       ) : null}
 
+      {paymentAccount && !billingExempt && !isOnboardingCheckout ? (
+        <BillingAccountSummaryCard summary={paymentAccount} showManageLink={false} />
+      ) : null}
+
       {pixPending ? (
         <PixPaymentPanel
           amount={pixPending.amount}
@@ -536,6 +526,7 @@ function AssinaturaContent() {
         />
       ) : null}
 
+      {!paymentAccount || billingExempt || isOnboardingCheckout ? (
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Resumo</CardTitle>
@@ -577,11 +568,12 @@ function AssinaturaContent() {
           </dl>
           {subscription?.billing_type === "PIX" && status === "active" ? (
             <p className="text-xs text-muted-foreground rounded-md border border-dashed p-3">
-              Mensalidade via PIX: todo mês o Asaas envia um novo código para pagamento (pode avisar por e-mail).
+              Mensalidade via PIX: todo mês você receberá um novo código para pagamento.
             </p>
           ) : null}
         </CardContent>
       </Card>
+      ) : null}
 
       {cardComplete && !billingExempt && billingEnabled && catalog ? (
         <Card className="border-muted">
@@ -600,7 +592,7 @@ function AssinaturaContent() {
                   mode="change"
                   catalog={catalog}
                   onSuccess={() => {
-                    setMsg("Cartão atualizado com sucesso.")
+                    setMsg(BILLING_CLIENT_MESSAGES.cardUpdated)
                     handleCardFormSuccess()
                   }}
                   onError={setErr}
