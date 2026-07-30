@@ -14,7 +14,10 @@ import {
 } from "@/lib/help-tutorial-video-constants"
 import {
   HELP_TUTORIAL_TOPIC_SUGGESTIONS,
+  extractYoutubeVideoId,
   newHelpId,
+  resolveYoutubeId,
+  youtubeEmbedUrl,
   type HelpTutorialTopic,
   type HelpTutorialsConfig,
 } from "@/lib/help-tutorials"
@@ -124,7 +127,8 @@ export default function PlataformaTutoriaisPage() {
                 {
                   id: newHelpId("vid"),
                   title: "Novo vídeo",
-                  video_url: "",
+                  youtube_url: "",
+                  youtube_id: "",
                   sort_order: t.videos.length,
                   active: true,
                 },
@@ -145,7 +149,19 @@ export default function PlataformaTutoriaisPage() {
         t.id === topicId
           ? {
               ...t,
-              videos: t.videos.map((v) => (v.id === videoId ? { ...v, ...patch } : v)),
+              videos: t.videos.map((v) => {
+                if (v.id !== videoId) return v
+                const merged = { ...v, ...patch }
+                if ("youtube_url" in patch) {
+                  const id = extractYoutubeVideoId(merged.youtube_url ?? "")
+                  merged.youtube_id = id ?? ""
+                  if (id) {
+                    merged.video_url = undefined
+                    merged.file_name = undefined
+                  }
+                }
+                return merged
+              }),
             }
           : t
       ),
@@ -252,12 +268,23 @@ export default function PlataformaTutoriaisPage() {
           upsert: false,
         })
       if (upErr) {
+        const em = upErr.message.toLowerCase()
+        if (em.includes("maximum allowed size") || em.includes("entity too large")) {
+          throw new Error(
+            `Vídeo muito grande. Máximo ${HELP_TUTORIAL_VIDEO_MAX_MB} MB por arquivo. Comprima o .mp4 ou use o corte no editor antes de enviar.`
+          )
+        }
         throw new Error(
           `${upErr.message}\n\nConfirme o bucket "${HELP_TUTORIAL_VIDEO_BUCKET}" no Supabase.`
         )
       }
 
-      updateVideo(topicId, videoId, { video_url: fileUrl, file_name: savedName })
+      updateVideo(topicId, videoId, {
+        video_url: fileUrl,
+        file_name: savedName,
+        youtube_url: undefined,
+        youtube_id: undefined,
+      })
       setMsg(`Vídeo "${savedName}" enviado. Clique em Salvar tutoriais para publicar no painel.`)
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Erro ao enviar vídeo")
@@ -287,10 +314,9 @@ export default function PlataformaTutoriaisPage() {
           </h1>
         </div>
         <p className="text-zinc-400 text-sm max-w-2xl">
-          Envie os vídeos que aparecem no painel da barbearia em{" "}
-          <strong className="text-zinc-200">Como usar</strong>. São os mesmos para todas as
-          barbearias. Use gravações de tela em .mp4 (até {HELP_TUTORIAL_VIDEO_MAX_MB} MB por vídeo). Ao
-          enviar, você pode cortar, espelhar ou girar antes de publicar.
+          Configure os vídeos do painel <strong className="text-zinc-200">Como usar</strong> (mesmos para
+          todas as barbearias). Cole o link do <strong className="text-zinc-200">YouTube</strong>{" "}
+          (pode ser não listado) ou envie um .mp4.
         </p>
       </div>
 
@@ -401,9 +427,11 @@ export default function PlataformaTutoriaisPage() {
                   onRemove={() => removeVideo(topic.id, video.id)}
                   onMove={(dir) => moveVideo(topic.id, videoIndex, dir)}
                   onPickFile={(file) => openEditor(topic.id, video.id, file)}
-                  onEditExisting={() =>
-                    void openEditorFromUrl(topic.id, video.id, video.video_url, video.file_name)
-                  }
+                  onEditExisting={() => {
+                    if (video.video_url) {
+                      void openEditorFromUrl(topic.id, video.id, video.video_url, video.file_name)
+                    }
+                  }}
                   loadingEdit={loadingEdit && editTarget?.videoId === video.id}
                 />
               ))}
@@ -529,7 +557,32 @@ function VideoEditor({
         className="bg-zinc-950 border-zinc-700 min-h-[60px]"
         placeholder="Descrição curta (opcional)"
       />
-      <div className="flex flex-wrap items-center gap-2">
+      <Input
+        value={video.youtube_url ?? ""}
+        onChange={(e) => onUpdate({ youtube_url: e.target.value })}
+        className="bg-zinc-950 border-zinc-700 font-mono text-sm"
+        placeholder="https://www.youtube.com/watch?v=..."
+      />
+      {resolveYoutubeId(video) ? (
+        <div className="space-y-2">
+          <p className="text-xs text-emerald-500/80">YouTube OK — pronto para salvar</p>
+          <div className="relative w-full aspect-video max-h-48 rounded-md overflow-hidden bg-black">
+            <iframe
+              title={video.title}
+              src={`${youtubeEmbedUrl(resolveYoutubeId(video)!)}?rel=0`}
+              className="absolute inset-0 w-full h-full border-0"
+              allowFullScreen
+            />
+          </div>
+        </div>
+      ) : (
+        <p className="text-xs text-amber-500/80">Cole um link válido do YouTube</p>
+      )}
+      <details className="rounded-lg border border-zinc-800 bg-zinc-950/50 px-3 py-2">
+        <summary className="text-xs text-zinc-400 cursor-pointer select-none">
+          Ou enviar arquivo .mp4 (até {HELP_TUTORIAL_VIDEO_MAX_MB} MB)
+        </summary>
+        <div className="flex flex-wrap items-center gap-2 pt-3">
         <input
           ref={fileRef}
           type="file"
@@ -576,20 +629,19 @@ function VideoEditor({
         {video.file_name ? (
           <span className="text-xs text-zinc-400 truncate max-w-[240px]">{video.file_name}</span>
         ) : null}
-      </div>
-      {video.video_url ? (
-        <div className="space-y-2">
-          <p className="text-xs text-emerald-500/80">Vídeo enviado — pronto para salvar</p>
-          <video
-            src={video.video_url}
-            controls
-            className="w-full max-h-48 rounded-md bg-black"
-            preload="metadata"
-          />
         </div>
-      ) : (
-        <p className="text-xs text-amber-500/80">Envie um arquivo .mp4 antes de salvar</p>
-      )}
+        {video.video_url && !resolveYoutubeId(video) ? (
+          <div className="pt-2 space-y-2">
+            <p className="text-xs text-emerald-500/80">Arquivo enviado — pronto para salvar</p>
+            <video
+              src={video.video_url}
+              controls
+              className="w-full max-h-48 rounded-md bg-black"
+              preload="metadata"
+            />
+          </div>
+        ) : null}
+      </details>
       <label className="flex items-center gap-2 text-sm text-zinc-400">
         <Switch checked={video.active} onCheckedChange={(v) => onUpdate({ active: v })} />
         Publicado

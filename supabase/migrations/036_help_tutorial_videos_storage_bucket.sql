@@ -2,10 +2,10 @@
 -- Rode no Supabase → SQL Editor (ou via CLI). Idempotente.
 
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-VALUES ('help-tutorial-videos', 'help-tutorial-videos', true, 83886080, NULL)
+VALUES ('help-tutorial-videos', 'help-tutorial-videos', true, 157286400, NULL)
 ON CONFLICT (id) DO UPDATE SET
   public = true,
-  file_size_limit = 83886080,
+  file_size_limit = 157286400,
   allowed_mime_types = NULL;
 
 DROP POLICY IF EXISTS "help_tutorial_videos_public_select" ON storage.objects;

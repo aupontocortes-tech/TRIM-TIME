@@ -2,7 +2,11 @@ export type HelpTutorialVideo = {
   id: string
   title: string
   description?: string
-  video_url: string
+  /** Link do YouTube (watch, youtu.be ou embed). */
+  youtube_url?: string
+  youtube_id?: string
+  /** Upload direto no Supabase (alternativa ao YouTube). */
+  video_url?: string
   file_name?: string
   sort_order: number
   active: boolean
@@ -22,7 +26,6 @@ export type HelpTutorialsConfig = {
 
 export const EMPTY_HELP_TUTORIALS: HelpTutorialsConfig = { topics: [] }
 
-/** Sugestões exibidas no Super ADM ao criar tópico. */
 export const HELP_TUTORIAL_TOPIC_SUGGESTIONS = [
   "Primeiros passos no Trim Time",
   "Como agendar atendimentos",
@@ -37,7 +40,45 @@ export function newHelpId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
 }
 
-function isValidVideoUrl(url: string): boolean {
+/** Extrai ID de vídeo do YouTube (watch, youtu.be, embed ou ID puro). */
+export function extractYoutubeVideoId(input: string): string | null {
+  const raw = input.trim()
+  if (!raw) return null
+  if (/^[\w-]{11}$/.test(raw)) return raw
+  const patterns = [
+    /(?:youtube\.com\/watch\?(?:.*&)?v=|youtube\.com\/watch\?v=)([\w-]{11})/,
+    /youtu\.be\/([\w-]{11})/,
+    /youtube\.com\/embed\/([\w-]{11})/,
+    /youtube\.com\/shorts\/([\w-]{11})/,
+  ]
+  for (const re of patterns) {
+    const m = raw.match(re)
+    if (m?.[1]) return m[1]
+  }
+  return null
+}
+
+export function youtubeWatchUrl(videoId: string): string {
+  return `https://www.youtube.com/watch?v=${videoId}`
+}
+
+export function youtubeEmbedUrl(videoId: string): string {
+  return `https://www.youtube.com/embed/${videoId}`
+}
+
+export function helpTutorialUsesYoutube(v: HelpTutorialVideo): boolean {
+  return !!resolveYoutubeId(v)
+}
+
+export function resolveYoutubeId(v: HelpTutorialVideo): string | null {
+  return (
+    extractYoutubeVideoId(v.youtube_url ?? "") ||
+    extractYoutubeVideoId(v.youtube_id ?? "") ||
+    null
+  )
+}
+
+function isValidUploadUrl(url: string): boolean {
   try {
     const u = new URL(url)
     return u.protocol === "http:" || u.protocol === "https:"
@@ -46,12 +87,25 @@ function isValidVideoUrl(url: string): boolean {
   }
 }
 
+export function helpTutorialVideoReady(v: HelpTutorialVideo): boolean {
+  if (resolveYoutubeId(v)) return true
+  const url = v.video_url?.trim() ?? ""
+  return !!url && isValidUploadUrl(url)
+}
+
 function normalizeVideo(raw: unknown, index: number): HelpTutorialVideo | null {
   if (!raw || typeof raw !== "object") return null
   const o = raw as Record<string, unknown>
   const title = typeof o.title === "string" ? o.title.trim() : ""
+  if (!title) return null
+
+  const youtubeUrl = typeof o.youtube_url === "string" ? o.youtube_url.trim() : ""
+  const youtubeIdRaw = typeof o.youtube_id === "string" ? o.youtube_id.trim() : ""
+  const youtubeId = extractYoutubeVideoId(youtubeUrl) || extractYoutubeVideoId(youtubeIdRaw) || ""
   const videoUrl = typeof o.video_url === "string" ? o.video_url.trim() : ""
-  if (!title || !videoUrl || !isValidVideoUrl(videoUrl)) return null
+
+  if (!youtubeId && (!videoUrl || !isValidUploadUrl(videoUrl))) return null
+
   const id = typeof o.id === "string" && o.id.trim() ? o.id.trim() : newHelpId("vid")
   const fileName = typeof o.file_name === "string" ? o.file_name.trim() : undefined
   const description = typeof o.description === "string" ? o.description.trim() : undefined
@@ -60,11 +114,14 @@ function normalizeVideo(raw: unknown, index: number): HelpTutorialVideo | null {
       ? Math.round(o.sort_order)
       : index
   const active = o.active !== false
+
   return {
     id,
     title,
     description: description || undefined,
-    video_url: videoUrl,
+    youtube_url: youtubeId ? youtubeUrl || youtubeWatchUrl(youtubeId) : undefined,
+    youtube_id: youtubeId || undefined,
+    video_url: !youtubeId && videoUrl ? videoUrl : undefined,
     file_name: fileName || undefined,
     sort_order: sortOrder,
     active,
@@ -90,7 +147,6 @@ function normalizeTopic(raw: unknown, index: number): HelpTutorialTopic | null {
   return { id, title, sort_order: sortOrder, active, videos }
 }
 
-/** Normaliza JSON do banco para exibição no painel (só ativos). */
 export function parseHelpTutorials(raw: unknown, opts?: { includeInactive?: boolean }): HelpTutorialsConfig {
   const includeInactive = opts?.includeInactive === true
   const root = raw && typeof raw === "object" ? (raw as { topics?: unknown }) : null
@@ -123,8 +179,18 @@ export function validateHelpTutorialsInput(raw: unknown): { ok: true; data: Help
       return { ok: false, error: `Tópico ${i + 1}: título obrigatório.` }
     }
     for (const v of topic.videos) {
-      if (!isValidVideoUrl(v.video_url)) {
-        return { ok: false, error: `Vídeo "${v.title}": envie o arquivo de vídeo antes de salvar.` }
+      if (!helpTutorialVideoReady(v)) {
+        return {
+          ok: false,
+          error: `Vídeo "${v.title}": cole um link do YouTube ou envie um arquivo .mp4.`,
+        }
+      }
+      if (!resolveYoutubeId(v) && !isValidUploadUrl(v.video_url ?? "")) {
+        return { ok: false, error: `Vídeo "${v.title}": link do YouTube inválido.` }
+      }
+      if (resolveYoutubeId(v)) continue
+      if (!v.video_url?.trim()) {
+        return { ok: false, error: `Vídeo "${v.title}": envie o arquivo ou use YouTube.` }
       }
     }
     topics.push(topic)

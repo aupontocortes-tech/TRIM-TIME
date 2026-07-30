@@ -6,11 +6,15 @@ export function getSupabaseServiceConfig():
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() ?? ""
 
   if (!url || !key) {
+    const missing: string[] = []
+    if (!url) missing.push("NEXT_PUBLIC_SUPABASE_URL")
+    if (!key) missing.push("SUPABASE_SERVICE_ROLE_KEY")
     return {
       ok: false,
-      error: "Supabase Storage não configurado no servidor.",
-      hint:
-        "Defina NEXT_PUBLIC_SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY no .env.local (local) ou na Vercel → Settings → Environment Variables → Production.",
+      error: `Supabase Storage: falta ${missing.join(" e ")} no ambiente atual.`,
+      hint: key
+        ? "Confira NEXT_PUBLIC_SUPABASE_URL na Vercel (Production). Depois de alterar variáveis, faça Redeploy."
+        : "Na Vercel, SUPABASE_SERVICE_ROLE_KEY precisa estar marcada em Production (não só Pre-Production). Cole a service_role do Supabase → API Keys → Legacy → Reveal. Depois: Deployments → Redeploy (obrigatório).",
     }
   }
 

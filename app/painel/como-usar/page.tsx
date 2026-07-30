@@ -4,8 +4,14 @@ import { useCallback, useEffect, useState } from "react"
 import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { type HelpTutorialTopic, type HelpTutorialVideo } from "@/lib/help-tutorials"
-import { CirclePlay, Loader2, Play } from "lucide-react"
+import {
+  helpTutorialUsesYoutube,
+  resolveYoutubeId,
+  youtubeEmbedUrl,
+  type HelpTutorialTopic,
+  type HelpTutorialVideo,
+} from "@/lib/help-tutorials"
+import { CirclePlay, ExternalLink, Loader2, Play } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 export default function ComoUsarPage() {
@@ -46,6 +52,8 @@ export default function ComoUsarPage() {
       </div>
     )
   }
+
+  const activeYoutubeId = activeVideo ? resolveYoutubeId(activeVideo) : null
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -88,18 +96,37 @@ export default function ComoUsarPage() {
               </CardHeader>
               <CardContent className="space-y-3 pb-4">
                 <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-black">
-                  <video
-                    key={activeVideo.id}
-                    src={activeVideo.video_url}
-                    controls
-                    controlsList="nodownload"
-                    className="absolute inset-0 w-full h-full"
-                    preload="metadata"
-                    playsInline
-                  >
-                    Seu navegador não suporta reprodução de vídeo.
-                  </video>
+                  {activeYoutubeId ? (
+                    <iframe
+                      key={activeVideo.id}
+                      title={activeVideo.title}
+                      src={`${youtubeEmbedUrl(activeYoutubeId)}?rel=0`}
+                      className="absolute inset-0 w-full h-full border-0"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                    />
+                  ) : activeVideo.video_url ? (
+                    <video
+                      key={activeVideo.id}
+                      src={activeVideo.video_url}
+                      controls
+                      controlsList="nodownload"
+                      className="absolute inset-0 w-full h-full"
+                      preload="metadata"
+                      playsInline
+                    >
+                      Seu navegador não suporta reprodução de vídeo.
+                    </video>
+                  ) : null}
                 </div>
+                {activeYoutubeId && activeVideo.youtube_url ? (
+                  <Button variant="outline" size="sm" asChild>
+                    <a href={activeVideo.youtube_url} target="_blank" rel="noopener noreferrer">
+                      <ExternalLink className="w-4 h-4 mr-2" />
+                      Abrir no YouTube
+                    </a>
+                  </Button>
+                ) : null}
               </CardContent>
             </Card>
           ) : null}
@@ -139,6 +166,9 @@ export default function ComoUsarPage() {
                             <span className="text-xs text-muted-foreground line-clamp-2 mt-0.5 block">
                               {video.description}
                             </span>
+                          ) : null}
+                          {helpTutorialUsesYoutube(video) ? (
+                            <span className="text-xs text-muted-foreground/80 mt-0.5 block">YouTube</span>
                           ) : null}
                         </span>
                       </button>
