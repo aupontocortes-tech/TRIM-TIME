@@ -11,8 +11,24 @@ import {
   type HelpTutorialTopic,
   type HelpTutorialVideo,
 } from "@/lib/help-tutorials"
-import { CirclePlay, ExternalLink, Loader2, Play } from "lucide-react"
+import { BookOpen, CirclePlay, ExternalLink, Loader2, Play } from "lucide-react"
 import { cn } from "@/lib/utils"
+
+function totalVideos(topics: HelpTutorialTopic[]): number {
+  return topics.reduce((n, t) => n + t.videos.length, 0)
+}
+
+function findVideoPosition(
+  topics: HelpTutorialTopic[],
+  videoId: string | undefined
+): { topicIndex: number; videoIndex: number } | null {
+  if (!videoId) return null
+  for (let ti = 0; ti < topics.length; ti++) {
+    const vi = topics[ti].videos.findIndex((v) => v.id === videoId)
+    if (vi >= 0) return { topicIndex: ti, videoIndex: vi }
+  }
+  return null
+}
 
 export default function ComoUsarPage() {
   const [topics, setTopics] = useState<HelpTutorialTopic[]>([])
@@ -54,17 +70,18 @@ export default function ComoUsarPage() {
   }
 
   const activeYoutubeId = activeVideo ? resolveYoutubeId(activeVideo) : null
+  const activePos = findVideoPosition(topics, activeVideo?.id)
+  const lessonCount = totalVideos(topics)
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="max-w-6xl mx-auto space-y-6">
       <div>
         <div className="flex items-center gap-3 mb-1">
           <CirclePlay className="w-8 h-8 text-primary" />
           <h1 className="text-2xl font-bold text-foreground">Como usar</h1>
         </div>
         <p className="text-sm text-muted-foreground">
-          Aprenda a usar o Trim Time com vídeos passo a passo — agenda, serviços, equipe, WhatsApp e
-          mais.
+          Mini curso em vídeo — escolha o tópico que quiser assistir primeiro e avance no seu ritmo.
         </p>
       </div>
 
@@ -85,10 +102,18 @@ export default function ComoUsarPage() {
           </CardContent>
         </Card>
       ) : (
-        <>
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)] lg:items-start">
           {activeVideo ? (
-            <Card className="overflow-hidden border-primary/20">
+            <Card className="overflow-hidden border-primary/20 lg:sticky lg:top-4">
               <CardHeader className="pb-2">
+                {activePos ? (
+                  <p className="text-xs font-medium uppercase tracking-wide text-primary mb-1">
+                    Tópico {activePos.topicIndex + 1}
+                    {topics[activePos.topicIndex]?.videos.length > 1
+                      ? ` · Aula ${activePos.videoIndex + 1}`
+                      : null}
+                  </p>
+                ) : null}
                 <CardTitle className="text-lg">{activeVideo.title}</CardTitle>
                 {activeVideo.description ? (
                   <CardDescription>{activeVideo.description}</CardDescription>
@@ -129,56 +154,149 @@ export default function ComoUsarPage() {
                 ) : null}
               </CardContent>
             </Card>
-          ) : null}
+          ) : (
+            <Card className="border-dashed">
+              <CardContent className="py-16 text-center text-sm text-muted-foreground">
+                Selecione um tópico ao lado para começar.
+              </CardContent>
+            </Card>
+          )}
 
-          <div className="space-y-4">
-            {topics.map((topic) => (
-              <Card key={topic.id}>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base">{topic.title}</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  {topic.videos.map((video) => {
-                    const selected = activeVideo?.id === video.id
-                    return (
-                      <button
-                        key={video.id}
-                        type="button"
-                        onClick={() => setActiveVideo(video)}
-                        className={cn(
-                          "w-full text-left rounded-lg border px-3 py-3 flex items-start gap-3 transition-colors",
-                          selected
-                            ? "border-primary bg-primary/5"
-                            : "border-border hover:bg-secondary/40"
-                        )}
-                      >
-                        <span
+          <Card className="overflow-hidden lg:max-h-[calc(100vh-6rem)] lg:flex lg:flex-col">
+            <CardHeader className="pb-3 shrink-0 border-b bg-muted/30">
+              <div className="flex items-center gap-2">
+                <BookOpen className="w-5 h-5 text-primary" />
+                <div>
+                  <CardTitle className="text-base">Conteúdo do curso</CardTitle>
+                  <CardDescription>
+                    {topics.length} {topics.length === 1 ? "tópico" : "tópicos"} · {lessonCount}{" "}
+                    {lessonCount === 1 ? "aula" : "aulas"}
+                  </CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0 lg:overflow-y-auto">
+              <div className="divide-y">
+                {topics.map((topic, topicIndex) => {
+                  const topicHasActive = topic.videos.some((v) => v.id === activeVideo?.id)
+                  const singleVideo = topic.videos.length === 1 ? topic.videos[0] : null
+
+                  return (
+                    <div key={topic.id} className={cn(topicHasActive && "bg-primary/5")}>
+                      {singleVideo ? (
+                        <button
+                          type="button"
+                          onClick={() => setActiveVideo(singleVideo)}
                           className={cn(
-                            "flex h-9 w-9 shrink-0 items-center justify-center rounded-full",
-                            selected ? "bg-primary text-primary-foreground" : "bg-secondary"
+                            "w-full text-left px-4 py-3 flex items-start gap-3 transition-colors hover:bg-secondary/40",
+                            activeVideo?.id === singleVideo.id && "bg-primary/10"
                           )}
                         >
-                          <Play className="w-4 h-4" />
-                        </span>
-                        <span className="min-w-0">
-                          <span className="font-medium text-sm text-foreground block">{video.title}</span>
-                          {video.description ? (
-                            <span className="text-xs text-muted-foreground line-clamp-2 mt-0.5 block">
-                              {video.description}
+                          <span
+                            className={cn(
+                              "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold",
+                              activeVideo?.id === singleVideo.id
+                                ? "bg-primary text-primary-foreground"
+                                : "bg-secondary text-foreground"
+                            )}
+                          >
+                            {topicIndex + 1}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground block">
+                              Tópico {topicIndex + 1}
                             </span>
-                          ) : null}
-                          {helpTutorialUsesYoutube(video) ? (
-                            <span className="text-xs text-muted-foreground/80 mt-0.5 block">YouTube</span>
-                          ) : null}
-                        </span>
-                      </button>
-                    )
-                  })}
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </>
+                            <span className="font-medium text-sm text-foreground block mt-0.5">
+                              {topic.title}
+                            </span>
+                            {singleVideo.description ? (
+                              <span className="text-xs text-muted-foreground line-clamp-2 mt-1 block">
+                                {singleVideo.description}
+                              </span>
+                            ) : null}
+                          </span>
+                          <Play
+                            className={cn(
+                              "w-4 h-4 shrink-0 mt-1",
+                              activeVideo?.id === singleVideo.id
+                                ? "text-primary"
+                                : "text-muted-foreground"
+                            )}
+                          />
+                        </button>
+                      ) : (
+                        <>
+                          <div className="px-4 py-3 flex items-start gap-3">
+                            <span
+                              className={cn(
+                                "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold",
+                                topicHasActive
+                                  ? "bg-primary text-primary-foreground"
+                                  : "bg-secondary text-foreground"
+                              )}
+                            >
+                              {topicIndex + 1}
+                            </span>
+                            <span className="min-w-0">
+                              <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground block">
+                                Tópico {topicIndex + 1}
+                              </span>
+                              <span className="font-medium text-sm text-foreground block mt-0.5">
+                                {topic.title}
+                              </span>
+                              <span className="text-xs text-muted-foreground mt-0.5 block">
+                                {topic.videos.length}{" "}
+                                {topic.videos.length === 1 ? "aula" : "aulas"}
+                              </span>
+                            </span>
+                          </div>
+                          <div className="pb-2 space-y-0.5">
+                            {topic.videos.map((video, videoIndex) => {
+                              const selected = activeVideo?.id === video.id
+                              return (
+                                <button
+                                  key={video.id}
+                                  type="button"
+                                  onClick={() => setActiveVideo(video)}
+                                  className={cn(
+                                    "w-full text-left pl-14 pr-4 py-2.5 flex items-start gap-2 transition-colors hover:bg-secondary/40",
+                                    selected && "bg-primary/10"
+                                  )}
+                                >
+                                  <span
+                                    className={cn(
+                                      "flex h-6 w-6 shrink-0 items-center justify-center rounded-full mt-0.5",
+                                      selected ? "bg-primary/20 text-primary" : "bg-muted"
+                                    )}
+                                  >
+                                    <Play className="w-3 h-3" />
+                                  </span>
+                                  <span className="min-w-0 flex-1">
+                                    <span className="text-xs text-muted-foreground block">
+                                      Aula {videoIndex + 1}
+                                    </span>
+                                    <span className="font-medium text-sm text-foreground block">
+                                      {video.title}
+                                    </span>
+                                    {helpTutorialUsesYoutube(video) ? (
+                                      <span className="text-[11px] text-muted-foreground/80 mt-0.5 block">
+                                        YouTube
+                                      </span>
+                                    ) : null}
+                                  </span>
+                                </button>
+                              )
+                            })}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       )}
     </div>
   )
