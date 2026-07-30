@@ -669,6 +669,8 @@ model PlatformSettings {
   defaultTrialPlan      SubscriptionPlan @default(pro) @map("default_trial_plan")
   /// Quando true + ASAAS_API_KEY, cobrança via Asaas.
   paymentApiEnabled     Boolean          @default(false) @map("payment_api_enabled")
+  /// Tutoriais em vídeo (tópicos + URLs no Storage) — Super ADM edita, painel exibe.
+  helpTutorials         Json?            @map("help_tutorials")
   updatedAt             DateTime         @updatedAt @map("updated_at") @db.Timestamptz
 
   @@map("platform_settings")

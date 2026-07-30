@@ -23,6 +23,7 @@ import {
   MessageCircle,
   Building2,
   Trash2,
+  CirclePlay,
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -53,6 +54,7 @@ const menuItems: { href: string; label: string; icon: typeof LayoutDashboard; ro
   },
   { href: "/painel/assinatura", label: "Assinatura", icon: CreditCard, roles: ["super_admin", "admin_barbershop"] },
   { href: "/painel/configuracoes", label: "Configurações", icon: Settings, roles: ["super_admin", "admin_barbershop"] },
+  { href: "/painel/como-usar", label: "Como usar", icon: CirclePlay },
   { href: "/painel/suporte", label: "Suporte", icon: MessageCircle },
 ]
 
