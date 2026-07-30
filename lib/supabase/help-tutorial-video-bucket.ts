@@ -3,6 +3,7 @@ import {
   HELP_TUTORIAL_VIDEO_MAX_BYTES,
 } from "@/lib/help-tutorial-video-constants"
 import { createServiceRoleClient } from "@/lib/supabase/server"
+import { getSupabaseServiceConfig } from "@/lib/supabase/service-config"
 
 export { HELP_TUTORIAL_VIDEO_BUCKET, HELP_TUTORIAL_VIDEO_MAX_BYTES }
 
@@ -11,6 +12,11 @@ type EnsureResult =
   | { ok: false; error: string; hint?: string }
 
 export async function ensureHelpTutorialVideoBucket(): Promise<EnsureResult> {
+  const cfg = getSupabaseServiceConfig()
+  if (!cfg.ok) {
+    return { ok: false, error: cfg.error, hint: cfg.hint }
+  }
+
   let supabase: ReturnType<typeof createServiceRoleClient>
   try {
     supabase = createServiceRoleClient()
@@ -18,7 +24,6 @@ export async function ensureHelpTutorialVideoBucket(): Promise<EnsureResult> {
     return {
       ok: false,
       error: e instanceof Error ? e.message : "Supabase não configurado",
-      hint: "Defina NEXT_PUBLIC_SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY na Vercel (Production).",
     }
   }
 

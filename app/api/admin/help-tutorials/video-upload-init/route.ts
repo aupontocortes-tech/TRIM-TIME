@@ -59,7 +59,7 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           error: error?.message ?? "Não foi possível preparar o upload",
-          hint: 'Confirme o bucket "help-tutorial-videos" e a chave service_role no Supabase.',
+          hint: `Confirme o bucket "${HELP_TUTORIAL_VIDEO_BUCKET}" e SUPABASE_SERVICE_ROLE_KEY no Supabase/Vercel.`,
         },
         { status: 500 }
       )

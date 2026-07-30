@@ -6,38 +6,31 @@ import Link from "next/link"
 import { Shield, LogOut, LayoutDashboard } from "lucide-react"
 
 type NavTheme = {
-  text: string
-  textMuted: string
   bg: string
-  bgHover: string
+  bgMuted: string
   border: string
-  borderHover: string
+  borderMuted: string
 }
 
+/** Fundos sólidos + texto branco (sem transparência). */
 const NAV_THEMES: NavTheme[] = [
-  { text: "#C9A962", textMuted: "#8A7344", bg: "rgba(201,169,98,0.14)", bgHover: "rgba(201,169,98,0.06)", border: "rgba(201,169,98,0.32)", borderHover: "rgba(201,169,98,0.18)" },
-  { text: "#6BBFB0", textMuted: "#4A857A", bg: "rgba(107,191,176,0.14)", bgHover: "rgba(107,191,176,0.06)", border: "rgba(107,191,176,0.32)", borderHover: "rgba(107,191,176,0.18)" },
-  { text: "#A88BD4", textMuted: "#735896", bg: "rgba(168,139,212,0.14)", bgHover: "rgba(168,139,212,0.06)", border: "rgba(168,139,212,0.32)", borderHover: "rgba(168,139,212,0.18)" },
-  { text: "#6A9FC4", textMuted: "#4A7088", bg: "rgba(106,159,196,0.14)", bgHover: "rgba(106,159,196,0.06)", border: "rgba(106,159,196,0.32)", borderHover: "rgba(106,159,196,0.18)" },
-  { text: "#6BAF88", textMuted: "#4A7858", bg: "rgba(107,175,136,0.14)", bgHover: "rgba(107,175,136,0.06)", border: "rgba(107,175,136,0.32)", borderHover: "rgba(107,175,136,0.18)" },
-  { text: "#C48878", textMuted: "#885F54", bg: "rgba(196,136,120,0.14)", bgHover: "rgba(196,136,120,0.06)", border: "rgba(196,136,120,0.32)", borderHover: "rgba(196,136,120,0.18)" },
-  { text: "#8A9BB0", textMuted: "#5E6D7D", bg: "rgba(138,155,176,0.14)", bgHover: "rgba(138,155,176,0.06)", border: "rgba(138,155,176,0.32)", borderHover: "rgba(138,155,176,0.18)" },
-  { text: "#B8A078", textMuted: "#7D6E52", bg: "rgba(184,160,120,0.14)", bgHover: "rgba(184,160,120,0.06)", border: "rgba(184,160,120,0.32)", borderHover: "rgba(184,160,120,0.18)" },
+  { bg: "#B8860B", bgMuted: "#8B6914", border: "#D4A017", borderMuted: "#6B520F" },
+  { bg: "#1F8A7A", bgMuted: "#166658", border: "#2AA896", borderMuted: "#0F4D44" },
+  { bg: "#7B52B8", bgMuted: "#5A3D88", border: "#9466D4", borderMuted: "#452F66" },
+  { bg: "#2B6CB0", bgMuted: "#1E4F85", border: "#3B82C4", borderMuted: "#163A60" },
+  { bg: "#2F855A", bgMuted: "#226644", border: "#38A169", borderMuted: "#184A32" },
+  { bg: "#C05640", bgMuted: "#943F2E", border: "#E07055", borderMuted: "#6E3022" },
+  { bg: "#4A6FA5", bgMuted: "#355278", border: "#5C85B8", borderMuted: "#283D58" },
+  { bg: "#A16207", bgMuted: "#7A4D05", border: "#CA8A04", borderMuted: "#5C3A04" },
 ]
 
 function navButtonStyle(theme: NavTheme, active: boolean): CSSProperties {
-  return active
-    ? {
-        color: theme.text,
-        backgroundColor: theme.bg,
-        borderColor: theme.border,
-        textShadow: "0 1px 8px rgba(0,0,0,0.35)",
-      }
-    : {
-        color: theme.textMuted,
-        backgroundColor: theme.bgHover,
-        borderColor: theme.borderHover,
-    }
+  return {
+    color: "#FFFFFF",
+    backgroundColor: active ? theme.bg : theme.bgMuted,
+    borderColor: active ? theme.border : theme.borderMuted,
+    fontWeight: active ? 700 : 600,
+  }
 }
 
 export default function PlataformaConsoleLayout({
@@ -113,7 +106,7 @@ export default function PlataformaConsoleLayout({
   ]
 
   const navLabelClass =
-    "text-[13px] font-semibold tracking-[0.04em] whitespace-nowrap leading-none"
+    "text-[14px] font-bold tracking-wide whitespace-nowrap leading-tight antialiased"
 
   return (
     <div className="min-h-screen bg-black text-white">
@@ -157,7 +150,7 @@ export default function PlataformaConsoleLayout({
             </div>
           </div>
 
-          <nav className="hidden lg:flex flex-wrap items-center gap-2 pb-3.5 pt-0.5">
+          <nav className="hidden lg:grid lg:grid-cols-4 xl:grid-cols-8 gap-2.5 w-full pb-4 pt-1">
             {navItems.map((item, i) => {
               const theme = NAV_THEMES[i % NAV_THEMES.length]!
               const active = item.match
@@ -168,28 +161,29 @@ export default function PlataformaConsoleLayout({
                   href={item.href}
                   onMouseEnter={() => setHoveredNav(item.href)}
                   onMouseLeave={() => setHoveredNav(null)}
-                  className={`${navLabelClass} px-3.5 py-2 rounded-lg border transition-all duration-200`}
+                  className={`${navLabelClass} flex items-center justify-center text-center px-3 py-2.5 rounded-lg border transition-all duration-200 min-h-[42px]`}
                   style={
                     active
                       ? navButtonStyle(theme, true)
                       : hovered
                         ? {
-                            color: theme.text,
+                            color: "#FFFFFF",
                             backgroundColor: theme.bg,
                             borderColor: theme.border,
+                            fontWeight: 700,
                           }
                         : navButtonStyle(theme, false)
                   }
                 >
-                  <span style={{ fontFamily: "var(--font-playfair), Georgia, serif" }}>{item.label}</span>
+                  <span style={{ fontFamily: "var(--font-inter), system-ui, sans-serif" }}>{item.label}</span>
                 </Link>
               )
             })}
           </nav>
         </div>
 
-        <div className="lg:hidden flex items-center gap-2 px-5 pb-3 overflow-x-auto border-t border-white/[0.04] pt-2.5 scrollbar-thin">
-          <LayoutDashboard className="w-4 h-4 shrink-0 text-[#C9A962] mr-0.5 opacity-80" />
+        <div className="lg:hidden flex items-center gap-2.5 px-5 pb-3 overflow-x-auto border-t border-white/[0.06] pt-3 scrollbar-thin">
+          <LayoutDashboard className="w-4 h-4 shrink-0 text-[#FFE08A] mr-0.5" />
           {navMobile.map((item, i) => {
             const theme = NAV_THEMES[i % NAV_THEMES.length]!
             const active = item.match
@@ -197,10 +191,10 @@ export default function PlataformaConsoleLayout({
               <Link
                 key={item.href}
                 href={item.href}
-                className="shrink-0 px-3 py-2 rounded-lg border text-[12px] font-semibold tracking-[0.04em] whitespace-nowrap transition-all"
+                className="shrink-0 px-4 py-2.5 rounded-lg border text-[13px] font-bold tracking-wide whitespace-nowrap transition-all antialiased"
                 style={active ? navButtonStyle(theme, true) : navButtonStyle(theme, false)}
               >
-                <span style={{ fontFamily: "var(--font-playfair), Georgia, serif" }}>{item.label}</span>
+                <span style={{ fontFamily: "var(--font-inter), system-ui, sans-serif" }}>{item.label}</span>
               </Link>
             )
           })}
