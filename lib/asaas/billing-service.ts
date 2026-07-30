@@ -63,7 +63,8 @@ function cardMetaFromAsaasToken(token: {
 }): { creditCardLast4: string | null; creditCardBrand: string | null } {
   const digits = (token.creditCardNumber ?? "").replace(/\D/g, "")
   return {
-    creditCardLast4: digits.length >= 4 ? digits.slice(-4) : null,
+    creditCardLast4:
+      digits.length >= 4 ? digits.slice(-4) : digits.length >= 3 ? digits.slice(-3) : null,
     creditCardBrand: token.creditCardBrand?.trim() || null,
   }
 }
@@ -820,8 +821,7 @@ export async function changeSubscriptionCardInApp(
 
   return {
     asaasSubscriptionId: sub.asaasSubscriptionId ?? "",
-    creditCardLast4: token.creditCardNumber ?? null,
-    creditCardBrand: token.creditCardBrand ?? null,
+    ...cardMetaFromAsaasToken(token),
   }
 }
 
@@ -1011,8 +1011,7 @@ export async function registerCardInApp(
 
   return {
     asaasSubscriptionId: asaasSubId,
-    creditCardLast4: token.creditCardNumber ?? null,
-    creditCardBrand: token.creditCardBrand ?? null,
+    ...cardMetaFromAsaasToken(token),
     mode,
     plan,
   }

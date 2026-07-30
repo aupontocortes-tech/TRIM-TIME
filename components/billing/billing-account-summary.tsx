@@ -72,16 +72,18 @@ export function BillingAccountSummaryCard({ summary, showManageLink = true, comp
                 Cartão cadastrado
               </dt>
               <dd className="font-semibold text-foreground font-mono tracking-wide">
-                {summary.card_display}
+                Final {summary.card_display}
               </dd>
             </div>
-          ) : summary.billing_type === "CREDIT_CARD" || summary.card_registered ? (
+          ) : summary.card_registered && summary.billing_type !== "PIX" ? (
             <div className="rounded-lg border border-border bg-secondary/20 p-3">
               <dt className="text-muted-foreground flex items-center gap-1.5 mb-1">
                 <CreditCard className="w-4 h-4" />
                 Cartão cadastrado
               </dt>
-              <dd className="font-semibold text-foreground">Cartão salvo com sucesso</dd>
+              <dd className="text-sm text-muted-foreground">
+                Cartão salvo. Troque o cartão em &quot;Gerenciar assinatura&quot; para exibir o final aqui.
+              </dd>
             </div>
           ) : null}
 

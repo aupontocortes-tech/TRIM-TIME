@@ -61,11 +61,24 @@ export type BuildBillingAccountSummaryInput = {
   catalog: PlanCatalog | null
 }
 
-function normalizeCardLast4(raw: string | null | undefined): string | null {
+function normalizeCardLastDigits(raw: string | null | undefined): string | null {
   if (!raw?.trim()) return null
   const digits = raw.replace(/\D/g, "")
   if (digits.length >= 4) return digits.slice(-4)
+  if (digits.length >= 3) return digits.slice(-3)
   return null
+}
+
+/** Texto amigável: bandeira + final do cartão (mín. 3 dígitos). */
+export function formatCardDisplay(
+  brand: string | null | undefined,
+  lastDigits: string | null | undefined
+): string | null {
+  const digits = normalizeCardLastDigits(lastDigits)
+  if (!digits) return null
+  const brandLabel = formatCardBrand(brand)
+  const mask = digits.length === 3 ? "•••" : "••••"
+  return brandLabel ? `${brandLabel} ${mask} ${digits}` : `${mask} ${digits}`
 }
 
 export function formatCardBrand(brand: string | null | undefined): string | null {
@@ -158,15 +171,13 @@ export function buildBillingAccountSummary(
   const trialActive = isTrialActive(subscription as Subscription)
   const trialDaysLeft = daysLeftInTrial(subscription as Subscription)
   const billingType = subscription.billing_type ?? null
-  const cardLast4 = normalizeCardLast4(subscription.credit_card_last4)
+  const cardLastDigits = normalizeCardLastDigits(subscription.credit_card_last4)
   const cardBrand = formatCardBrand(subscription.credit_card_brand)
   const cardRegistered = !!subscription.card_setup_at
-  const cardDisplay =
-    cardLast4 != null
-      ? `${cardBrand ? `${cardBrand} ` : ""}•••• ${cardLast4}`
-      : cardRegistered
-        ? "Cartão cadastrado"
-        : null
+  const cardDisplay = formatCardDisplay(
+    subscription.credit_card_brand,
+    subscription.credit_card_last4
+  )
 
   const nextChargeRaw = trialActive
     ? subscription.trial_end
@@ -188,7 +199,7 @@ export function buildBillingAccountSummary(
     status_label: STATUS_LABELS[status],
     billing_type: billingType,
     billing_type_label: billingType ? (BILLING_TYPE_LABELS[billingType] ?? billingType) : null,
-    card_last4: cardLast4,
+    card_last4: cardLastDigits,
     card_brand: cardBrand,
     card_display: cardDisplay,
     card_registered: cardRegistered,

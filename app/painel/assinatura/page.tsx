@@ -586,6 +586,14 @@ function AssinaturaContent() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
+            {paymentAccount?.card_display ? (
+              <div className="rounded-lg border border-border bg-secondary/20 px-3 py-2.5 text-sm">
+                <p className="text-muted-foreground mb-0.5">Cartão em uso</p>
+                <p className="font-semibold text-foreground font-mono tracking-wide">
+                  Final {paymentAccount.card_display}
+                </p>
+              </div>
+            ) : null}
             {showChangeCard ? (
               <>
                 <TrialCardForm
