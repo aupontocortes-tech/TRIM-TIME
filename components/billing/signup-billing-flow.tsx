@@ -130,7 +130,9 @@ export function SignupBillingFlow({ catalog, trialDays, onSuccess, onError }: Pr
               />
             </div>
             <div className="space-y-1 min-w-0">
-              <p className="text-base font-bold text-foreground">Contratar agora</p>
+              <p className="text-xl font-extrabold tracking-tight text-amber-400 drop-shadow-[0_0_14px_rgba(251,191,36,0.45)]">
+                Contratar agora
+              </p>
               <p className="text-sm text-muted-foreground">
                 Escolha Básico, Pro ou Premium — painel liberado na hora
               </p>
