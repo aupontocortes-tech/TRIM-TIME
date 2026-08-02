@@ -1,23 +1,30 @@
 import type { WhatsAppAutoReplyRule } from "@/lib/db/types"
+import {
+  DEFAULT_WHATSAPP_AUTO_REPLY_RULES,
+  WHATSAPP_AUTO_REPLY_RULE_LABELS,
+} from "@/lib/whatsapp-auto-reply-defaults"
 
-/** Itens do menu numerado (fallback quando a mensagem não bate em nenhuma regra). */
-export const WHATSAPP_AUTO_REPLY_MENU_ITEMS: {
+export type WhatsAppAutoReplyMenuItem = {
   n: number
   ruleId: string
   label: string
   hint: string
-}[] = [
-  { n: 1, ruleId: "endereco", label: "Endereço", hint: "ex.: onde fica" },
-  { n: 2, ruleId: "horario", label: "Meu horário", hint: "ex.: meu horario" },
-  { n: 3, ruleId: "confirmar", label: "Confirmar horário/vaga", hint: "ex.: confirmo" },
-  { n: 4, ruleId: "lista_espera", label: "Lista de espera", hint: "ex.: minha fila" },
-  { n: 5, ruleId: "cancelar_remarcar", label: "Cancelar ou remarcar", hint: "ex.: remarcar" },
-  { n: 6, ruleId: "servicos", label: "Serviços e preços", hint: "ex.: quanto custa" },
-  { n: 7, ruleId: "funcionamento", label: "Horário de funcionamento", hint: "ex.: que horas abre" },
-  { n: 8, ruleId: "profissional_agendamento", label: "Quem vai me atender", hint: "ex.: meu barbeiro" },
-  { n: 9, ruleId: "profissionais", label: "Profissionais", hint: "ex.: quais profissionais" },
-  { n: 10, ruleId: "agendar", label: "Agendar", hint: "ex.: agendar" },
-]
+}
+
+/** Exemplo curto por regra (menu fallback). */
+const MENU_HINTS: Record<string, string> = {
+  endereco: "onde fica",
+  horario: "meu horario",
+  confirmar: "confirmo",
+  lista_espera: "minha fila",
+  cancelar_remarcar: "remarcar",
+  servicos: "quanto custa",
+  funcionamento: "que horas abre",
+  profissional_agendamento: "meu barbeiro",
+  profissionais: "quais profissionais",
+  unidades: "unidades",
+  agendar: "agendar",
+}
 
 const MENU_TRIGGER_WORDS = [
   "menu",
@@ -41,6 +48,43 @@ function normalizeMenuInput(text: string): string {
     .trim()
 }
 
+function menuLabel(rule: WhatsAppAutoReplyRule): string {
+  if (rule.id && WHATSAPP_AUTO_REPLY_RULE_LABELS[rule.id]) {
+    return WHATSAPP_AUTO_REPLY_RULE_LABELS[rule.id]
+  }
+  const kw = rule.keywords?.find((k) => k.trim())
+  return kw?.trim() || rule.id || "Opção"
+}
+
+function menuHint(rule: WhatsAppAutoReplyRule): string {
+  if (rule.id && MENU_HINTS[rule.id]) return MENU_HINTS[rule.id]
+  const kw = rule.keywords?.find((k) => k.trim())
+  return kw?.trim() || "palavra-chave"
+}
+
+/** Monta itens 1..N só com regras habilitadas (ordem padrão + extras no final). */
+export function buildWhatsAppAutoReplyMenuItems(
+  rules: WhatsAppAutoReplyRule[]
+): WhatsAppAutoReplyMenuItem[] {
+  const enabled = rules.filter((r) => r.id && r.enabled !== false)
+  const byId = new Map(enabled.map((r) => [r.id!, r]))
+  const defaultOrder = DEFAULT_WHATSAPP_AUTO_REPLY_RULES.map((r) => r.id).filter(Boolean) as string[]
+  const orderedIds = [
+    ...defaultOrder.filter((id) => byId.has(id)),
+    ...enabled.map((r) => r.id!).filter((id) => !defaultOrder.includes(id)),
+  ]
+
+  return orderedIds.map((ruleId, idx) => {
+    const rule = byId.get(ruleId)!
+    return {
+      n: idx + 1,
+      ruleId,
+      label: menuLabel(rule),
+      hint: menuHint(rule),
+    }
+  })
+}
+
 /** Cliente digitou só o número da opção (ex.: "3" ou "3."). */
 export function matchWhatsAppAutoReplyRuleByMenuNumber(
   messageText: string,
@@ -50,7 +94,7 @@ export function matchWhatsAppAutoReplyRuleByMenuNumber(
   const m = t.match(/^(\d{1,2})\.?$/)
   if (!m) return null
   const n = Number(m[1])
-  const item = WHATSAPP_AUTO_REPLY_MENU_ITEMS.find((i) => i.n === n)
+  const item = buildWhatsAppAutoReplyMenuItems(rules).find((i) => i.n === n)
   if (!item) return null
   const rule = rules.find((r) => r.id === item.ruleId && r.enabled !== false)
   return rule ?? null
@@ -67,10 +111,8 @@ export function buildWhatsAppAutoReplyMenuText(
   rules: WhatsAppAutoReplyRule[],
   barbershopName?: string
 ): string {
-  const enabledIds = new Set(rules.filter((r) => r.enabled !== false).map((r) => r.id))
-  const lines = WHATSAPP_AUTO_REPLY_MENU_ITEMS.filter((i) => enabledIds.has(i.ruleId)).map(
-    (i) => `${i.n}. ${i.label} (${i.hint})`
-  )
+  const items = buildWhatsAppAutoReplyMenuItems(rules)
+  const lines = items.map((i) => `${i.n}. ${i.label} (ex.: ${i.hint})`)
 
   const header = barbershopName?.trim()
     ? `Olá! Sou o atendimento automático da ${barbershopName.trim()}.`

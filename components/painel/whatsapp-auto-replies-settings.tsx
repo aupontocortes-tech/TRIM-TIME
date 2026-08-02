@@ -105,7 +105,8 @@ export function WhatsAppAutoRepliesSettings({
         <CardTitle className="text-base text-foreground">Respostas automáticas (palavras-chave)</CardTitle>
         <CardDescription className="text-muted-foreground">
           Palavra-chave → resposta automática. Se o cliente mandar algo fora das regras, recebe um menu numerado
-          (1–10). Também pode digitar só o número (ex.: <strong className="text-foreground">3</strong>).
+          com todas as opções ativas. Também pode digitar só o número (ex.:{" "}
+          <strong className="text-foreground">3</strong>).
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 max-w-2xl">
