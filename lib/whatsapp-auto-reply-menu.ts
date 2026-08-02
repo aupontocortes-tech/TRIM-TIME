@@ -1,7 +1,6 @@
 import type { WhatsAppAutoReplyRule } from "@/lib/db/types"
 import {
   DEFAULT_WHATSAPP_AUTO_REPLY_RULES,
-  WHATSAPP_AUTO_REPLY_RULE_LABELS,
 } from "@/lib/whatsapp-auto-reply-defaults"
 
 export type WhatsAppAutoReplyMenuItem = {
@@ -11,7 +10,22 @@ export type WhatsAppAutoReplyMenuItem = {
   hint: string
 }
 
-/** Exemplo curto por regra (menu fallback). */
+/** Título curto no menu (fácil de ler no WhatsApp). */
+const MENU_LABELS: Record<string, string> = {
+  endereco: "Endereço",
+  horario: "Meu horário",
+  confirmar: "Confirmar horário/vaga",
+  lista_espera: "Lista de espera",
+  cancelar_remarcar: "Cancelar ou remarcar",
+  servicos: "Serviços e preços",
+  funcionamento: "Horário de funcionamento",
+  profissional_agendamento: "Quem vai me atender",
+  profissionais: "Profissionais",
+  unidades: "Unidades",
+  agendar: "Agendar",
+}
+
+/** Palavra que o cliente pode digitar (além do número). */
 const MENU_HINTS: Record<string, string> = {
   endereco: "onde fica",
   horario: "meu horario",
@@ -49,9 +63,7 @@ function normalizeMenuInput(text: string): string {
 }
 
 function menuLabel(rule: WhatsAppAutoReplyRule): string {
-  if (rule.id && WHATSAPP_AUTO_REPLY_RULE_LABELS[rule.id]) {
-    return WHATSAPP_AUTO_REPLY_RULE_LABELS[rule.id]
-  }
+  if (rule.id && MENU_LABELS[rule.id]) return MENU_LABELS[rule.id]
   const kw = rule.keywords?.find((k) => k.trim())
   return kw?.trim() || rule.id || "Opção"
 }
@@ -112,16 +124,16 @@ export function buildWhatsAppAutoReplyMenuText(
   barbershopName?: string
 ): string {
   const items = buildWhatsAppAutoReplyMenuItems(rules)
-  const lines = items.map((i) => `${i.n}. ${i.label} (ex.: ${i.hint})`)
+  const lines = items.map((i) => `${i.n}. ${i.label} (${i.hint})`)
 
   const header = barbershopName?.trim()
-    ? `Olá! Sou o atendimento automático da ${barbershopName.trim()}.`
+    ? `Olá! Atendimento automático da ${barbershopName.trim()}.`
     : "Olá! Atendimento automático."
 
   return [
     header,
     "",
-    "Digite o número ou escreva a palavra-chave:",
+    "Digite o número ou escreva a palavra:",
     "",
     ...lines,
   ].join("\n")
