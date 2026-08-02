@@ -45,6 +45,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 
 
 import { Separator } from "@/components/ui/separator"
@@ -290,6 +291,29 @@ function AgendaQuickActions({
         </Button>
       ) : null}
     </div>
+  )
+}
+
+function AgendaScopeHint({ children }: { children: React.ReactNode }) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-border/50 bg-muted/20 text-[10px] font-semibold leading-none text-muted-foreground/80 hover:bg-muted/40 hover:text-muted-foreground"
+          aria-label="Informação sobre a agenda"
+        >
+          ?
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        className="w-[min(18rem,calc(100vw-2rem))] p-3 text-xs leading-snug text-foreground"
+        align="end"
+        sideOffset={6}
+      >
+        {children}
+      </PopoverContent>
+    </Popover>
   )
 }
 
@@ -1143,20 +1167,8 @@ export default function AgendaPage() {
         </div>
       ) : null}
 
-      {!unitsLoading && isNetworkView ? (
-        <div className="rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-xs text-foreground sm:px-4 sm:py-3 sm:text-sm">
-          <strong>Todas as unidades</strong> — agendamentos de todas as lojas juntos. Para criar agendamento,
-          escolha o profissional da unidade desejada.
-        </div>
-      ) : null}
-      {!unitsLoading && selectedUnitId && nomeUnidadeAtiva ? (
-        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200 sm:px-4 sm:py-3 sm:text-sm">
-          Agenda da unidade <strong className="text-foreground">{nomeUnidadeAtiva}</strong> — só agendamentos desta
-          loja.
-        </div>
-      ) : null}
-
-      <div className="flex flex-wrap gap-1.5 sm:gap-2">
+      <div className="flex items-start gap-1.5 sm:gap-2">
+        <div className="flex flex-1 flex-wrap gap-1.5 sm:gap-2">
         <Button
           type="button"
           size="sm"
@@ -1184,6 +1196,18 @@ export default function AgendaPage() {
         >
           Agendamento mensal
         </Button>
+        </div>
+        {!unitsLoading && isNetworkView ? (
+          <AgendaScopeHint>
+            <strong>Todas as unidades</strong> — agendamentos de todas as lojas juntos. Para criar agendamento,
+            escolha o profissional da unidade desejada.
+          </AgendaScopeHint>
+        ) : null}
+        {!unitsLoading && selectedUnitId && nomeUnidadeAtiva ? (
+          <AgendaScopeHint>
+            Agenda da unidade <strong>{nomeUnidadeAtiva}</strong> — só agendamentos desta loja.
+          </AgendaScopeHint>
+        ) : null}
       </div>
 
       <Card className="border-border bg-card shadow-none">
