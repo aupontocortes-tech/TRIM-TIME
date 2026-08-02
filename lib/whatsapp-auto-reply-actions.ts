@@ -166,7 +166,7 @@ export async function buildConfirmarRespostaText(params: ActionParams): Promise<
         barbershopId: params.barbershopId,
         itemId: notified.id,
         clientId: client.id,
-        settings: params.settings,
+        settings: params.settings ?? null,
       })
 
       if (accepted.ok) {
