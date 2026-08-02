@@ -856,11 +856,11 @@ export default function AgendaPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div className="space-y-3 sm:space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Agenda</h1>
-          <p className="text-muted-foreground">Gerencie os agendamentos da sua barbearia</p>
+          <h1 className="text-xl font-bold text-foreground sm:text-2xl">Agenda</h1>
+          <p className="text-xs text-muted-foreground sm:text-sm">Gerencie os agendamentos da sua barbearia</p>
         </div>
         <Button
           className="bg-primary text-primary-foreground hover:bg-primary/90 w-full sm:w-auto"
@@ -1144,24 +1144,24 @@ export default function AgendaPage() {
       ) : null}
 
       {!unitsLoading && isNetworkView ? (
-        <div className="rounded-lg border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-foreground">
+        <div className="rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-xs text-foreground sm:px-4 sm:py-3 sm:text-sm">
           <strong>Todas as unidades</strong> — agendamentos de todas as lojas juntos. Para criar agendamento,
           escolha o profissional da unidade desejada.
         </div>
       ) : null}
       {!unitsLoading && selectedUnitId && nomeUnidadeAtiva ? (
-        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200 sm:px-4 sm:py-3 sm:text-sm">
           Agenda da unidade <strong className="text-foreground">{nomeUnidadeAtiva}</strong> — só agendamentos desta
           loja.
         </div>
       ) : null}
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-1.5 sm:gap-2">
         <Button
           type="button"
           size="sm"
           variant={visao === "dia" ? "default" : "outline"}
-          className={`text-left h-auto min-h-9 py-1.5 whitespace-normal ${visao === "dia" ? "bg-primary text-primary-foreground" : "border-border"}`}
+          className={`text-left h-auto min-h-8 py-1 text-xs whitespace-normal sm:min-h-9 sm:py-1.5 sm:text-sm ${visao === "dia" ? "bg-primary text-primary-foreground" : "border-border"}`}
           onClick={() => setVisao("dia")}
         >
           Agendamento do dia
@@ -1170,7 +1170,7 @@ export default function AgendaPage() {
           type="button"
           size="sm"
           variant={visao === "semana" ? "default" : "outline"}
-          className={`text-left h-auto min-h-9 py-1.5 whitespace-normal ${visao === "semana" ? "bg-primary text-primary-foreground" : "border-border"}`}
+          className={`text-left h-auto min-h-8 py-1 text-xs whitespace-normal sm:min-h-9 sm:py-1.5 sm:text-sm ${visao === "semana" ? "bg-primary text-primary-foreground" : "border-border"}`}
           onClick={() => setVisao("semana")}
         >
           Agendamento da semana
@@ -1179,7 +1179,7 @@ export default function AgendaPage() {
           type="button"
           size="sm"
           variant={visao === "mes" ? "default" : "outline"}
-          className={`text-left h-auto min-h-9 py-1.5 whitespace-normal ${visao === "mes" ? "bg-primary text-primary-foreground" : "border-border"}`}
+          className={`text-left h-auto min-h-8 py-1 text-xs whitespace-normal sm:min-h-9 sm:py-1.5 sm:text-sm ${visao === "mes" ? "bg-primary text-primary-foreground" : "border-border"}`}
           onClick={() => setVisao("mes")}
         >
           Agendamento mensal
@@ -1187,8 +1187,8 @@ export default function AgendaPage() {
       </div>
 
       <Card className="bg-card border-border">
-        <CardContent className="p-4">
-          <div className="flex items-center justify-between">
+        <CardContent className="p-2 sm:p-4">
+          <div className="flex items-center justify-between gap-2">
             <Button
               variant="outline"
               size="icon"
@@ -1197,30 +1197,34 @@ export default function AgendaPage() {
                 else if (visao === "semana") mudarSemana(-1)
                 else mudarMes(-1)
               }}
-              className="border-border text-foreground hover:bg-secondary"
+              className="h-8 w-8 shrink-0 border-border text-foreground hover:bg-secondary sm:h-10 sm:w-10"
             >
               <ChevronLeft className="w-4 h-4" />
             </Button>
 
-            <div className="text-center px-1">
+            <div className="min-w-0 flex-1 text-center px-1">
               {visao === "dia" ? (
                 <>
-                  <p className="text-lg font-semibold text-foreground">{formatarData(dataSelecionada)}</p>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-sm font-semibold leading-tight text-foreground sm:text-lg">
+                    {formatarData(dataSelecionada)}
+                  </p>
+                  <p className="text-[11px] leading-tight text-muted-foreground sm:text-sm">
                     {dataSelecionada.toLocaleDateString("pt-BR", { day: "numeric", month: "long", year: "numeric" })}
                   </p>
                 </>
               ) : visao === "semana" ? (
                 <>
-                  <p className="text-lg font-semibold text-foreground">{formatarIntervaloSemana(dataSelecionada)}</p>
-                  <p className="text-sm text-muted-foreground">Segunda a domingo</p>
+                  <p className="text-sm font-semibold leading-tight text-foreground sm:text-lg">
+                    {formatarIntervaloSemana(dataSelecionada)}
+                  </p>
+                  <p className="text-[11px] leading-tight text-muted-foreground sm:text-sm">Segunda a domingo</p>
                 </>
               ) : (
                 <>
-                  <p className="text-lg font-semibold text-foreground">
+                  <p className="text-sm font-semibold leading-tight text-foreground sm:text-lg">
                     {dataSelecionada.toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}
                   </p>
-                  <p className="text-sm text-muted-foreground">Todos os dias deste mês</p>
+                  <p className="text-[11px] leading-tight text-muted-foreground sm:text-sm">Todos os dias deste mês</p>
                 </>
               )}
             </div>
@@ -1233,7 +1237,7 @@ export default function AgendaPage() {
                 else if (visao === "semana") mudarSemana(1)
                 else mudarMes(1)
               }}
-              className="border-border text-foreground hover:bg-secondary"
+              className="h-8 w-8 shrink-0 border-border text-foreground hover:bg-secondary sm:h-10 sm:w-10"
             >
               <ChevronRight className="w-4 h-4" />
             </Button>
@@ -1241,36 +1245,36 @@ export default function AgendaPage() {
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-4 gap-1.5 sm:gap-4">
         <Card className="bg-card border-border">
-          <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-foreground">{agendamentosFiltrados.length}</p>
-            <p className="text-xs text-muted-foreground">Total</p>
+          <CardContent className="p-2 text-center sm:p-4">
+            <p className="text-base font-bold leading-none text-foreground sm:text-2xl">{agendamentosFiltrados.length}</p>
+            <p className="mt-1 text-[10px] text-muted-foreground sm:text-xs">Total</p>
           </CardContent>
         </Card>
         <Card className="bg-card border-border">
-          <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-green-500">{totalConfirmados}</p>
-            <p className="text-xs text-muted-foreground">Confirmados</p>
+          <CardContent className="p-2 text-center sm:p-4">
+            <p className="text-base font-bold leading-none text-green-500 sm:text-2xl">{totalConfirmados}</p>
+            <p className="mt-1 text-[10px] text-muted-foreground sm:text-xs">Confirmados</p>
           </CardContent>
         </Card>
         <Card className="bg-card border-border">
-          <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-yellow-500">{totalPendentes}</p>
-            <p className="text-xs text-muted-foreground">Pendentes</p>
+          <CardContent className="p-2 text-center sm:p-4">
+            <p className="text-base font-bold leading-none text-yellow-500 sm:text-2xl">{totalPendentes}</p>
+            <p className="mt-1 text-[10px] text-muted-foreground sm:text-xs">Pendentes</p>
           </CardContent>
         </Card>
         <Card className="bg-card border-border">
-          <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-primary">
+          <CardContent className="p-2 text-center sm:p-4">
+            <p className="text-[11px] font-bold leading-tight text-primary tabular-nums sm:text-2xl sm:leading-none">
               R${totalFaturamento.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </p>
-            <p className="text-xs text-muted-foreground">Previsto</p>
+            <p className="mt-1 text-[10px] text-muted-foreground sm:text-xs">Previsto</p>
           </CardContent>
         </Card>
       </div>
 
-      <div className="flex items-center gap-2 overflow-x-auto pb-2">
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:gap-2 sm:pb-2">
         <Filter className="w-4 h-4 text-muted-foreground flex-shrink-0" />
         {profissionais.map((prof) => (
           <Button
@@ -1290,10 +1294,10 @@ export default function AgendaPage() {
       </div>
 
       <Card className="bg-card border-border">
-        <CardHeader>
-          <CardTitle className="text-foreground">Agendamentos</CardTitle>
+        <CardHeader className="px-3 py-2 sm:px-6 sm:py-4">
+          <CardTitle className="text-base text-foreground sm:text-lg">Agendamentos</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-3 pb-3 pt-0 sm:px-6 sm:pb-6">
           <div className="space-y-3">
             {loading ? (
               <div className="text-center py-8">
