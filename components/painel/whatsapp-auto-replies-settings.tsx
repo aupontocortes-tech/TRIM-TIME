@@ -104,9 +104,9 @@ export function WhatsAppAutoRepliesSettings({
       <CardHeader>
         <CardTitle className="text-base text-foreground">Respostas automáticas (palavras-chave)</CardTitle>
         <CardDescription className="text-muted-foreground">
-          Palavra-chave → resposta automática. Se o cliente mandar algo fora das regras, recebe um menu curto
-          (número + palavra). Digitando <strong className="text-foreground">3</strong> ou{" "}
-          <strong className="text-foreground">confirmo</strong>, a resposta certa é enviada na hora.
+          Palavra-chave → resposta direta (ex.: &quot;quero agendar&quot; manda o link). A lista numerada só
+          aparece se a mensagem não bater em nenhuma palavra-chave — ou se o cliente digitar um número após
+          ver o menu.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 max-w-2xl">

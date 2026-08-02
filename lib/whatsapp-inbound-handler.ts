@@ -182,9 +182,10 @@ export async function handleGreenApiInboundWebhook(payload: unknown): Promise<Gr
         : null
 
   if (!rule) {
-    const showMenu =
-      autoReplySettings?.show_menu_on_unknown !== false || isWhatsAppAutoReplyMenuRequest(text)
-    if (!showMenu) return { handled: false, skipped: "no_keyword_match" }
+    // Menu só quando não bate palavra-chave nem número da lista (fallback).
+    if (autoReplySettings?.show_menu_on_unknown === false && !isWhatsAppAutoReplyMenuRequest(text)) {
+      return { handled: false, skipped: "no_keyword_match" }
+    }
 
     const menuBody = buildWhatsAppAutoReplyMenuText(rules, integration.barbershop.name)
     const send = await sendGreenApiText({

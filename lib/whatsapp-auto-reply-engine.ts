@@ -7,8 +7,22 @@ function normalizeForMatch(text: string): string {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/\bindereco\b/g, "endereco")
+    .replace(/\bagendamentos?\b/g, "agendar")
     .replace(/\s+/g, " ")
     .trim()
+}
+
+function mergeRuleWithDefault(
+  custom: WhatsAppAutoReplyRule,
+  defaultRule?: WhatsAppAutoReplyRule
+): WhatsAppAutoReplyRule {
+  if (!defaultRule) return custom
+  const keywords = [...new Set([...custom.keywords, ...defaultRule.keywords])]
+  return {
+    ...custom,
+    keywords,
+    reply_template: custom.reply_template.trim() || defaultRule.reply_template.trim(),
+  }
 }
 
 function normalizeAutoReplyRule(r: WhatsAppAutoReplyRule): WhatsAppAutoReplyRule {
@@ -25,7 +39,14 @@ export function resolveWhatsAppAutoReplyRules(
 ): WhatsAppAutoReplyRule[] {
   const custom = settings?.rules?.filter((r) => r.keywords?.length && r.reply_template?.trim())
   if (custom?.length) {
-    const normalized = custom.map(normalizeAutoReplyRule)
+    const defaultById = new Map(
+      DEFAULT_WHATSAPP_AUTO_REPLY_RULES.filter((d) => d.id).map((d) => [d.id!, normalizeAutoReplyRule(d)])
+    )
+    const normalized = custom.map((r) => {
+      const base = normalizeAutoReplyRule(r)
+      const def = r.id ? defaultById.get(r.id) : undefined
+      return mergeRuleWithDefault(base, def)
+    })
     const ids = new Set(normalized.map((r) => r.id))
     const missing = DEFAULT_WHATSAPP_AUTO_REPLY_RULES.filter((d) => d.id && !ids.has(d.id)).map(
       normalizeAutoReplyRule
