@@ -7,9 +7,11 @@ import {
 } from "@/lib/whatsapp-auto-reply-context"
 import {
   extractGreenApiIncomingText,
+  getGreenApiIncomingMessageKind,
   isWhatsAppAutoReplyEnabled,
   matchWhatsAppAutoReplyRule,
   resolveWhatsAppAutoReplyRules,
+  WHATSAPP_AUDIO_ONLY_REPLY_TEXT,
 } from "@/lib/whatsapp-auto-reply-engine"
 import {
   buildWhatsAppAutoReplyMenuText,
@@ -128,8 +130,7 @@ export async function handleGreenApiInboundWebhook(payload: unknown): Promise<Gr
     return { handled: false, skipped: "from_instance" }
   }
 
-  const text = extractGreenApiIncomingText(body)
-  if (!text) return { handled: false, skipped: "no_text" }
+  const messageKind = getGreenApiIncomingMessageKind(body)
 
   const instanceData = body.instanceData
   if (!instanceData || typeof instanceData !== "object") {
@@ -164,12 +165,31 @@ export async function handleGreenApiInboundWebhook(payload: unknown): Promise<Gr
     return { handled: false, skipped: "auto_reply_disabled" }
   }
 
+  const senderPhone = extractSenderPhone(body.senderData)
+  if (!senderPhone) return { handled: false, skipped: "no_sender_phone" }
+
+  if (messageKind === "audio") {
+    const send = await sendGreenApiText({
+      integration,
+      toDigits: senderPhone,
+      body: WHATSAPP_AUDIO_ONLY_REPLY_TEXT,
+    })
+    return {
+      handled: true,
+      ruleId: "audio_only",
+      sendOk: send.ok,
+      skipped: send.ok ? undefined : send.error ?? send.skipped,
+    }
+  }
+
+  if (messageKind !== "text") return { handled: false, skipped: "unsupported_message" }
+
+  const text = extractGreenApiIncomingText(body)
+  if (!text) return { handled: false, skipped: "no_text" }
+
   const rules = resolveWhatsAppAutoReplyRules(autoReplySettings)
   let rule = matchWhatsAppAutoReplyRule(text, rules)
   if (!rule) rule = matchWhatsAppAutoReplyRuleByMenuNumber(text, rules)
-
-  const senderPhone = extractSenderPhone(body.senderData)
-  if (!senderPhone) return { handled: false, skipped: "no_sender_phone" }
 
   console.info("[whatsapp-inbound] senderPhone", senderPhone, "text", text.slice(0, 60))
 

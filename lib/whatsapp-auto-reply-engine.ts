@@ -80,6 +80,28 @@ export function matchWhatsAppAutoReplyRule(
   return null
 }
 
+const GREEN_API_AUDIO_MESSAGE_TYPES = new Set(["audioMessage", "pttMessage"])
+
+/** Resposta automática quando o cliente manda áudio (não processamos voz). */
+export const WHATSAPP_AUDIO_ONLY_REPLY_TEXT =
+  "Olá! Este atendimento automático só entende mensagens *por escrito*.\n\n" +
+  "Por favor, *digite* sua pergunta em texto — por exemplo:\n" +
+  "• agendar\n" +
+  "• tem horário para hoje\n" +
+  "• onde fica\n" +
+  "• meu horário"
+
+export function getGreenApiIncomingMessageKind(
+  body: Record<string, unknown>
+): "text" | "audio" | "unsupported" {
+  const messageData = body.messageData
+  if (!messageData || typeof messageData !== "object") return "unsupported"
+  const type = (messageData as Record<string, unknown>).typeMessage
+  if (typeof type === "string" && GREEN_API_AUDIO_MESSAGE_TYPES.has(type)) return "audio"
+  if (extractGreenApiIncomingText(body)) return "text"
+  return "unsupported"
+}
+
 export function extractGreenApiIncomingText(body: Record<string, unknown>): string | null {
   const messageData = body.messageData
   if (!messageData || typeof messageData !== "object") return null
