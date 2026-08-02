@@ -16,6 +16,7 @@ import {
 } from "@/lib/painel-signup-session-cookie"
 import type { Barbershop, BarbershopSettings } from "@/lib/db/types"
 import type { Prisma } from "@prisma/client"
+import { configureGreenApiInboundWebhook } from "@/lib/whatsapp-green-api"
 
 export const dynamic = "force-dynamic"
 
@@ -348,6 +349,28 @@ export async function PATCH(request: Request) {
         ...(mergedSettings !== undefined && { settings: mergedSettings }),
       },
     })
+
+    const autoReplyPatch = body.settings?.notification_settings?.whatsapp_auto_replies
+    if (autoReplyPatch && autoReplyPatch.enabled !== false) {
+      const integration = await prisma.whatsAppIntegration.findUnique({
+        where: { barbershopId },
+        select: { graphPhoneNumberId: true, apiToken: true, greenApiBaseUrl: true },
+      })
+      if (integration?.graphPhoneNumberId?.trim() && integration.apiToken?.trim()) {
+        void configureGreenApiInboundWebhook({
+          idInstance: integration.graphPhoneNumberId,
+          apiTokenInstance: integration.apiToken,
+          baseUrl: integration.greenApiBaseUrl,
+        }).then((webhook) => {
+          if (webhook.ok) {
+            console.info("[barbershops PATCH] webhook Green API configurado:", webhook.webhookUrl)
+          } else {
+            console.warn("[barbershops PATCH] falha ao configurar webhook Green API:", webhook.error)
+          }
+        })
+      }
+    }
+
     const effectivePlan = await resolveEffectivePlanForActiveSession(barbershopId)
     return NextResponse.json({
       ...toBarbershopApi(barbershop),

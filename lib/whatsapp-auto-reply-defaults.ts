@@ -7,6 +7,8 @@ export const DEFAULT_WHATSAPP_AUTO_REPLY_RULES: WhatsAppAutoReplyRule[] = [
     keywords: [
       "endereço",
       "endereco",
+      "indereço",
+      "indereco",
       "onde fica",
       "onde é",
       "onde e",
@@ -15,6 +17,8 @@ export const DEFAULT_WHATSAPP_AUTO_REPLY_RULES: WhatsAppAutoReplyRule[] = [
       "como chegar",
       "qual endereço",
       "qual endereco",
+      "qual o endereço",
+      "qual o endereco",
     ],
     reply_template: "{{barbearia}}\n{{endereco}}\n{{maps}}",
   },

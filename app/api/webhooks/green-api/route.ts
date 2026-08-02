@@ -20,6 +20,9 @@ export async function POST(request: Request) {
   try {
     const payload = await request.json()
     const result = await handleGreenApiInboundWebhook(payload)
+    if (!result.handled) {
+      console.info("[webhooks/green-api] skipped:", result.skipped)
+    }
     return NextResponse.json({ received: true, ...result })
   } catch (e) {
     console.error("[webhooks/green-api]", e)

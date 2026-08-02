@@ -36,6 +36,18 @@ function isGroupChat(senderData: unknown): boolean {
   return typeof chatId === "string" && chatId.endsWith("@g.us")
 }
 
+function isMessageFromInstance(body: Record<string, unknown>): boolean {
+  const instanceData = body.instanceData
+  if (!instanceData || typeof instanceData !== "object") return false
+  const wid = (instanceData as Record<string, unknown>).wid
+  if (typeof wid !== "string" || !wid) return false
+
+  const senderData = body.senderData
+  if (!senderData || typeof senderData !== "object") return false
+  const sender = (senderData as Record<string, unknown>).sender ?? (senderData as Record<string, unknown>).chatId
+  return typeof sender === "string" && sender === wid
+}
+
 export type GreenApiInboundResult = {
   handled: boolean
   skipped?: string
@@ -53,6 +65,10 @@ export async function handleGreenApiInboundWebhook(payload: unknown): Promise<Gr
 
   if (isGroupChat(body.senderData)) {
     return { handled: false, skipped: "group_chat" }
+  }
+
+  if (isMessageFromInstance(body)) {
+    return { handled: false, skipped: "from_instance" }
   }
 
   const text = extractGreenApiIncomingText(body)
@@ -124,10 +140,17 @@ export async function handleGreenApiInboundWebhook(payload: unknown): Promise<Gr
     body: replyBody,
   })
 
-  return {
+  const result: GreenApiInboundResult = {
     handled: true,
     ruleId: rule.id,
     sendOk: send.ok,
     skipped: send.ok ? undefined : send.error ?? send.skipped,
   }
+  console.info("[whatsapp-inbound]", {
+    barbershopId: integration.barbershop.id,
+    ruleId: rule.id,
+    textPreview: text.slice(0, 80),
+    ...result,
+  })
+  return result
 }

@@ -5,6 +5,7 @@ import { resolveEffectivePlanForActiveSession } from "@/lib/barbershop-effective
 import { prisma } from "@/lib/prisma"
 import {
   GREEN_API_STATE_LABELS,
+  configureGreenApiInboundWebhook,
   resolveGreenApiBaseUrl,
   validateGreenApiCredentials,
 } from "@/lib/whatsapp-green-api"
@@ -247,6 +248,18 @@ export async function POST(request: Request) {
         greenApiBaseUrl,
       },
       select: SELECT_FIELDS,
+    })
+
+    void configureGreenApiInboundWebhook({
+      idInstance,
+      apiTokenInstance,
+      baseUrl: greenApiBaseUrl,
+    }).then((webhook) => {
+      if (webhook.ok) {
+        console.info("[whatsapp POST] webhook Green API configurado:", webhook.webhookUrl)
+      } else {
+        console.warn("[whatsapp POST] falha ao configurar webhook Green API:", webhook.error)
+      }
     })
 
     return NextResponse.json({

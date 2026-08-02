@@ -1,5 +1,6 @@
 import type { WhatsAppIntegration } from "@prisma/client"
 import { brWhatsappCheckCandidates, whatsappDigitsForCloudApi } from "@/lib/whatsapp-phone"
+import { resolvePublicBookingOrigin } from "@/lib/booking-public-url"
 
 /** Fallback quando a URL da instância ainda não foi resolvida. */
 export const GREEN_API_BASE_URL = "https://api.greenapi.com"
@@ -305,5 +306,47 @@ export async function sendGreenApiText(params: {
     return { ok: true, status: res.status, delivery: "text", idMessage: json.idMessage, checkWhatsapp: checkMeta }
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "fetch_failed" }
+  }
+}
+
+export function buildGreenApiWebhookUrl(): string {
+  const origin = resolvePublicBookingOrigin()
+  const secret = process.env.GREEN_API_WEBHOOK_SECRET?.trim()
+  const base = `${origin}/api/webhooks/green-api`
+  if (!secret) return base
+  return `${base}?secret=${encodeURIComponent(secret)}`
+}
+
+/** Registra URL de webhook na Green API para receber mensagens dos clientes. */
+export async function configureGreenApiInboundWebhook(params: {
+  idInstance: string
+  apiTokenInstance: string
+  baseUrl?: string | null
+}): Promise<{ ok: boolean; webhookUrl?: string; error?: string }> {
+  const id = params.idInstance.trim()
+  const token = params.apiTokenInstance.trim()
+  if (!id || !token) return { ok: false, error: "missing_credentials" }
+
+  const baseUrl =
+    params.baseUrl?.trim() || (await resolveGreenApiBaseUrl(id, token))
+  if (!baseUrl) return { ok: false, error: "green_api_base_url_unresolved" }
+
+  const webhookUrl = buildGreenApiWebhookUrl()
+  try {
+    const res = await fetch(greenApiUrl(baseUrl, "setSettings", id, token), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        webhookUrl,
+        incomingWebhook: "yes",
+      }),
+    })
+    const json = (await res.json().catch(() => ({}))) as { saveSettings?: boolean; error?: string }
+    if (!res.ok || json.saveSettings === false) {
+      return { ok: false, webhookUrl, error: json.error || res.statusText || "set_settings_failed" }
+    }
+    return { ok: true, webhookUrl }
+  } catch (e) {
+    return { ok: false, webhookUrl, error: e instanceof Error ? e.message : "fetch_failed" }
   }
 }

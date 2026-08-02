@@ -6,6 +6,7 @@ function normalizeForMatch(text: string): string {
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\bindereco\b/g, "endereco")
     .replace(/\s+/g, " ")
     .trim()
 }
@@ -68,6 +69,9 @@ export function extractGreenApiIncomingText(body: Record<string, unknown>): stri
   }
 
   if (type === "quotedMessage") {
+    const extended = md.extendedTextMessageData as Record<string, unknown> | undefined
+    const replyText = extended?.text
+    if (typeof replyText === "string" && replyText.trim()) return replyText.trim()
     const quoted = md.quotedMessage as Record<string, unknown> | undefined
     const text = quoted?.textMessage
     return typeof text === "string" ? text.trim() : null
