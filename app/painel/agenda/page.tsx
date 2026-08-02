@@ -856,7 +856,7 @@ export default function AgendaPage() {
   }
 
   return (
-    <div className="space-y-3 sm:space-y-6">
+    <div className="space-y-2 sm:space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
         <div>
           <h1 className="text-xl font-bold text-foreground sm:text-2xl">Agenda</h1>
@@ -1186,9 +1186,9 @@ export default function AgendaPage() {
         </Button>
       </div>
 
-      <Card className="bg-card border-border">
-        <CardContent className="p-2 sm:p-4">
-          <div className="flex items-center justify-between gap-2">
+      <Card className="border-border bg-card shadow-none">
+        <CardContent className="px-2 py-1 sm:p-4">
+          <div className="flex items-center justify-between gap-1 sm:gap-2">
             <Button
               variant="outline"
               size="icon"
@@ -1197,34 +1197,62 @@ export default function AgendaPage() {
                 else if (visao === "semana") mudarSemana(-1)
                 else mudarMes(-1)
               }}
-              className="h-8 w-8 shrink-0 border-border text-foreground hover:bg-secondary sm:h-10 sm:w-10"
+              className="h-7 w-7 shrink-0 border-border text-foreground hover:bg-secondary sm:h-10 sm:w-10"
             >
-              <ChevronLeft className="w-4 h-4" />
+              <ChevronLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             </Button>
 
-            <div className="min-w-0 flex-1 text-center px-1">
+            <div className="min-w-0 flex-1 text-center px-0.5 sm:px-1">
               {visao === "dia" ? (
                 <>
-                  <p className="text-sm font-semibold leading-tight text-foreground sm:text-lg">
+                  <p className="text-xs font-semibold leading-tight text-foreground sm:hidden">
                     {formatarData(dataSelecionada)}
+                    <span className="font-normal text-muted-foreground">
+                      {" · "}
+                      {dataSelecionada.toLocaleDateString("pt-BR", {
+                        day: "numeric",
+                        month: "short",
+                        year: "numeric",
+                      })}
+                    </span>
                   </p>
-                  <p className="text-[11px] leading-tight text-muted-foreground sm:text-sm">
-                    {dataSelecionada.toLocaleDateString("pt-BR", { day: "numeric", month: "long", year: "numeric" })}
-                  </p>
+                  <div className="hidden sm:block">
+                    <p className="text-lg font-semibold leading-tight text-foreground">
+                      {formatarData(dataSelecionada)}
+                    </p>
+                    <p className="text-sm leading-tight text-muted-foreground">
+                      {dataSelecionada.toLocaleDateString("pt-BR", {
+                        day: "numeric",
+                        month: "long",
+                        year: "numeric",
+                      })}
+                    </p>
+                  </div>
                 </>
               ) : visao === "semana" ? (
                 <>
-                  <p className="text-sm font-semibold leading-tight text-foreground sm:text-lg">
+                  <p className="text-xs font-semibold leading-tight text-foreground sm:hidden">
                     {formatarIntervaloSemana(dataSelecionada)}
+                    <span className="font-normal text-muted-foreground"> · seg–dom</span>
                   </p>
-                  <p className="text-[11px] leading-tight text-muted-foreground sm:text-sm">Segunda a domingo</p>
+                  <div className="hidden sm:block">
+                    <p className="text-lg font-semibold leading-tight text-foreground">
+                      {formatarIntervaloSemana(dataSelecionada)}
+                    </p>
+                    <p className="text-sm leading-tight text-muted-foreground">Segunda a domingo</p>
+                  </div>
                 </>
               ) : (
                 <>
-                  <p className="text-sm font-semibold leading-tight text-foreground sm:text-lg">
+                  <p className="text-xs font-semibold leading-tight text-foreground sm:hidden">
                     {dataSelecionada.toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}
                   </p>
-                  <p className="text-[11px] leading-tight text-muted-foreground sm:text-sm">Todos os dias deste mês</p>
+                  <div className="hidden sm:block">
+                    <p className="text-lg font-semibold leading-tight text-foreground">
+                      {dataSelecionada.toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}
+                    </p>
+                    <p className="text-sm leading-tight text-muted-foreground">Todos os dias deste mês</p>
+                  </div>
                 </>
               )}
             </div>
@@ -1237,44 +1265,44 @@ export default function AgendaPage() {
                 else if (visao === "semana") mudarSemana(1)
                 else mudarMes(1)
               }}
-              className="h-8 w-8 shrink-0 border-border text-foreground hover:bg-secondary sm:h-10 sm:w-10"
+              className="h-7 w-7 shrink-0 border-border text-foreground hover:bg-secondary sm:h-10 sm:w-10"
             >
-              <ChevronRight className="w-4 h-4" />
+              <ChevronRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             </Button>
           </div>
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-4 gap-1.5 sm:gap-4">
-        <Card className="bg-card border-border">
-          <CardContent className="p-2 text-center sm:p-4">
-            <p className="text-base font-bold leading-none text-foreground sm:text-2xl">{agendamentosFiltrados.length}</p>
-            <p className="mt-1 text-[10px] text-muted-foreground sm:text-xs">Total</p>
-          </CardContent>
-        </Card>
-        <Card className="bg-card border-border">
-          <CardContent className="p-2 text-center sm:p-4">
-            <p className="text-base font-bold leading-none text-green-500 sm:text-2xl">{totalConfirmados}</p>
-            <p className="mt-1 text-[10px] text-muted-foreground sm:text-xs">Confirmados</p>
-          </CardContent>
-        </Card>
-        <Card className="bg-card border-border">
-          <CardContent className="p-2 text-center sm:p-4">
-            <p className="text-base font-bold leading-none text-yellow-500 sm:text-2xl">{totalPendentes}</p>
-            <p className="mt-1 text-[10px] text-muted-foreground sm:text-xs">Pendentes</p>
-          </CardContent>
-        </Card>
-        <Card className="bg-card border-border">
-          <CardContent className="p-2 text-center sm:p-4">
-            <p className="text-[11px] font-bold leading-tight text-primary tabular-nums sm:text-2xl sm:leading-none">
-              R${totalFaturamento.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+      <div className="overflow-hidden rounded-lg border border-border bg-card sm:overflow-visible sm:rounded-none sm:border-0 sm:bg-transparent">
+        <div className="grid grid-cols-4 divide-x divide-border/60 sm:grid-cols-4 sm:gap-4 sm:divide-x-0">
+          <div className="px-0.5 py-1 text-center sm:rounded-lg sm:border sm:border-border sm:bg-card sm:p-4">
+            <p className="text-sm font-bold leading-none text-foreground sm:text-2xl">
+              {agendamentosFiltrados.length}
             </p>
-            <p className="mt-1 text-[10px] text-muted-foreground sm:text-xs">Previsto</p>
-          </CardContent>
-        </Card>
+            <p className="mt-0.5 text-[9px] leading-none text-muted-foreground sm:mt-1 sm:text-xs">Total</p>
+          </div>
+          <div className="px-0.5 py-1 text-center sm:rounded-lg sm:border sm:border-border sm:bg-card sm:p-4">
+            <p className="text-sm font-bold leading-none text-green-500 sm:text-2xl">{totalConfirmados}</p>
+            <p className="mt-0.5 text-[9px] leading-none text-muted-foreground sm:mt-1 sm:text-xs">Confirmados</p>
+          </div>
+          <div className="px-0.5 py-1 text-center sm:rounded-lg sm:border sm:border-border sm:bg-card sm:p-4">
+            <p className="text-sm font-bold leading-none text-yellow-500 sm:text-2xl">{totalPendentes}</p>
+            <p className="mt-0.5 text-[9px] leading-none text-muted-foreground sm:mt-1 sm:text-xs">Pendentes</p>
+          </div>
+          <div className="px-0.5 py-1 text-center sm:rounded-lg sm:border sm:border-border sm:bg-card sm:p-4">
+            <p className="text-[10px] font-bold leading-none text-primary tabular-nums sm:text-2xl">
+              R$
+              {totalFaturamento.toLocaleString("pt-BR", {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}
+            </p>
+            <p className="mt-0.5 text-[9px] leading-none text-muted-foreground sm:mt-1 sm:text-xs">Previsto</p>
+          </div>
+        </div>
       </div>
 
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:gap-2 sm:pb-2">
+      <div className="flex items-center gap-1 overflow-x-auto pb-0.5 sm:gap-2 sm:pb-2">
         <Filter className="w-4 h-4 text-muted-foreground flex-shrink-0" />
         {profissionais.map((prof) => (
           <Button
@@ -1293,9 +1321,9 @@ export default function AgendaPage() {
         ))}
       </div>
 
-      <Card className="bg-card border-border">
-        <CardHeader className="px-3 py-2 sm:px-6 sm:py-4">
-          <CardTitle className="text-base text-foreground sm:text-lg">Agendamentos</CardTitle>
+      <Card className="border-border bg-card">
+        <CardHeader className="px-3 py-1.5 sm:px-6 sm:py-4">
+          <CardTitle className="text-sm text-foreground sm:text-lg">Agendamentos</CardTitle>
         </CardHeader>
         <CardContent className="px-3 pb-3 pt-0 sm:px-6 sm:pb-6">
           <div className="space-y-3">
