@@ -11,6 +11,12 @@ import {
   matchWhatsAppAutoReplyRule,
   resolveWhatsAppAutoReplyRules,
 } from "@/lib/whatsapp-auto-reply-engine"
+import {
+  buildWhatsAppAutoReplyMenuText,
+  isWhatsAppAutoReplyMenuRequest,
+  matchWhatsAppAutoReplyRuleByMenuNumber,
+} from "@/lib/whatsapp-auto-reply-menu"
+import type { WhatsAppAutoReplyRule } from "@/lib/db/types"
 
 function unwrapGreenApiBody(payload: unknown): Record<string, unknown> | null {
   if (!payload || typeof payload !== "object") return null
@@ -53,6 +59,57 @@ export type GreenApiInboundResult = {
   skipped?: string
   ruleId?: string
   sendOk?: boolean
+}
+
+async function dispatchAutoReply(params: {
+  integration: {
+    apiToken: string | null
+    graphPhoneNumberId: string | null
+    greenApiBaseUrl: string | null
+  }
+  barbershop: { id: string; name: string; slug: string; settings: unknown }
+  senderPhone: string
+  senderName: string | null
+  settings: BarbershopSettings | null
+  rule: WhatsAppAutoReplyRule
+  textPreview: string
+}): Promise<GreenApiInboundResult> {
+  const { integration, barbershop, senderPhone, senderName, settings, rule, textPreview } = params
+
+  const vars = await buildWhatsAppAutoReplyContext(
+    {
+      barbershopId: barbershop.id,
+      barbershopName: barbershop.name,
+      slug: barbershop.slug,
+      senderPhone,
+      senderName,
+      settings,
+    },
+    rule.reply_template
+  )
+
+  const replyBody = renderWhatsAppAutoReplyTemplate(rule.reply_template, vars)
+  if (!replyBody) return { handled: false, skipped: "empty_reply" }
+
+  const send = await sendGreenApiText({
+    integration,
+    toDigits: senderPhone,
+    body: replyBody,
+  })
+
+  const result: GreenApiInboundResult = {
+    handled: true,
+    ruleId: rule.id,
+    sendOk: send.ok,
+    skipped: send.ok ? undefined : send.error ?? send.skipped,
+  }
+  console.info("[whatsapp-inbound]", {
+    barbershopId: barbershop.id,
+    ruleId: rule.id,
+    textPreview: textPreview.slice(0, 80),
+    ...result,
+  })
+  return result
 }
 
 export async function handleGreenApiInboundWebhook(payload: unknown): Promise<GreenApiInboundResult> {
@@ -108,8 +165,8 @@ export async function handleGreenApiInboundWebhook(payload: unknown): Promise<Gr
   }
 
   const rules = resolveWhatsAppAutoReplyRules(autoReplySettings)
-  const rule = matchWhatsAppAutoReplyRule(text, rules)
-  if (!rule) return { handled: false, skipped: "no_keyword_match" }
+  let rule = matchWhatsAppAutoReplyRule(text, rules)
+  if (!rule) rule = matchWhatsAppAutoReplyRuleByMenuNumber(text, rules)
 
   const senderPhone = extractSenderPhone(body.senderData)
   if (!senderPhone) return { handled: false, skipped: "no_sender_phone" }
@@ -124,38 +181,32 @@ export async function handleGreenApiInboundWebhook(payload: unknown): Promise<Gr
         ? senderData.senderName
         : null
 
-  const vars = await buildWhatsAppAutoReplyContext(
-    {
-      barbershopId: integration.barbershop.id,
-      barbershopName: integration.barbershop.name,
-      slug: integration.barbershop.slug,
-      senderPhone,
-      senderName,
-      settings,
-    },
-    rule.reply_template
-  )
+  if (!rule) {
+    const showMenu =
+      autoReplySettings?.show_menu_on_unknown !== false || isWhatsAppAutoReplyMenuRequest(text)
+    if (!showMenu) return { handled: false, skipped: "no_keyword_match" }
 
-  const replyBody = renderWhatsAppAutoReplyTemplate(rule.reply_template, vars)
-  if (!replyBody) return { handled: false, skipped: "empty_reply" }
-
-  const send = await sendGreenApiText({
-    integration,
-    toDigits: senderPhone,
-    body: replyBody,
-  })
-
-  const result: GreenApiInboundResult = {
-    handled: true,
-    ruleId: rule.id,
-    sendOk: send.ok,
-    skipped: send.ok ? undefined : send.error ?? send.skipped,
+    const menuBody = buildWhatsAppAutoReplyMenuText(rules, integration.barbershop.name)
+    const send = await sendGreenApiText({
+      integration,
+      toDigits: senderPhone,
+      body: menuBody,
+    })
+    return {
+      handled: true,
+      ruleId: "menu",
+      sendOk: send.ok,
+      skipped: send.ok ? undefined : send.error ?? send.skipped,
+    }
   }
-  console.info("[whatsapp-inbound]", {
-    barbershopId: integration.barbershop.id,
-    ruleId: rule.id,
-    textPreview: text.slice(0, 80),
-    ...result,
+
+  return dispatchAutoReply({
+    integration,
+    barbershop: integration.barbershop,
+    senderPhone,
+    senderName,
+    settings,
+    rule,
+    textPreview: text,
   })
-  return result
 }

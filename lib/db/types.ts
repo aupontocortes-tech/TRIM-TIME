@@ -90,6 +90,8 @@ export type WhatsAppAutoReplyRule = {
 
 export type WhatsAppAutoReplySettings = {
   enabled?: boolean
+  /** Se true (padrão), mensagem sem palavra-chave recebe menu numerado 1–10. */
+  show_menu_on_unknown?: boolean
   rules?: WhatsAppAutoReplyRule[]
 }
 
