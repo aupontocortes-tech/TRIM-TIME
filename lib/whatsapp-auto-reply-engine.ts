@@ -84,12 +84,7 @@ const GREEN_API_AUDIO_MESSAGE_TYPES = new Set(["audioMessage", "pttMessage"])
 
 /** Resposta automática quando o cliente manda áudio (não processamos voz). */
 export const WHATSAPP_AUDIO_ONLY_REPLY_TEXT =
-  "Olá! Este atendimento automático só entende mensagens *por escrito*.\n\n" +
-  "Por favor, *digite* sua pergunta em texto — por exemplo:\n" +
-  "• agendar\n" +
-  "• tem horário para hoje\n" +
-  "• onde fica\n" +
-  "• meu horário"
+  "Só atendemos por *texto* — áudio não funciona aqui.\nDigite sua pergunta (ex.: agendar, onde fica, meu horário)."
 
 export function getGreenApiIncomingMessageKind(
   body: Record<string, unknown>
