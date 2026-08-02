@@ -16,6 +16,7 @@ import type {
   BarbershopUnit,
   SubscriptionPlan,
   RetailProduct,
+  WhatsAppAutoReplyRule,
 } from "@/lib/db/types"
 import {
   bookingRulesFromSettings,
@@ -114,6 +115,8 @@ import { cn } from "@/lib/utils"
 import { planSalesButtonVariant, planSalesTheme } from "@/lib/plan-sales-theme"
 import { BarberPhotoAdjust } from "@/components/barber-photo-adjust"
 import { WhatsAppConnectWizard } from "@/components/painel/whatsapp-connect-wizard"
+import { WhatsAppAutoRepliesSettings } from "@/components/painel/whatsapp-auto-replies-settings"
+import { DEFAULT_WHATSAPP_AUTO_REPLY_RULES } from "@/lib/whatsapp-auto-reply-defaults"
 import { GREEN_API_FIELD_COPY } from "@/lib/whatsapp-green-api"
 import { ChangePasswordForm } from "@/components/account/change-password-form"
 import { DeleteAccountSection } from "@/components/account/delete-account-section"
@@ -406,6 +409,10 @@ export default function ConfiguracoesPage() {
   const [notifEmailTpl, setNotifEmailTpl] = useState(DEFAULT_EMAIL_REMINDER)
   const [notifEmailConfirmTpl, setNotifEmailConfirmTpl] = useState(DEFAULT_EMAIL_CONFIRMATION)
   const [notifEmailPostTpl, setNotifEmailPostTpl] = useState(DEFAULT_EMAIL_POST_SERVICE)
+  const [notifWaAutoReplyEnabled, setNotifWaAutoReplyEnabled] = useState(true)
+  const [notifWaAutoReplyRules, setNotifWaAutoReplyRules] = useState<WhatsAppAutoReplyRule[]>(
+    DEFAULT_WHATSAPP_AUTO_REPLY_RULES
+  )
   const [notifBusy, setNotifBusy] = useState(false)
   const [notifOk, setNotifOk] = useState(false)
   const [notifError, setNotifError] = useState<string | null>(null)
@@ -501,6 +508,8 @@ export default function ConfiguracoesPage() {
       setNotifMetaTplConfirm("")
       setNotifMetaTplReminder("")
       setNotifMetaTplPost("")
+      setNotifWaAutoReplyEnabled(true)
+      setNotifWaAutoReplyRules(DEFAULT_WHATSAPP_AUTO_REPLY_RULES.map((r) => ({ ...r })))
       return
     }
     const offs = (ns.reminder_offsets_minutes ?? [60]).filter((m) => ALLOWED_REMINDER_MINUTES.has(m))
@@ -541,6 +550,18 @@ export default function ConfiguracoesPage() {
     setNotifMetaTplConfirm(ns.whatsapp_meta_template_confirmation?.trim() ?? "")
     setNotifMetaTplReminder(ns.whatsapp_meta_template_reminder?.trim() ?? "")
     setNotifMetaTplPost(ns.whatsapp_meta_template_post_service?.trim() ?? "")
+    const ar = ns.whatsapp_auto_replies
+    setNotifWaAutoReplyEnabled(ar?.enabled !== false)
+    setNotifWaAutoReplyRules(
+      ar?.rules?.length
+        ? ar.rules.map((r) => ({
+            id: r.id,
+            enabled: r.enabled,
+            keywords: [...r.keywords],
+            reply_template: r.reply_template,
+          }))
+        : DEFAULT_WHATSAPP_AUTO_REPLY_RULES.map((r) => ({ ...r }))
+    )
   }, [
     barbershop?.id,
     barbershop?.updated_at,
@@ -789,6 +810,10 @@ export default function ConfiguracoesPage() {
     () => getBookingLinkReadiness(listaServicos, shopBarbersForReadiness),
     [listaServicos, shopBarbersForReadiness]
   )
+  const waWebhookUrl = useMemo(() => {
+    if (typeof window === "undefined") return "/api/webhooks/green-api"
+    return `${window.location.origin}/api/webhooks/green-api`
+  }, [])
   const bookingLinkSetupMessage = bookingLinkReadinessMessage(bookingLinkReadiness)
   const bookingLinkSetupLoaded = !servicosLoading && !shopBarbersReadinessLoading
 
@@ -1575,6 +1600,17 @@ export default function ConfiguracoesPage() {
               whatsapp_meta_template_confirmation: notifMetaTplConfirm.trim(),
               whatsapp_meta_template_reminder: notifMetaTplReminder.trim(),
               whatsapp_meta_template_post_service: notifMetaTplPost.trim(),
+              whatsapp_auto_replies: {
+                enabled: notifWaAutoReplyEnabled,
+                rules: notifWaAutoReplyRules
+                  .map((r) => ({
+                    id: r.id,
+                    enabled: r.enabled,
+                    keywords: r.keywords.map((k) => k.trim()).filter(Boolean),
+                    reply_template: r.reply_template.trim(),
+                  }))
+                  .filter((r) => r.keywords.length > 0 && r.reply_template),
+              },
             },
           },
         }),
@@ -4714,6 +4750,16 @@ export default function ConfiguracoesPage() {
                   )}
                 </CardContent>
               </Card>
+
+              {whatsappIntegrationFeature ? (
+                <WhatsAppAutoRepliesSettings
+                  enabled={notifWaAutoReplyEnabled}
+                  rules={notifWaAutoReplyRules}
+                  webhookUrl={waWebhookUrl}
+                  onEnabledChange={setNotifWaAutoReplyEnabled}
+                  onRulesChange={setNotifWaAutoReplyRules}
+                />
+              ) : null}
 
               <Card className="bg-card border-border">
                 <CardHeader>

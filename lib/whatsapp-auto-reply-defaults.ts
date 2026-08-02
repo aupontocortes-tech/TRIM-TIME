@@ -1,0 +1,60 @@
+import type { WhatsAppAutoReplyRule } from "@/lib/db/types"
+
+export const DEFAULT_WHATSAPP_AUTO_REPLY_RULES: WhatsAppAutoReplyRule[] = [
+  {
+    id: "endereco",
+    enabled: true,
+    keywords: [
+      "endereço",
+      "endereco",
+      "onde fica",
+      "onde é",
+      "onde e",
+      "localização",
+      "localizacao",
+      "como chegar",
+      "qual endereço",
+      "qual endereco",
+    ],
+    reply_template: "{{barbearia}}\n{{endereco}}\n{{maps}}",
+  },
+  {
+    id: "horario",
+    enabled: true,
+    keywords: [
+      "meu horário",
+      "meu horario",
+      "qual horário",
+      "qual horario",
+      "tenho agendamento",
+      "meu agendamento",
+      "quando é",
+      "quando e",
+      "qual meu horario",
+      "qual meu horário",
+    ],
+    reply_template: "{{proximo_agendamento}}",
+  },
+  {
+    id: "unidades",
+    enabled: true,
+    keywords: ["quantas lojas", "quantas unidades", "unidades", "filiais", "lojas", "quantas filiais"],
+    reply_template: "{{lista_unidades}}",
+  },
+  {
+    id: "agendar",
+    enabled: true,
+    keywords: [
+      "agendar",
+      "marcar horário",
+      "marcar horario",
+      "marcação",
+      "marcacao",
+      "quero cortar",
+      "horário disponível",
+      "horario disponivel",
+      "quero agendar",
+    ],
+    reply_template: "Para agendar, acesse:\n{{link_agendamento}}",
+  },
+]

@@ -75,6 +75,22 @@ export type BarbershopNotificationSettings = {
   whatsapp_meta_template_confirmation?: string
   whatsapp_meta_template_reminder?: string
   whatsapp_meta_template_post_service?: string
+  /** Respostas automáticas quando o cliente manda mensagem no WhatsApp (palavras-chave). */
+  whatsapp_auto_replies?: WhatsAppAutoReplySettings
+}
+
+export type WhatsAppAutoReplyRule = {
+  id?: string
+  enabled?: boolean
+  /** Palavras ou frases que o cliente pode mandar (ex.: endereço, onde fica). */
+  keywords: string[]
+  /** Texto de resposta; aceita {{nome_cliente}}, {{endereco}}, {{proximo_agendamento}}, etc. */
+  reply_template: string
+}
+
+export type WhatsAppAutoReplySettings = {
+  enabled?: boolean
+  rules?: WhatsAppAutoReplyRule[]
 }
 
 /** Programa de fidelidade configurável pelo dono (plano Premium). */
