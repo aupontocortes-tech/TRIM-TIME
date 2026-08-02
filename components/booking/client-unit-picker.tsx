@@ -156,7 +156,13 @@ export function ClientUnitPicker({
 
   const selectedUnit = units.find((u) => u.id === selectedUnitId) ?? null
   const draftUnit = units.find((u) => u.id === draftId) ?? null
+  const singleUnit = units.length === 1 ? units[0]! : null
   const needsPick = units.length > 1 && !selectedUnitId
+
+  useEffect(() => {
+    if (!singleUnit) return
+    if (selectedUnitId !== singleUnit.id) onConfirm(singleUnit.id)
+  }, [singleUnit, selectedUnitId, onConfirm])
 
   const openSheet = () => {
     setDraftId(selectedUnitId ?? units[0]?.id ?? null)
@@ -167,6 +173,30 @@ export function ClientUnitPicker({
     if (!draftId) return
     onConfirm(draftId)
     setOpen(false)
+  }
+
+  if (singleUnit) {
+    const displayUnit = selectedUnit ?? singleUnit
+    const accent = unitPickerAccent(0)
+    return (
+      <div className="w-full rounded-xl border-2 p-4 border-primary/35 bg-card/90">
+        <div className="flex items-start gap-3">
+          <div
+            className={cn(
+              "w-11 h-11 rounded-full flex items-center justify-center shrink-0",
+              accent.circle
+            )}
+          >
+            <Building2 className="w-5 h-5 text-white" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-lg font-extrabold text-primary tracking-tight">Unidade</p>
+            <p className="text-sm font-semibold text-foreground mt-1">{displayUnit.name}</p>
+            <UnitAddressLine unit={displayUnit} />
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
