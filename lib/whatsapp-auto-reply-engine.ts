@@ -11,17 +11,26 @@ function normalizeForMatch(text: string): string {
     .trim()
 }
 
+function normalizeAutoReplyRule(r: WhatsAppAutoReplyRule): WhatsAppAutoReplyRule {
+  return {
+    id: r.id || `rule-${r.keywords[0]}`,
+    enabled: r.enabled !== false,
+    keywords: r.keywords.map((k) => k.trim()).filter(Boolean),
+    reply_template: r.reply_template.trim(),
+  }
+}
+
 export function resolveWhatsAppAutoReplyRules(
   settings: WhatsAppAutoReplySettings | null | undefined
 ): WhatsAppAutoReplyRule[] {
   const custom = settings?.rules?.filter((r) => r.keywords?.length && r.reply_template?.trim())
   if (custom?.length) {
-    return custom.map((r) => ({
-      id: r.id || `rule-${r.keywords[0]}`,
-      enabled: r.enabled !== false,
-      keywords: r.keywords.map((k) => k.trim()).filter(Boolean),
-      reply_template: r.reply_template.trim(),
-    }))
+    const normalized = custom.map(normalizeAutoReplyRule)
+    const ids = new Set(normalized.map((r) => r.id))
+    const missing = DEFAULT_WHATSAPP_AUTO_REPLY_RULES.filter((d) => d.id && !ids.has(d.id)).map(
+      normalizeAutoReplyRule
+    )
+    return missing.length ? [...normalized, ...missing] : normalized
   }
   return DEFAULT_WHATSAPP_AUTO_REPLY_RULES
 }

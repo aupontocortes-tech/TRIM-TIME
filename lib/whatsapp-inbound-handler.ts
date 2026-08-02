@@ -124,14 +124,17 @@ export async function handleGreenApiInboundWebhook(payload: unknown): Promise<Gr
         ? senderData.senderName
         : null
 
-  const vars = await buildWhatsAppAutoReplyContext({
-    barbershopId: integration.barbershop.id,
-    barbershopName: integration.barbershop.name,
-    slug: integration.barbershop.slug,
-    senderPhone,
-    senderName,
-    settings,
-  })
+  const vars = await buildWhatsAppAutoReplyContext(
+    {
+      barbershopId: integration.barbershop.id,
+      barbershopName: integration.barbershop.name,
+      slug: integration.barbershop.slug,
+      senderPhone,
+      senderName,
+      settings,
+    },
+    rule.reply_template
+  )
 
   const replyBody = renderWhatsAppAutoReplyTemplate(rule.reply_template, vars)
   if (!replyBody) return { handled: false, skipped: "empty_reply" }

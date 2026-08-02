@@ -2,7 +2,10 @@
 
 import { Plus, RotateCcw, Trash2 } from "lucide-react"
 import type { WhatsAppAutoReplyRule } from "@/lib/db/types"
-import { DEFAULT_WHATSAPP_AUTO_REPLY_RULES } from "@/lib/whatsapp-auto-reply-defaults"
+import {
+  DEFAULT_WHATSAPP_AUTO_REPLY_RULES,
+  WHATSAPP_AUTO_REPLY_RULE_LABELS,
+} from "@/lib/whatsapp-auto-reply-defaults"
 import { NOTIFICATION_TEMPLATE_VARIABLE_HELP } from "@/lib/notification-template"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -12,10 +15,19 @@ import { Textarea } from "@/components/ui/textarea"
 import { Field, FieldLabel } from "@/components/ui/field"
 
 const AUTO_REPLY_EXTRA_VARS = [
-  { tag: "{{proximo_agendamento}}", desc: "Próximo horário do cliente (pelo telefone)" },
-  { tag: "{{lista_unidades}}", desc: "Lista de unidades / endereços" },
-  { tag: "{{link_agendamento}}", desc: "Link público para agendar" },
+  { tag: "{{proximo_agendamento}}", desc: "Próximo horário do cliente (pelo telefone)", group: "Agendamento" },
+  { tag: "{{profissional_agendamento}}", desc: "Profissional do próximo horário", group: "Agendamento" },
+  { tag: "{{confirmar_resposta}}", desc: "Confirma vaga ou horário pendente (ação automática)", group: "Agendamento" },
+  { tag: "{{cancelar_remarcar}}", desc: "Instruções para cancelar/remarcar + link", group: "Agendamento" },
+  { tag: "{{lista_espera}}", desc: "Status da fila + link para confirmar vaga", group: "Lista de espera" },
+  { tag: "{{lista_servicos}}", desc: "Serviços ativos com preços", group: "Informações" },
+  { tag: "{{horario_funcionamento}}", desc: "Dias e horários de abertura", group: "Informações" },
+  { tag: "{{lista_profissionais}}", desc: "Profissionais ativos + link", group: "Informações" },
+  { tag: "{{lista_unidades}}", desc: "Unidades e endereços", group: "Informações" },
+  { tag: "{{link_agendamento}}", desc: "Link público /b/slug", group: "Informações" },
 ] as const
+
+const VAR_GROUPS = ["Agendamento", "Lista de espera", "Informações"] as const
 
 type WhatsAppAutoRepliesSettingsProps = {
   enabled: boolean
@@ -29,6 +41,23 @@ function newRuleId() {
   return `custom-${Date.now().toString(36)}`
 }
 
+function ruleLabel(rule: WhatsAppAutoReplyRule, index: number): string {
+  if (rule.id && WHATSAPP_AUTO_REPLY_RULE_LABELS[rule.id]) {
+    return WHATSAPP_AUTO_REPLY_RULE_LABELS[rule.id]
+  }
+  return `Personalizada ${index + 1}`
+}
+
+function sortRulesByDefaultOrder(rules: WhatsAppAutoReplyRule[]): WhatsAppAutoReplyRule[] {
+  const order = DEFAULT_WHATSAPP_AUTO_REPLY_RULES.map((r) => r.id)
+  return [...rules].sort((a, b) => {
+    const ia = a.id ? order.indexOf(a.id) : 999
+    const ib = b.id ? order.indexOf(b.id) : 999
+    if (ia !== ib) return ia - ib
+    return 0
+  })
+}
+
 export function WhatsAppAutoRepliesSettings({
   enabled,
   rules,
@@ -36,12 +65,26 @@ export function WhatsAppAutoRepliesSettings({
   onEnabledChange,
   onRulesChange,
 }: WhatsAppAutoRepliesSettingsProps) {
-  const updateRule = (index: number, patch: Partial<WhatsAppAutoReplyRule>) => {
-    onRulesChange(rules.map((r, i) => (i === index ? { ...r, ...patch } : r)))
+  const sortedRules = sortRulesByDefaultOrder(rules)
+
+  const updateRule = (rule: WhatsAppAutoReplyRule, patch: Partial<WhatsAppAutoReplyRule>) => {
+    onRulesChange(
+      rules.map((r) => {
+        if (rule.id && r.id === rule.id) return { ...r, ...patch }
+        if (!rule.id && r === rule) return { ...r, ...patch }
+        return r
+      })
+    )
   }
 
-  const removeRule = (index: number) => {
-    onRulesChange(rules.filter((_, i) => i !== index))
+  const removeRule = (rule: WhatsAppAutoReplyRule) => {
+    onRulesChange(
+      rules.filter((r) => {
+        if (rule.id && r.id === rule.id) return false
+        if (!rule.id && r === rule) return false
+        return true
+      })
+    )
   }
 
   const addRule = () => {
@@ -61,8 +104,8 @@ export function WhatsAppAutoRepliesSettings({
       <CardHeader>
         <CardTitle className="text-base text-foreground">Respostas automáticas (palavras-chave)</CardTitle>
         <CardDescription className="text-muted-foreground">
-          Quando o cliente mandar mensagem no WhatsApp da barbearia, o Trim Time responde se a frase contiver uma
-          palavra-chave configurada abaixo.
+          O cliente manda mensagem no WhatsApp da barbearia; se bater uma palavra-chave, o Trim Time responde na hora
+          (endereço, horários, confirmação, lista de espera, etc.).
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 max-w-2xl">
@@ -83,30 +126,31 @@ export function WhatsAppAutoRepliesSettings({
             >
               console.green-api.com
             </a>
-            , abra sua instância → Configurações → cole esta URL de webhook:
+            , abra sua instância → Configurações → cole esta URL:
           </p>
           <code className="block break-all rounded bg-background/80 px-2 py-1.5 text-[11px] text-foreground">
             {webhookUrl}
           </code>
         </div>
 
-        <div className="space-y-4">
-          {rules.map((rule, index) => (
-            <div key={rule.id ?? index} className="rounded-lg border border-border p-3 space-y-3">
+        <div className="space-y-3">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Regras configuradas</p>
+          {sortedRules.map((rule, index) => (
+            <div key={rule.id ?? `rule-${index}`} className="rounded-lg border border-border p-3 space-y-3">
               <div className="flex items-center justify-between gap-2">
-                <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer">
+                <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer min-w-0">
                   <Checkbox
                     checked={rule.enabled !== false}
-                    onCheckedChange={(v) => updateRule(index, { enabled: v === true })}
+                    onCheckedChange={(v) => updateRule(rule, { enabled: v === true })}
                   />
-                  Regra {index + 1}
+                  <span className="truncate">{ruleLabel(rule, index)}</span>
                 </label>
                 <Button
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                  onClick={() => removeRule(index)}
+                  className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+                  onClick={() => removeRule(rule)}
                   aria-label="Remover regra"
                 >
                   <Trash2 className="h-4 w-4" />
@@ -118,7 +162,7 @@ export function WhatsAppAutoRepliesSettings({
                   className="mt-1 bg-input border-border text-foreground"
                   value={rule.keywords.join(", ")}
                   onChange={(e) =>
-                    updateRule(index, {
+                    updateRule(rule, {
                       keywords: e.target.value
                         .split(",")
                         .map((k) => k.trim())
@@ -133,7 +177,7 @@ export function WhatsAppAutoRepliesSettings({
                 <Textarea
                   className="mt-1 min-h-[72px] bg-input border-border text-foreground"
                   value={rule.reply_template}
-                  onChange={(e) => updateRule(index, { reply_template: e.target.value })}
+                  onChange={(e) => updateRule(rule, { reply_template: e.target.value })}
                 />
               </Field>
             </div>
@@ -157,10 +201,10 @@ export function WhatsAppAutoRepliesSettings({
           </Button>
         </div>
 
-        <div className="rounded-lg border border-border bg-muted/40 p-3">
-          <p className="mb-2 text-xs font-medium text-foreground">Palavras automáticas na resposta:</p>
+        <div className="rounded-lg border border-border bg-muted/40 p-3 space-y-3">
+          <p className="text-xs font-medium text-foreground">Variáveis disponíveis na resposta</p>
           <div className="flex flex-wrap gap-1.5">
-            {[...NOTIFICATION_TEMPLATE_VARIABLE_HELP, ...AUTO_REPLY_EXTRA_VARS].map((v) => (
+            {NOTIFICATION_TEMPLATE_VARIABLE_HELP.map((v) => (
               <span
                 key={v.tag}
                 className="inline-flex items-center rounded-md bg-primary/10 px-2 py-0.5 font-mono text-[11px] text-primary"
@@ -170,6 +214,22 @@ export function WhatsAppAutoRepliesSettings({
               </span>
             ))}
           </div>
+          {VAR_GROUPS.map((group) => (
+            <div key={group}>
+              <p className="text-[11px] font-medium text-muted-foreground mb-1.5">{group}</p>
+              <div className="flex flex-wrap gap-1.5">
+                {AUTO_REPLY_EXTRA_VARS.filter((v) => v.group === group).map((v) => (
+                  <span
+                    key={v.tag}
+                    className="inline-flex items-center rounded-md bg-primary/10 px-2 py-0.5 font-mono text-[11px] text-primary"
+                    title={v.desc}
+                  >
+                    {v.tag}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       </CardContent>
     </Card>
