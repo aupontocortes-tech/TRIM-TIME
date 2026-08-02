@@ -200,7 +200,7 @@ export function ClientUnitPicker({
             />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-base font-bold text-foreground tracking-tight">
+            <p className="text-lg font-extrabold text-primary tracking-tight">
               Escolha a unidade
             </p>
             {selectedUnit ? (
