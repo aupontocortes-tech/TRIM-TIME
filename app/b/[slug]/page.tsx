@@ -2765,19 +2765,19 @@ export default function BarbeariaPage() {
               <span>{displayCityLine}</span>
             </div>
           </div>
-          <div className="flex flex-wrap gap-4 text-sm text-muted-foreground mb-4">
+          <div className="flex flex-col gap-2 text-sm text-muted-foreground mb-4 sm:flex-row sm:flex-wrap sm:gap-4">
             {displayPhone ? (
               <a
                 href={`tel:${displayPhone.replace(/\D/g, "")}`}
-                className="flex items-center gap-1 hover:text-primary transition-colors"
+                className="flex min-w-0 items-center gap-1.5 hover:text-primary transition-colors"
               >
                 <Phone className="w-4 h-4 shrink-0" />
-                {displayPhone}
+                <span className="break-all">{displayPhone}</span>
               </a>
             ) : null}
-            <div className="flex items-center gap-1">
-              <Clock className="w-4 h-4" />
-              <span>{displayHorarioFuncionamento ?? "—"}</span>
+            <div className="flex min-w-0 items-start gap-1.5">
+              <Clock className="w-4 h-4 shrink-0 mt-0.5" />
+              <span className="leading-snug">{displayHorarioFuncionamento ?? "—"}</span>
             </div>
           </div>
 
@@ -2872,32 +2872,58 @@ export default function BarbeariaPage() {
         </div>
       ) : null}
 
-      {/* Indicador de Etapas */}
+      {/* Indicador de Etapas — grid evita sobreposição em telas estreitas (~320px) */}
       <div className="max-w-2xl mx-auto px-4 mb-6">
-        <div className="flex items-center justify-between">
-          {[1, 2, 3, 4].map((step) => (
-            <div key={step} className="flex items-center">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors
-                ${etapa >= step 
-                  ? 'bg-primary text-primary-foreground' 
-                  : 'bg-secondary text-muted-foreground'
-                }`}
-              >
-                {etapa > step ? <Check className="w-4 h-4" /> : step}
+        <div className="grid grid-cols-4 gap-x-0.5 sm:gap-x-1">
+          {(
+            [
+              { step: 1, label: "Serviços" },
+              { step: 2, label: "Profissional" },
+              { step: 3, label: "Horário" },
+              { step: 4, label: "Confirmar" },
+            ] as const
+          ).map(({ step, label }, index) => (
+            <div key={step} className="flex min-w-0 flex-col items-center">
+              <div className="flex w-full items-center justify-center">
+                {index > 0 ? (
+                  <div
+                    className={`h-0.5 sm:h-1 min-w-1 flex-1 transition-colors ${
+                      etapa > index ? "bg-primary" : "bg-secondary"
+                    }`}
+                    aria-hidden
+                  />
+                ) : (
+                  <span className="min-w-1 flex-1 sm:hidden" aria-hidden />
+                )}
+                <div
+                  className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-medium transition-colors sm:h-8 sm:w-8 sm:text-sm ${
+                    etapa >= step
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-secondary text-muted-foreground"
+                  }`}
+                >
+                  {etapa > step ? (
+                    <Check className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                  ) : (
+                    step
+                  )}
+                </div>
+                {index < 3 ? (
+                  <div
+                    className={`h-0.5 sm:h-1 min-w-1 flex-1 transition-colors ${
+                      etapa > step ? "bg-primary" : "bg-secondary"
+                    }`}
+                    aria-hidden
+                  />
+                ) : (
+                  <span className="min-w-1 flex-1 sm:hidden" aria-hidden />
+                )}
               </div>
-              {step < 4 && (
-                <div className={`w-12 sm:w-20 h-1 mx-1 transition-colors
-                  ${etapa > step ? 'bg-primary' : 'bg-secondary'}`} 
-                />
-              )}
+              <span className="mt-1.5 w-full truncate px-0.5 text-center text-[10px] leading-tight text-muted-foreground sm:mt-2 sm:text-xs">
+                {label}
+              </span>
             </div>
           ))}
-        </div>
-        <div className="flex justify-between mt-2 text-xs text-muted-foreground">
-          <span>Serviços</span>
-          <span>Profissional</span>
-          <span>Horário</span>
-          <span>Confirmar</span>
         </div>
       </div>
 
@@ -2925,8 +2951,8 @@ export default function BarbeariaPage() {
                   onClick={() => toggleServico(servico.id)}
                 >
                   <CardContent className="p-4 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors
                         ${servicosSelecionados.includes(servico.id) 
                           ? 'border-primary bg-primary' 
                           : 'border-muted-foreground'
@@ -2946,7 +2972,7 @@ export default function BarbeariaPage() {
                         ) : null}
                       </div>
                     </div>
-                    <span className="text-primary font-semibold">R$ {servico.preco}</span>
+                    <span className="text-primary font-semibold shrink-0 tabular-nums">R$ {servico.preco}</span>
                   </CardContent>
                 </Card>
               ))}
@@ -2977,7 +3003,7 @@ export default function BarbeariaPage() {
                   onClick={() => setProfissionalSelecionado(profissional.id)}
                 >
                   <CardContent className="p-4 flex items-center gap-4">
-                    <Avatar className="w-14 h-14 border-2 border-primary/20 overflow-hidden">
+                    <Avatar className="w-14 h-14 border-2 border-primary/20 overflow-hidden shrink-0">
                       <AvatarImage
                         src={profissional.foto}
                         className="object-cover w-full h-full"
@@ -2994,7 +3020,7 @@ export default function BarbeariaPage() {
                       <p className="font-medium text-foreground">{profissional.nome}</p>
                       <p className="text-sm text-muted-foreground">{profissional.especialidade}</p>
                     </div>
-                    <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors
+                    <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors
                       ${profissionalSelecionado === profissional.id 
                         ? 'border-primary bg-primary' 
                         : 'border-muted-foreground'
@@ -3114,7 +3140,7 @@ export default function BarbeariaPage() {
             <Card className="mb-6 border-primary/20">
               <CardContent className="p-4 space-y-3">
                 <div className="flex items-center gap-3 pb-3 border-b border-border">
-                  <Calendar className="w-5 h-5 text-primary" />
+                  <Calendar className="w-5 h-5 text-primary shrink-0" />
                   <div>
                     <p className="text-sm text-muted-foreground">Data e Horário</p>
                     <p className="font-medium text-foreground">
@@ -3125,7 +3151,7 @@ export default function BarbeariaPage() {
 
                 {selectedUnit ? (
                   <div className="flex items-center gap-3 pb-3 border-b border-border">
-                    <Building2 className="w-5 h-5 text-primary" />
+                    <Building2 className="w-5 h-5 text-primary shrink-0" />
                     <div>
                       <p className="text-sm text-muted-foreground">Unidade</p>
                       <p className="font-medium text-foreground">{selectedUnit.name}</p>
@@ -3134,7 +3160,7 @@ export default function BarbeariaPage() {
                 ) : null}
                 
                 <div className="flex items-center gap-3 pb-3 border-b border-border">
-                  <Scissors className="w-5 h-5 text-primary" />
+                  <Scissors className="w-5 h-5 text-primary shrink-0" />
                   <div>
                     <p className="text-sm text-muted-foreground">Serviços</p>
                     <p className="font-medium text-foreground">
@@ -3144,7 +3170,7 @@ export default function BarbeariaPage() {
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <Avatar className="w-10 h-10">
+                  <Avatar className="w-10 h-10 shrink-0">
                     <AvatarFallback className="bg-primary/10 text-primary text-sm">
                       {profissionalData?.nome.split(' ').map(n => n[0]).join('')}
                     </AvatarFallback>
@@ -3331,29 +3357,29 @@ export default function BarbeariaPage() {
             </div>
           )}
           
-          <div className="flex gap-3">
+          <div className="flex gap-2 sm:gap-3">
             {etapa > 1 ? (
               <Button
                 variant="outline"
                 onClick={() => setEtapa(etapa - 1)}
-                className="border-border text-foreground hover:bg-secondary"
+                className="shrink-0 border-border px-3 text-foreground hover:bg-secondary sm:px-4"
               >
-                <ChevronLeft className="w-4 h-4 mr-1" />
+                <ChevronLeft className="w-4 h-4 mr-1 shrink-0" />
                 Voltar
               </Button>
             ) : isRemarcando ? (
               <Button
                 variant="outline"
                 onClick={voltarDaRemarcacao}
-                className="border-border text-foreground hover:bg-secondary"
+                className="shrink-0 border-border px-3 text-foreground hover:bg-secondary sm:px-4"
               >
-                <ChevronLeft className="w-4 h-4 mr-1" />
+                <ChevronLeft className="w-4 h-4 mr-1 shrink-0" />
                 Voltar
               </Button>
             ) : null}
             
             <Button
-              className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
+              className="min-w-0 flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
               disabled={!podeAvancar() || bookingLoading}
               onClick={() => {
                 if (etapa < 4) {

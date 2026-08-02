@@ -246,16 +246,16 @@ function AgendaQuickActions({
 
   return (
     <div
-      className="flex items-center gap-2 shrink-0"
+      className="flex items-center gap-1 sm:gap-2 shrink-0"
       onClick={(e) => e.stopPropagation()}
       onKeyDown={(e) => e.stopPropagation()}
     >
       {waUrl ? (
         <Button
           asChild
-          size="sm"
+          size="icon"
           variant="outline"
-          className="h-8 gap-1.5 border-green-500/40 text-green-600 hover:bg-green-500/10 dark:text-green-400"
+          className="h-8 w-8 border-green-500/40 text-green-600 hover:bg-green-500/10 dark:text-green-400 sm:w-auto sm:px-3"
         >
           <a href={waUrl} target="_blank" rel="noopener noreferrer" title="Falar no WhatsApp">
             <MessageCircle className="w-4 h-4 shrink-0" />
@@ -265,9 +265,9 @@ function AgendaQuickActions({
       ) : (
         <Button
           type="button"
-          size="sm"
+          size="icon"
           variant="outline"
-          className="h-8 gap-1.5 opacity-50"
+          className="h-8 w-8 opacity-50 sm:w-auto sm:px-3"
           disabled
           title="Cliente sem WhatsApp cadastrado"
         >
@@ -278,9 +278,9 @@ function AgendaQuickActions({
       {podeRemarcar ? (
         <Button
           type="button"
-          size="sm"
+          size="icon"
           variant="outline"
-          className="h-8 gap-1.5 border-primary/40 text-primary hover:bg-primary/10"
+          className="h-8 w-8 border-primary/40 text-primary hover:bg-primary/10 sm:w-auto sm:px-3"
           disabled={actionLoadingId === agendamento.id}
           title="Alterar data e horário"
           onClick={() => onRemarcar(agendamento)}
@@ -1325,66 +1325,70 @@ export default function AgendaPage() {
                         <div
                           key={agendamento.id}
                           onClick={() => setAgendamentoSelecionado(agendamento)}
-                          className="flex items-center gap-4 p-4 rounded-lg bg-secondary/30 border border-border/50 cursor-pointer hover:border-primary/50 transition-colors"
+                          className="flex flex-col gap-3 rounded-lg border border-border/50 bg-secondary/30 p-3 transition-colors cursor-pointer hover:border-primary/50 sm:flex-row sm:items-center sm:gap-4 sm:p-4"
                         >
-                          <Avatar className="w-11 h-11 shrink-0 border border-border">
-                            <AvatarImage src={agendamento.clienteFoto ?? undefined} alt="" />
-                            <AvatarFallback className="bg-primary/15 text-primary text-sm font-medium">
-                              {agendamento.cliente
-                                .split(" ")
-                                .map((n) => n[0])
-                                .join("")
-                                .slice(0, 2)
-                                .toUpperCase()}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div className="text-center min-w-[60px]">
-                            <p className="text-lg font-bold text-primary">{agendamento.hora}</p>
-                            <p className="text-xs text-muted-foreground">{agendamento.duracao}min</p>
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1 flex-wrap">
-                              <p className="font-medium text-foreground truncate">{agendamento.cliente}</p>
-                              {(() => {
-                                const loyalty = loyaltyForAppointment(agendamento.raw.client_id)
-                                return loyalty ? <LoyaltyAgendaBadge status={loyalty} /> : null
-                              })()}
-                              <span className="text-xs text-muted-foreground px-2 py-0.5 bg-secondary rounded">
-                                {agendamento.profissional}
-                              </span>
-                              {agendamento.unidade ? (
-                                <span className="text-xs text-primary px-2 py-0.5 bg-primary/10 rounded">
-                                  {agendamento.unidade}
-                                </span>
-                              ) : null}
+                          <div className="flex min-w-0 flex-1 items-start gap-3">
+                            <Avatar className="w-10 h-10 shrink-0 border border-border sm:w-11 sm:h-11">
+                              <AvatarImage src={agendamento.clienteFoto ?? undefined} alt="" />
+                              <AvatarFallback className="bg-primary/15 text-primary text-sm font-medium">
+                                {agendamento.cliente
+                                  .split(" ")
+                                  .map((n) => n[0])
+                                  .join("")
+                                  .slice(0, 2)
+                                  .toUpperCase()}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="min-w-[48px] shrink-0 text-center sm:min-w-[60px]">
+                              <p className="text-lg font-bold text-primary">{agendamento.hora}</p>
+                              <p className="text-xs text-muted-foreground">{agendamento.duracao}min</p>
                             </div>
-                            <p className="text-sm text-muted-foreground">{agendamento.servico}</p>
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate font-medium text-foreground">{agendamento.cliente}</p>
+                              <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                                {(() => {
+                                  const loyalty = loyaltyForAppointment(agendamento.raw.client_id)
+                                  return loyalty ? <LoyaltyAgendaBadge status={loyalty} /> : null
+                                })()}
+                                <span className="rounded bg-secondary px-2 py-0.5 text-xs text-muted-foreground">
+                                  {agendamento.profissional}
+                                </span>
+                                {agendamento.unidade ? (
+                                  <span className="rounded bg-primary/10 px-2 py-0.5 text-xs text-primary">
+                                    {agendamento.unidade}
+                                  </span>
+                                ) : null}
+                              </div>
+                              <p className="mt-1 text-sm text-muted-foreground">{agendamento.servico}</p>
+                            </div>
                           </div>
-                          <AgendaQuickActions
-                            agendamento={agendamento}
-                            shopName={nomeBarbearia}
-                            actionLoadingId={actionLoadingId}
-                            onRemarcar={abrirRemarcar}
-                          />
-                          <span
-                            className={`px-2 py-1 rounded-full text-xs font-medium shrink-0 ${
-                              agendamento.status === "confirmed"
-                                ? "bg-green-500/10 text-green-500"
+                          <div className="flex items-center justify-between gap-2 border-t border-border/40 pt-2 sm:shrink-0 sm:border-0 sm:pt-0">
+                            <AgendaQuickActions
+                              agendamento={agendamento}
+                              shopName={nomeBarbearia}
+                              actionLoadingId={actionLoadingId}
+                              onRemarcar={abrirRemarcar}
+                            />
+                            <span
+                              className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-medium sm:text-xs ${
+                                agendamento.status === "confirmed"
+                                  ? "bg-green-500/10 text-green-500"
+                                  : agendamento.status === "completed"
+                                    ? "bg-blue-500/10 text-blue-500"
+                                    : agendamento.status === "canceled"
+                                      ? "bg-destructive/10 text-destructive"
+                                      : "bg-yellow-500/10 text-yellow-500"
+                              }`}
+                            >
+                              {agendamento.status === "confirmed"
+                                ? "Confirmado"
                                 : agendamento.status === "completed"
-                                  ? "bg-blue-500/10 text-blue-500"
+                                  ? "Concluído"
                                   : agendamento.status === "canceled"
-                                    ? "bg-destructive/10 text-destructive"
-                                    : "bg-yellow-500/10 text-yellow-500"
-                            }`}
-                          >
-                            {agendamento.status === "confirmed"
-                              ? "Confirmado"
-                              : agendamento.status === "completed"
-                                ? "Concluído"
-                                : agendamento.status === "canceled"
-                                  ? "Cancelado"
-                                  : "Pendente"}
-                          </span>
+                                    ? "Cancelado"
+                                    : "Pendente"}
+                            </span>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -1396,108 +1400,120 @@ export default function AgendaPage() {
                 <div
                   key={agendamento.id}
                   onClick={() => setAgendamentoSelecionado(agendamento)}
-                  className="flex items-center gap-4 p-4 rounded-lg bg-secondary/30 border border-border/50 cursor-pointer hover:border-primary/50 transition-colors"
+                  className="flex flex-col gap-3 rounded-lg border border-border/50 bg-secondary/30 p-3 transition-colors cursor-pointer hover:border-primary/50 sm:flex-row sm:items-center sm:gap-4 sm:p-4"
                 >
-                  <Avatar className="w-11 h-11 shrink-0 border border-border">
-                    <AvatarImage src={agendamento.clienteFoto ?? undefined} alt="" />
-                    <AvatarFallback className="bg-primary/15 text-primary text-sm font-medium">
-                      {agendamento.cliente
-                        .split(" ")
-                        .map((n) => n[0])
-                        .join("")
-                        .slice(0, 2)
-                        .toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="text-center min-w-[60px]">
-                    <p className="text-lg font-bold text-primary">{agendamento.hora}</p>
-                    <p className="text-xs text-muted-foreground">{agendamento.duracao}min</p>
-                  </div>
+                  <div className="flex min-w-0 flex-1 items-start gap-3">
+                    <Avatar className="w-10 h-10 shrink-0 border border-border sm:w-11 sm:h-11">
+                      <AvatarImage src={agendamento.clienteFoto ?? undefined} alt="" />
+                      <AvatarFallback className="bg-primary/15 text-primary text-sm font-medium">
+                        {agendamento.cliente
+                          .split(" ")
+                          .map((n) => n[0])
+                          .join("")
+                          .slice(0, 2)
+                          .toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-[48px] shrink-0 text-center sm:min-w-[60px]">
+                      <p className="text-lg font-bold text-primary">{agendamento.hora}</p>
+                      <p className="text-xs text-muted-foreground">{agendamento.duracao}min</p>
+                    </div>
 
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1 flex-wrap">
-                      <p className="font-medium text-foreground truncate">{agendamento.cliente}</p>
-                      {(() => {
-                        const loyalty = loyaltyForAppointment(agendamento.raw.client_id)
-                        return loyalty ? <LoyaltyAgendaBadge status={loyalty} /> : null
-                      })()}
-                      <span className="text-xs text-muted-foreground px-2 py-0.5 bg-secondary rounded">
-                        {agendamento.profissional}
-                      </span>
-                      {agendamento.unidade ? (
-                        <span className="text-xs text-primary px-2 py-0.5 bg-primary/10 rounded">
-                          {agendamento.unidade}
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium text-foreground">{agendamento.cliente}</p>
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                        {(() => {
+                          const loyalty = loyaltyForAppointment(agendamento.raw.client_id)
+                          return loyalty ? <LoyaltyAgendaBadge status={loyalty} /> : null
+                        })()}
+                        <span className="rounded bg-secondary px-2 py-0.5 text-xs text-muted-foreground">
+                          {agendamento.profissional}
                         </span>
+                        {agendamento.unidade ? (
+                          <span className="rounded bg-primary/10 px-2 py-0.5 text-xs text-primary">
+                            {agendamento.unidade}
+                          </span>
+                        ) : null}
+                      </div>
+                      <p className="mt-1 text-sm text-muted-foreground">{agendamento.servico}</p>
+                      {agendamento.servicoDescricao ? (
+                        <p className="mt-0.5 line-clamp-2 whitespace-pre-wrap text-xs text-muted-foreground/85">
+                          {agendamento.servicoDescricao}
+                        </p>
                       ) : null}
                     </div>
-                    <p className="text-sm text-muted-foreground">{agendamento.servico}</p>
-                    {agendamento.servicoDescricao ? (
-                      <p className="text-xs text-muted-foreground/85 mt-0.5 line-clamp-2 whitespace-pre-wrap">
-                        {agendamento.servicoDescricao}
-                      </p>
-                    ) : null}
                   </div>
 
-                  <AgendaQuickActions
-                    agendamento={agendamento}
-                    shopName={nomeBarbearia}
-                    actionLoadingId={actionLoadingId}
-                    onRemarcar={abrirRemarcar}
-                  />
+                  <div
+                    className="flex items-center justify-between gap-2 border-t border-border/40 pt-2 sm:shrink-0 sm:border-0 sm:pt-0"
+                    onClick={(e) => e.stopPropagation()}
+                    onKeyDown={(e) => e.stopPropagation()}
+                  >
+                    <AgendaQuickActions
+                      agendamento={agendamento}
+                      shopName={nomeBarbearia}
+                      actionLoadingId={actionLoadingId}
+                      onRemarcar={abrirRemarcar}
+                    />
 
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm font-semibold text-primary">
-                      R${agendamento.valor.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </span>
-                    <span
-                      className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        agendamento.status === "confirmed"
-                          ? "bg-green-500/10 text-green-500"
+                    <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+                      <span className="text-sm font-semibold tabular-nums text-primary">
+                        R$
+                        {agendamento.valor.toLocaleString("pt-BR", {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
+                      </span>
+                      <span
+                        className={`rounded-full px-2 py-1 text-[10px] font-medium sm:text-xs ${
+                          agendamento.status === "confirmed"
+                            ? "bg-green-500/10 text-green-500"
+                            : agendamento.status === "completed"
+                              ? "bg-blue-500/10 text-blue-500"
+                              : agendamento.status === "canceled"
+                                ? "bg-destructive/10 text-destructive"
+                                : "bg-yellow-500/10 text-yellow-500"
+                        }`}
+                      >
+                        {agendamento.status === "confirmed"
+                          ? "Confirmado"
                           : agendamento.status === "completed"
-                            ? "bg-blue-500/10 text-blue-500"
+                            ? "Concluído"
                             : agendamento.status === "canceled"
-                              ? "bg-destructive/10 text-destructive"
-                              : "bg-yellow-500/10 text-yellow-500"
-                      }`}
-                    >
-                      {agendamento.status === "confirmed"
-                        ? "Confirmado"
-                        : agendamento.status === "completed"
-                          ? "Concluído"
-                          : agendamento.status === "canceled"
-                            ? "Cancelado"
-                            : "Pendente"}
-                    </span>
-                  </div>
+                              ? "Cancelado"
+                              : "Pendente"}
+                      </span>
 
-                  {agendamento.status === "pending" && (
-                    <div className="flex gap-1">
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-8 w-8 text-green-500 hover:bg-green-500/10"
-                        disabled={actionLoadingId === agendamento.id}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          void aplicarAcao(agendamento.id, { status: "confirmed" })
-                        }}
-                      >
-                        <Check className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-8 w-8 text-destructive hover:bg-destructive/10"
-                        disabled={actionLoadingId === agendamento.id}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          void aplicarAcao(agendamento.id, { status: "canceled" })
-                        }}
-                      >
-                        <X className="w-4 h-4" />
-                      </Button>
+                      {agendamento.status === "pending" && (
+                        <div className="flex gap-1">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8 shrink-0 text-green-500 hover:bg-green-500/10"
+                            disabled={actionLoadingId === agendamento.id}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              void aplicarAcao(agendamento.id, { status: "confirmed" })
+                            }}
+                          >
+                            <Check className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8 shrink-0 text-destructive hover:bg-destructive/10"
+                            disabled={actionLoadingId === agendamento.id}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              void aplicarAcao(agendamento.id, { status: "canceled" })
+                            }}
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      )}
                     </div>
-                  )}
+                  </div>
                 </div>
               ))
             )}
