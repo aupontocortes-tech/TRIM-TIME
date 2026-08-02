@@ -114,6 +114,8 @@ export async function handleGreenApiInboundWebhook(payload: unknown): Promise<Gr
   const senderPhone = extractSenderPhone(body.senderData)
   if (!senderPhone) return { handled: false, skipped: "no_sender_phone" }
 
+  console.info("[whatsapp-inbound] senderPhone", senderPhone, "text", text.slice(0, 60))
+
   const senderData = body.senderData as Record<string, unknown> | undefined
   const senderName =
     typeof senderData?.senderContactName === "string"
