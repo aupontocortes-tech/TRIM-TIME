@@ -54,7 +54,10 @@ import { useUnits } from "@/hooks/use-units"
 import { barbersListUrl } from "@/lib/barbers-list-url"
 import { clientsListUrl } from "@/lib/clients-list-url"
 import { formatWaitlistDayLabel, shopTodayYmd } from "@/lib/waitlist-expiry"
-import { isSlotPastGraceFromYmd } from "@/lib/appointment-reminder-time"
+import {
+  appointmentStatusBadgeClass,
+  appointmentStatusLabel,
+} from "@/lib/appointment-status"
 import {
   appointmentContactWhatsAppMessage,
   buildClientWhatsAppUrl,
@@ -170,6 +173,16 @@ function agendaValorExibicao(appointment: Appointment): number {
     retailSum += Number(l.quantity) * Number(l.unit_price)
   }
   return Math.round((svcSum + retailSum) * 100) / 100
+}
+
+function AgendaStatusBadge({ status }: { status: Appointment["status"] }) {
+  return (
+    <span
+      className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-medium sm:text-xs ${appointmentStatusBadgeClass(status)}`}
+    >
+      {appointmentStatusLabel(status)}
+    </span>
+  )
 }
 
 function mapAgendaItem(appointment: Appointment, unitName?: string | null): AgendaItem {
@@ -325,7 +338,7 @@ export default function AgendaPage() {
       ? parseLoyaltyProgram(barbershop?.settings ?? null)
       : null
   const isNetworkView = units.length > 1 && !selectedUnitId
-  const [secaoAgenda, setSecaoAgenda] = useState<"agenda" | "lista_espera">("agenda")
+  const [secaoAgenda, setSecaoAgenda] = useState<"agenda" | "historico" | "lista_espera">("agenda")
   const [waitlistRows, setWaitlistRows] = useState<WaitingListItem[]>([])
   const [waitlistLoading, setWaitlistLoading] = useState(false)
   const [waitlistError, setWaitlistError] = useState("")
@@ -335,6 +348,9 @@ export default function AgendaPage() {
   const [dataSelecionada, setDataSelecionada] = useState(new Date())
   const [filtroProf, setFiltroProf] = useState("Todos")
   const [agendamentos, setAgendamentos] = useState<AgendaItem[]>([])
+  const [historico, setHistorico] = useState<AgendaItem[]>([])
+  const [historicoLoading, setHistoricoLoading] = useState(false)
+  const [historicoError, setHistoricoError] = useState("")
   const [barbers, setBarbers] = useState<Barber[]>([])
   const barbersForUnit = useMemo(() => {
     if (units.length <= 1 || !selectedUnitId) return barbers
@@ -349,7 +365,7 @@ export default function AgendaPage() {
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null)
   /** Confirmação antes de aplicar alteração de status no modal de detalhes. */
   const [acaoDetalhesDialog, setAcaoDetalhesDialog] = useState<
-    null | "confirmar" | "concluir" | "cancelar"
+    null | "confirmar" | "concluir" | "cancelar" | "nao_compareceu"
   >(null)
   const [painelServicoValorOpen, setPainelServicoValorOpen] = useState(false)
   const [painelLinhasServicos, setPainelLinhasServicos] = useState<PainelServicoLinha[]>([])
@@ -477,7 +493,7 @@ export default function AgendaPage() {
     setLoading(true)
     setError("")
     try {
-      const params = new URLSearchParams()
+      const params = new URLSearchParams({ view: "agenda" })
       if (isNetworkView) params.set("network", "1")
       if (visao === "dia") {
         params.set("date", toYMD(dataSelecionada))
@@ -502,20 +518,9 @@ export default function AgendaPage() {
         setAgendamentos([])
         return
       }
-      const list = (Array.isArray(data) ? data : [])
-        .filter((a) => {
-          if (a.status === "no_show") return false
-          if (a.status === "pending" || a.status === "confirmed") {
-            return !isSlotPastGraceFromYmd(a.date, a.time)
-          }
-          return true
-        })
-        .map((a) =>
-          mapAgendaItem(
-            a,
-            a.unit_id ? unitNameById.get(a.unit_id) ?? null : null
-          )
-        )
+      const list = (Array.isArray(data) ? data : []).map((a) =>
+        mapAgendaItem(a, a.unit_id ? unitNameById.get(a.unit_id) ?? null : null)
+      )
       list.sort((a, b) => {
         const da = a.raw.date ?? ""
         const db = b.raw.date ?? ""
@@ -531,9 +536,45 @@ export default function AgendaPage() {
     }
   }
 
+  const carregarHistorico = useCallback(async () => {
+    setHistoricoLoading(true)
+    setHistoricoError("")
+    try {
+      const params = new URLSearchParams({ view: "history" })
+      if (isNetworkView) params.set("network", "1")
+      const barber = barbersForUnit.find((b) => b.name === filtroProf)
+      if (barber) params.set("barber_id", barber.id)
+      const res = await fetch(`/api/appointments?${params.toString()}`, {
+        credentials: "include",
+        cache: "no-store",
+      })
+      const data = (await res.json().catch(() => [])) as Appointment[] | { error?: string }
+      if (!res.ok) {
+        setHistoricoError(
+          Array.isArray(data) ? "Não foi possível carregar o histórico." : data.error || "Não foi possível carregar o histórico."
+        )
+        setHistorico([])
+        return
+      }
+      const list = (Array.isArray(data) ? data : []).map((a) =>
+        mapAgendaItem(a, a.unit_id ? unitNameById.get(a.unit_id) ?? null : null)
+      )
+      setHistorico(list)
+    } catch {
+      setHistoricoError("Erro ao carregar o histórico.")
+      setHistorico([])
+    } finally {
+      setHistoricoLoading(false)
+    }
+  }, [barbersForUnit, filtroProf, isNetworkView, unitNameById])
+
   useEffect(() => {
     void carregarDependencias()
   }, [selectedUnitId, unitScopeVersion, isNetworkView])
+
+  useEffect(() => {
+    if (secaoAgenda === "historico") void carregarHistorico()
+  }, [secaoAgenda, carregarHistorico, filtroProf])
 
   useEffect(() => {
     void carregarAgendamentos()
@@ -575,7 +616,9 @@ export default function AgendaPage() {
 
   const totalFaturamento = agendamentosFiltrados.reduce((acc, a) => acc + a.valor, 0)
   const totalConfirmados = agendamentosFiltrados.filter((a) => a.status === "confirmed").length
-  const totalPendentes = agendamentosFiltrados.filter((a) => a.status === "pending").length
+  const totalPendentes = agendamentosFiltrados.filter(
+    (a) => a.status === "pending" || a.status === "pending_finalization"
+  ).length
 
   const aplicarAcao = async (appointmentId: string, payload: Partial<{
     status: Appointment["status"]
@@ -603,12 +646,14 @@ export default function AgendaPage() {
         return false
       }
       if (payload.status === "confirmed") setFeedback("Agendamento confirmado.")
-      else if (payload.status === "completed") setFeedback("Atendimento marcado como concluído.")
+      else if (payload.status === "completed") setFeedback("Atendimento marcado como finalizado.")
+      else if (payload.status === "no_show") setFeedback("Marcado como não compareceu.")
       else if (payload.status === "canceled") setFeedback("Agendamento cancelado.")
       else if (payload.date !== undefined || payload.time !== undefined)
         setFeedback("Horário remarcado com sucesso.")
       else setFeedback("Agendamento atualizado com sucesso.")
       await carregarAgendamentos()
+      if (secaoAgenda === "historico") await carregarHistorico()
       if (payload.status === "completed") {
         try {
           const clientsRes = await fetch(clientsListUrl(selectedUnitId), {
@@ -906,6 +951,17 @@ export default function AgendaPage() {
         <Button
           type="button"
           size="sm"
+          variant={secaoAgenda === "historico" ? "default" : "outline"}
+          onClick={() => {
+            setSecaoAgenda("historico")
+            void carregarHistorico()
+          }}
+        >
+          Histórico
+        </Button>
+        <Button
+          type="button"
+          size="sm"
           variant={secaoAgenda === "lista_espera" ? "default" : "outline"}
           onClick={() => {
             setSecaoAgenda("lista_espera")
@@ -1151,6 +1207,61 @@ export default function AgendaPage() {
                   </tbody>
                 </table>
               </div>
+            ) : null}
+          </CardContent>
+        </Card>
+      ) : secaoAgenda === "historico" ? (
+        <Card className="bg-card border-border">
+          <CardHeader>
+            <CardTitle className="text-foreground">Histórico de agendamentos</CardTitle>
+            <CardDescription>
+              Atendimentos de dias anteriores e encerrados hoje. Pendente de finalização pode ser
+              concluído a qualquer momento.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {historicoLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                <span className="ml-2 text-sm text-muted-foreground">Carregando histórico…</span>
+              </div>
+            ) : null}
+            {historicoError ? (
+              <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">
+                {historicoError}
+              </div>
+            ) : null}
+            {!historicoLoading && !historicoError ? (
+              historico.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-6 text-center">Nenhum registro no histórico.</p>
+              ) : (
+                <div className="space-y-3">
+                  {historico.map((agendamento) => (
+                    <div
+                      key={agendamento.id}
+                      onClick={() => setAgendamentoSelecionado(agendamento)}
+                      className="flex flex-col gap-3 rounded-lg border border-border/50 bg-secondary/30 p-3 transition-colors cursor-pointer hover:border-primary/50 sm:flex-row sm:items-center sm:gap-4 sm:p-4"
+                    >
+                      <div className="flex min-w-0 flex-1 items-start gap-3">
+                        <div className="min-w-[72px] shrink-0 text-center sm:min-w-[88px]">
+                          <p className="text-xs text-muted-foreground">
+                            {agendamento.raw.date
+                              ? new Date(`${agendamento.raw.date}T12:00:00`).toLocaleDateString("pt-BR")
+                              : "—"}
+                          </p>
+                          <p className="text-lg font-bold text-primary">{agendamento.hora}</p>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate font-medium text-foreground">{agendamento.cliente}</p>
+                          <p className="text-sm text-muted-foreground">{agendamento.servico}</p>
+                          <p className="text-xs text-muted-foreground">{agendamento.profissional}</p>
+                        </div>
+                      </div>
+                      <AgendaStatusBadge status={agendamento.status} />
+                    </div>
+                  ))}
+                </div>
+              )
             ) : null}
           </CardContent>
         </Card>
@@ -1425,25 +1536,7 @@ export default function AgendaPage() {
                               actionLoadingId={actionLoadingId}
                               onRemarcar={abrirRemarcar}
                             />
-                            <span
-                              className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-medium sm:text-xs ${
-                                agendamento.status === "confirmed"
-                                  ? "bg-green-500/10 text-green-500"
-                                  : agendamento.status === "completed"
-                                    ? "bg-blue-500/10 text-blue-500"
-                                    : agendamento.status === "canceled"
-                                      ? "bg-destructive/10 text-destructive"
-                                      : "bg-yellow-500/10 text-yellow-500"
-                              }`}
-                            >
-                              {agendamento.status === "confirmed"
-                                ? "Confirmado"
-                                : agendamento.status === "completed"
-                                  ? "Concluído"
-                                  : agendamento.status === "canceled"
-                                    ? "Cancelado"
-                                    : "Pendente"}
-                            </span>
+                            <AgendaStatusBadge status={agendamento.status} />
                           </div>
                         </div>
                       ))}
@@ -1520,25 +1613,7 @@ export default function AgendaPage() {
                           maximumFractionDigits: 2,
                         })}
                       </span>
-                      <span
-                        className={`rounded-full px-2 py-1 text-[10px] font-medium sm:text-xs ${
-                          agendamento.status === "confirmed"
-                            ? "bg-green-500/10 text-green-500"
-                            : agendamento.status === "completed"
-                              ? "bg-blue-500/10 text-blue-500"
-                              : agendamento.status === "canceled"
-                                ? "bg-destructive/10 text-destructive"
-                                : "bg-yellow-500/10 text-yellow-500"
-                        }`}
-                      >
-                        {agendamento.status === "confirmed"
-                          ? "Confirmado"
-                          : agendamento.status === "completed"
-                            ? "Concluído"
-                            : agendamento.status === "canceled"
-                              ? "Cancelado"
-                              : "Pendente"}
-                      </span>
+                      <AgendaStatusBadge status={agendamento.status} />
 
                       {agendamento.status === "pending" && (
                         <div className="flex gap-1">
@@ -2131,7 +2206,7 @@ export default function AgendaPage() {
                       onClick={() => setAcaoDetalhesDialog("confirmar")}
                     >
                       <Check className="mr-2 size-5 shrink-0" />
-                      Finalizar
+                      Confirmar
                     </Button>
                     <Button
                       variant="outline"
@@ -2150,7 +2225,15 @@ export default function AgendaPage() {
                       disabled={actionLoadingId === agendamentoSelecionado.id}
                       onClick={() => setAcaoDetalhesDialog("concluir")}
                     >
-                      Finalizar atendimento
+                      Finalizado
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="min-h-12 flex-1 border-border px-5 text-base text-foreground hover:bg-secondary"
+                      disabled={actionLoadingId === agendamentoSelecionado.id}
+                      onClick={() => setAcaoDetalhesDialog("nao_compareceu")}
+                    >
+                      Não compareceu
                     </Button>
                     <Button
                       variant="outline"
@@ -2158,7 +2241,34 @@ export default function AgendaPage() {
                       disabled={actionLoadingId === agendamentoSelecionado.id}
                       onClick={() => setAcaoDetalhesDialog("cancelar")}
                     >
-                      Cancelar agendamento
+                      Cancelar
+                    </Button>
+                  </>
+                )}
+                {agendamentoSelecionado.status === "pending_finalization" && (
+                  <>
+                    <Button
+                      className="min-h-12 flex-1 bg-primary px-5 text-base text-primary-foreground hover:bg-primary/90"
+                      disabled={actionLoadingId === agendamentoSelecionado.id}
+                      onClick={() => setAcaoDetalhesDialog("concluir")}
+                    >
+                      Finalizado
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="min-h-12 flex-1 border-border px-5 text-base text-foreground hover:bg-secondary"
+                      disabled={actionLoadingId === agendamentoSelecionado.id}
+                      onClick={() => setAcaoDetalhesDialog("nao_compareceu")}
+                    >
+                      Não compareceu
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="min-h-12 flex-1 border-destructive/30 px-5 text-base text-destructive hover:bg-destructive/10"
+                      disabled={actionLoadingId === agendamentoSelecionado.id}
+                      onClick={() => setAcaoDetalhesDialog("cancelar")}
+                    >
+                      Cancelar
                     </Button>
                   </>
                 )}
@@ -2178,21 +2288,25 @@ export default function AgendaPage() {
           <AlertDialogHeader>
             <AlertDialogTitle className="text-foreground">
               {acaoDetalhesDialog === "confirmar"
-                ? "Deseja finalizar?"
+                ? "Confirmar agendamento?"
                 : acaoDetalhesDialog === "concluir"
-                  ? "Deseja finalizar o atendimento?"
-                  : acaoDetalhesDialog === "cancelar"
-                    ? "Deseja cancelar?"
-                    : ""}
+                  ? "Marcar como finalizado?"
+                  : acaoDetalhesDialog === "nao_compareceu"
+                    ? "Marcar como não compareceu?"
+                    : acaoDetalhesDialog === "cancelar"
+                      ? "Deseja cancelar?"
+                      : ""}
             </AlertDialogTitle>
             <AlertDialogDescription className="text-muted-foreground text-sm leading-relaxed">
               {acaoDetalhesDialog === "confirmar"
-                ? "Ao finalizar, o horário ficará confirmado para o cliente (status Confirmado). Ele verá esta atualização no link de agendamento."
+                ? "O horário ficará confirmado para o cliente."
                 : acaoDetalhesDialog === "concluir"
-                  ? "Ao finalizar, o horário ficará como concluído na agenda. Faça isso apenas depois que o serviço tiver sido feito."
-                  : acaoDetalhesDialog === "cancelar"
-                    ? "Deseja cancelar este agendamento? O cliente verá esta alteração no link quando o sistema atualizar o status para Cancelado."
-                    : null}
+                  ? "Use quando o serviço foi realizado. O registro vai para o histórico."
+                  : acaoDetalhesDialog === "nao_compareceu"
+                    ? "Use quando o cliente não apareceu no horário marcado."
+                    : acaoDetalhesDialog === "cancelar"
+                      ? "O agendamento será cancelado e ficará no histórico."
+                      : null}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="gap-2 sm:flex-row sm:justify-end">
@@ -2212,7 +2326,9 @@ export default function AgendaPage() {
                   ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
                   : acaoDetalhesDialog === "confirmar"
                     ? "bg-green-500 text-white hover:bg-green-600"
-                    : "bg-primary text-primary-foreground hover:bg-primary/90"
+                    : acaoDetalhesDialog === "nao_compareceu"
+                      ? "bg-secondary text-foreground hover:bg-secondary/80"
+                      : "bg-primary text-primary-foreground hover:bg-primary/90"
               }`}
               onClick={() => {
                 const sel = agendamentoSelecionado
@@ -2222,20 +2338,28 @@ export default function AgendaPage() {
                   let ok = false
                   if (kind === "confirmar") ok = await aplicarAcao(sel.id, { status: "confirmed" })
                   else if (kind === "concluir") ok = await aplicarAcao(sel.id, { status: "completed" })
+                  else if (kind === "nao_compareceu") ok = await aplicarAcao(sel.id, { status: "no_show" })
                   else ok = await aplicarAcao(sel.id, { status: "canceled" })
-                  if (ok) setAcaoDetalhesDialog(null)
+                  if (ok) {
+                    setAcaoDetalhesDialog(null)
+                    if (kind === "concluir" || kind === "nao_compareceu" || kind === "cancelar") {
+                      setAgendamentoSelecionado(null)
+                    }
+                  }
                 })()
               }}
             >
               {actionLoadingId === agendamentoSelecionado?.id
                 ? "Aguardando..."
                 : acaoDetalhesDialog === "confirmar"
-                  ? "Sim, finalizar"
+                  ? "Sim, confirmar"
                   : acaoDetalhesDialog === "concluir"
                     ? "Sim, finalizar"
-                    : acaoDetalhesDialog === "cancelar"
-                      ? "Sim, cancelar"
-                      : ""}
+                    : acaoDetalhesDialog === "nao_compareceu"
+                      ? "Sim, não compareceu"
+                      : acaoDetalhesDialog === "cancelar"
+                        ? "Sim, cancelar"
+                        : ""}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>

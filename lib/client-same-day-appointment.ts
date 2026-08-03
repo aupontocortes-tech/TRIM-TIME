@@ -1,11 +1,11 @@
 import { prisma } from "@/lib/prisma"
-import { isSlotPastGrace } from "@/lib/appointment-reminder-time"
+import { isAppointmentEnded } from "@/lib/appointment-reminder-time"
 import { normalizeAppointmentTime } from "@/lib/scheduling"
 
 /**
  * Cliente só fica “preso” no dia enquanto existir agendamento pending/confirmed
- * cujo início + tolerância ainda não passou. Concluídos, no_show, cancelados ou
- * horários já vencidos (mesmo se o job ainda não marcou no_show) liberam novo agendamento.
+ * cujo horário ainda não terminou. Finalizados, pendente de finalização, no_show,
+ * cancelados ou horários já encerrados liberam novo agendamento.
  */
 export async function clientHasBlockingAppointmentOnDay(args: {
   barbershopId: string
@@ -21,11 +21,12 @@ export async function clientHasBlockingAppointmentOnDay(args: {
       status: { in: ["pending", "confirmed"] },
       ...(args.ignoreAppointmentIds?.length ? { id: { notIn: args.ignoreAppointmentIds } } : {}),
     },
-    select: { date: true, time: true },
+    select: { date: true, time: true, service: { select: { duration: true } } },
   })
   const now = new Date()
   return rows.some((row) => {
     const t = normalizeAppointmentTime(String(row.time ?? ""))
-    return !isSlotPastGrace(row.date, t, now)
+    const dur = row.service?.duration ?? 30
+    return !isAppointmentEnded(row.date, t, dur, now)
   })
 }

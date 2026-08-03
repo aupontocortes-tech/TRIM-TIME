@@ -26,6 +26,7 @@ enum SubscriptionStatus {
 enum AppointmentStatus {
   pending
   confirmed
+  pending_finalization
   completed
   canceled
   no_show

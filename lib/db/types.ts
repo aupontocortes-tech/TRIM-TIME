@@ -5,7 +5,13 @@
 
 export type SubscriptionPlan = "basic" | "pro" | "premium"
 export type SubscriptionStatus = "trial" | "active" | "past_due" | "canceled"
-export type AppointmentStatus = "pending" | "confirmed" | "completed" | "canceled" | "no_show"
+export type AppointmentStatus =
+  | "pending"
+  | "confirmed"
+  | "pending_finalization"
+  | "completed"
+  | "canceled"
+  | "no_show"
 export type WaitingListStatus = "waiting" | "notified" | "accepted" | "expired" | "canceled"
 
 /** Conta da barbearia: super_admin = dono do sistema; admin_barbershop = dono da barbearia (padrão). */
@@ -132,6 +138,8 @@ export type BarbershopSettings = {
   /** Minutos para aceitar vaga após notificação da lista de espera (padrão 15). */
   waitlist_accept_deadline_minutes?: number
   loyalty_program?: BarbershopLoyaltyProgram | null
+  /** Dias para manter cancelados no histórico (0 = nunca apagar). Padrão: 90. */
+  appointment_canceled_retention_days?: number | null
 }
 
 export interface Barbershop {

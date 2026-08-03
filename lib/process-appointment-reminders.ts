@@ -14,7 +14,10 @@ import { sendWhatsAppNotification, type WhatsAppSendResult } from "@/lib/whatsap
 import { sendClientNotificationEmail, type ClientEmailSendResult } from "@/lib/client-notification-email"
 import { hasFeature } from "@/lib/plans"
 import { resolveEffectivePlanForBarbershop } from "@/lib/barbershop-effective-plan-server"
-import { expireStaleAppointmentsWhere } from "@/lib/appointment-expiry"
+import {
+  cleanupOldCanceledAppointmentsForBarbershop,
+  transitionEndedAppointmentsWhere,
+} from "@/lib/appointment-expiry"
 
 const PRESET_REMINDER_OFFSETS = new Set([30, 60, 120, 1440])
 
@@ -46,7 +49,18 @@ export type ReminderRunStats = {
  * Usa `barbershop.settings.notification_settings` e deduplica por `reminder_minutes` no `notification_log`.
  */
 export async function processAppointmentReminders(): Promise<ReminderRunStats> {
-  await expireStaleAppointmentsWhere({})
+  await transitionEndedAppointmentsWhere({})
+
+  const shops = await prisma.barbershop.findMany({
+    where: { suspendedAt: null },
+    select: { id: true, settings: true },
+  })
+  for (const shop of shops) {
+    await cleanupOldCanceledAppointmentsForBarbershop(
+      shop.id,
+      (shop.settings ?? null) as BarbershopSettings | null
+    )
+  }
 
   const stats: ReminderRunStats = {
     appointments_scanned: 0,

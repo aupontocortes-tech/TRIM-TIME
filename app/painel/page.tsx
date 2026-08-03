@@ -19,7 +19,7 @@ import { useBarbershop } from "@/hooks/use-barbershop"
 import { useUnits } from "@/hooks/use-units"
 import type { DashboardStats } from "@/lib/db/types"
 import type { Appointment } from "@/lib/db/types"
-import { isSlotPastGraceFromYmd } from "@/lib/appointment-reminder-time"
+import { AGENDA_ACTIVE_STATUSES } from "@/lib/appointment-status"
 import { startOfMonthYMDLocal, toYMDLocal } from "@/lib/date-local"
 
 export default function PainelDashboard() {
@@ -38,18 +38,12 @@ export default function PainelDashboard() {
     const dashParams = new URLSearchParams({ date: today, monthStart })
     Promise.all([
       fetch(`/api/dashboard?${dashParams}`, { credentials: "include" }).then((r) => (r.ok ? r.json() : null)),
-      fetch(`/api/appointments?date=${today}`, { credentials: "include" }).then((r) => (r.ok ? r.json() : [])),
+      fetch(`/api/appointments?date=${today}&view=agenda`, { credentials: "include" }).then((r) => (r.ok ? r.json() : [])),
     ]).then(([dashboardData, appointments]) => {
       setStats(dashboardData)
       const raw = Array.isArray(appointments) ? appointments : []
       setAgendamentosHoje(
-        raw.filter((a) => {
-          if (a.status === "no_show") return false
-          if (a.status === "pending" || a.status === "confirmed") {
-            return !isSlotPastGraceFromYmd(a.date, a.time)
-          }
-          return true
-        })
+        raw.filter((a) => AGENDA_ACTIVE_STATUSES.includes(a.status))
       )
     }).finally(() => setLoading(false))
   }, [barbershopLoading, unitsLoading, selectedUnitId])

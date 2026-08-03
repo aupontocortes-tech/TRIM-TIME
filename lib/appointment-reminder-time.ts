@@ -64,3 +64,25 @@ export function isSlotPastGraceFromYmd(
 ): boolean {
   return appointmentStartsAtUtcFromYmd(ymd, timeStr).getTime() + graceMs < now.getTime()
 }
+
+export function appointmentEndsAtUtc(date: Date, timeStr: string, durationMinutes: number): Date {
+  const start = appointmentStartsAtUtc(date, timeStr).getTime()
+  const mins = Number.isFinite(durationMinutes) && durationMinutes > 0 ? durationMinutes : 30
+  return new Date(start + mins * 60 * 1000)
+}
+
+export function appointmentEndsAtUtcFromYmd(ymd: string, timeStr: string, durationMinutes: number): Date {
+  const start = appointmentStartsAtUtcFromYmd(ymd, timeStr).getTime()
+  const mins = Number.isFinite(durationMinutes) && durationMinutes > 0 ? durationMinutes : 30
+  return new Date(start + mins * 60 * 1000)
+}
+
+/** Horário do serviço já terminou (início + duração). */
+export function isAppointmentEnded(
+  date: Date,
+  timeStr: string,
+  durationMinutes: number,
+  now: Date = new Date()
+): boolean {
+  return appointmentEndsAtUtc(date, timeStr, durationMinutes).getTime() <= now.getTime()
+}

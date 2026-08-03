@@ -18,7 +18,13 @@ import { withServiceDescriptionsFromDb } from "@/lib/service-queries"
 import { trySendWhatsAppAppointmentConfirmation } from "@/lib/whatsapp-appointment-events"
 import { trySendEmailAppointmentConfirmation } from "@/lib/email-appointment-events"
 import { trySendPushAppointmentConfirmation } from "@/lib/push-appointment-events"
-import { expireStaleAppointmentsForBarbershop } from "@/lib/appointment-expiry"
+import {
+  cleanupOldCanceledAppointmentsForBarbershop,
+  transitionEndedAppointmentsForBarbershop,
+} from "@/lib/appointment-expiry"
+import { AGENDA_ACTIVE_STATUSES } from "@/lib/appointment-status"
+import { shopTodayYmd } from "@/lib/waitlist-expiry"
+import type { BarbershopSettings } from "@/lib/db/types"
 import { clientHasBlockingAppointmentOnDay } from "@/lib/client-same-day-appointment"
 import {
   syncAppointmentUnitsFromBarbers,
@@ -28,11 +34,19 @@ import {
 export async function GET(request: Request) {
   try {
     const barbershopId = await requireBarbershopId()
+    const barbershop = await prisma.barbershop.findUnique({
+      where: { id: barbershopId },
+      select: { settings: true },
+    })
+    const settings = (barbershop?.settings ?? null) as BarbershopSettings | null
+
     await withAppointmentDbSchema(async () => {
       await syncAppointmentUnitsFromBarbers(barbershopId)
-      await expireStaleAppointmentsForBarbershop(barbershopId)
+      await transitionEndedAppointmentsForBarbershop(barbershopId)
+      await cleanupOldCanceledAppointmentsForBarbershop(barbershopId, settings)
     })
     const { searchParams } = new URL(request.url)
+    const view = searchParams.get("view")
     const date = searchParams.get("date") // YYYY-MM-DD
     const from = searchParams.get("from")
     const to = searchParams.get("to")
@@ -51,11 +65,47 @@ export async function GET(request: Request) {
       return undefined
     })()
 
+    const todayYmd = shopTodayYmd()
+    const todayDate = parseAppointmentDate(todayYmd)
+
+    const viewFilter: Prisma.AppointmentWhereInput = (() => {
+      if (view === "agenda") {
+        if (date && date < todayYmd) {
+          return { id: { in: [] } }
+        }
+        const mergedDate: Prisma.DateTimeFilter = { gte: todayDate }
+        if (dateFilter?.equals) mergedDate.equals = dateFilter.equals
+        if (dateFilter?.gte) {
+          mergedDate.gte =
+            dateFilter.gte > todayDate ? dateFilter.gte : todayDate
+        }
+        if (dateFilter?.lte) mergedDate.lte = dateFilter.lte
+        return {
+          status: { in: [...AGENDA_ACTIVE_STATUSES] },
+          date: mergedDate,
+        }
+      }
+      if (view === "history") {
+        return {
+          OR: [
+            { date: { lt: todayDate } },
+            { status: { in: ["completed", "canceled", "no_show"] } },
+          ],
+        }
+      }
+      return {}
+    })()
+
     const where = await buildAppointmentListWhere(barbershopId, selectedUnitId, {
-      ...(dateFilter ? { date: dateFilter } : {}),
+      ...viewFilter,
+      ...(view === "agenda" || view === "history" ? {} : dateFilter ? { date: dateFilter } : {}),
       ...(barberId ? { barberId } : {}),
     })
-    const rows = await fetchAppointmentsWithRelations(where)
+    const orderBy =
+      view === "history"
+        ? [{ date: "desc" as const }, { time: "desc" as const }]
+        : [{ date: "asc" as const }, { time: "asc" as const }]
+    const rows = await fetchAppointmentsWithRelations(where, orderBy)
     const list = rows.map(mapAppointmentRowToApi) as Appointment[]
     return NextResponse.json(await withServiceDescriptionsFromDb(list))
   } catch (e) {
@@ -69,7 +119,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const barbershopId = await requireBarbershopId()
-    await withAppointmentDbSchema(() => expireStaleAppointmentsForBarbershop(barbershopId))
+    await withAppointmentDbSchema(() => transitionEndedAppointmentsForBarbershop(barbershopId))
     const body = await request.json() as {
       client_id: string
       barber_id: string
