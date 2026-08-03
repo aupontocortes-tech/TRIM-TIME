@@ -4,6 +4,7 @@ import { prismaAppointmentUnitFilter } from "@/lib/unit-context"
 import { parseAppointmentDate } from "@/lib/appointment-prisma-helpers"
 import { COMMISSION_APPOINTMENT_STATUSES } from "@/lib/commissions"
 import { loadFinancialLedgerEntries } from "@/lib/db/financial-ledger-store"
+import { sumArchivedAppointmentSales } from "@/lib/appointment-financial-snapshot"
 import { shopExpenseCategoryLabel } from "@/lib/shop-expenses"
 
 const SALE_STATUSES: AppointmentStatus[] = [...COMMISSION_APPOINTMENT_STATUSES]
@@ -195,7 +196,15 @@ export async function buildFinancialSummary(
     }),
   ])
 
-  const revenue = Number(periodAgg._sum.totalPrice ?? 0)
+  const archivedRevenue = await sumArchivedAppointmentSales({
+    barbershopId,
+    from: fromD,
+    to: toD,
+    unitId: unitId ?? null,
+  })
+
+  const revenue =
+    Math.round((Number(periodAgg._sum.totalPrice ?? 0) + archivedRevenue) * 100) / 100
   const appointmentSaleCount = periodAgg._count._all
   const ticketAvg =
     appointmentSaleCount > 0 ? Math.round((revenue / appointmentSaleCount) * 100) / 100 : 0

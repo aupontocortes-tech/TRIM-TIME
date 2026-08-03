@@ -79,9 +79,33 @@ export function isAppointmentInHistoryView(args: {
   return ["completed", "canceled", "no_show"].includes(args.status)
 }
 
-export function canceledRetentionDays(settings?: { appointment_canceled_retention_days?: number | null } | null): number {
-  const raw = settings?.appointment_canceled_retention_days
+export const HISTORY_RETENTION_OPTIONS = [
+  { days: 30, label: "30 dias" },
+  { days: 60, label: "60 dias" },
+  { days: 90, label: "90 dias" },
+  { days: 180, label: "6 meses" },
+  { days: 0, label: "Nunca apagar" },
+] as const
+
+export function historyRetentionDays(
+  settings?: {
+    appointment_history_retention_days?: number | null
+    appointment_canceled_retention_days?: number | null
+  } | null
+): number {
+  const raw =
+    settings?.appointment_history_retention_days ?? settings?.appointment_canceled_retention_days
   if (raw === 0) return 0
   if (typeof raw === "number" && Number.isFinite(raw) && raw > 0) return Math.round(raw)
-  return 90
+  return 30
+}
+
+/** @deprecated Use historyRetentionDays */
+export function canceledRetentionDays(
+  settings?: {
+    appointment_history_retention_days?: number | null
+    appointment_canceled_retention_days?: number | null
+  } | null
+): number {
+  return historyRetentionDays(settings)
 }

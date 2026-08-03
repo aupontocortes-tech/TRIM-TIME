@@ -19,7 +19,7 @@ import { trySendWhatsAppAppointmentConfirmation } from "@/lib/whatsapp-appointme
 import { trySendEmailAppointmentConfirmation } from "@/lib/email-appointment-events"
 import { trySendPushAppointmentConfirmation } from "@/lib/push-appointment-events"
 import {
-  cleanupOldCanceledAppointmentsForBarbershop,
+  cleanupOldHistoryAppointmentsForBarbershop,
   transitionEndedAppointmentsForBarbershop,
 } from "@/lib/appointment-expiry"
 import { AGENDA_ACTIVE_STATUSES } from "@/lib/appointment-status"
@@ -43,7 +43,7 @@ export async function GET(request: Request) {
     await withAppointmentDbSchema(async () => {
       await syncAppointmentUnitsFromBarbers(barbershopId)
       await transitionEndedAppointmentsForBarbershop(barbershopId)
-      await cleanupOldCanceledAppointmentsForBarbershop(barbershopId, settings)
+      await cleanupOldHistoryAppointmentsForBarbershop(barbershopId, settings)
     })
     const { searchParams } = new URL(request.url)
     const view = searchParams.get("view")

@@ -29,6 +29,7 @@ import {
 } from "@/lib/waitlist-service"
 import type { BarbershopSettings } from "@/lib/db/types"
 import { creditLoyaltyVisitForAppointment } from "@/lib/loyalty-program-server"
+import { ensureAppointmentSaleLedgerEntry } from "@/lib/appointment-financial-snapshot"
 
 function mergeServiceLineQuantities(rows: unknown): { order: string[]; qty: Map<string, number> } {
   const qty = new Map<string, number>()
@@ -293,7 +294,16 @@ export async function PATCH(
       commissionPercent?: number
       commissionAmount?: number
     } = {}
-    if (body.status !== undefined) patch.status = body.status
+    if (body.status !== undefined) {
+      const terminal = ["completed", "canceled", "no_show"] as const
+      const from = beforeApi.status as AppointmentStatus
+      const to = body.status as AppointmentStatus
+      if (terminal.includes(from as (typeof terminal)[number]) && to === "pending_finalization") {
+        patch.status = to
+      } else if (body.status !== undefined) {
+        patch.status = body.status
+      }
+    }
 
     const unitFilter = selectedUnitId ? { unitId: selectedUnitId } : {}
 
@@ -405,6 +415,7 @@ export async function PATCH(
       void trySendWhatsAppAppointmentPostService(barbershopId, id)
       void trySendEmailAppointmentPostService(barbershopId, id)
       void trySendPushAppointmentPostService(barbershopId, id)
+      await ensureAppointmentSaleLedgerEntry(barbershopId, enriched as Appointment)
       const shopRow = await prisma.barbershop.findUnique({
         where: { id: barbershopId },
         select: { settings: true },

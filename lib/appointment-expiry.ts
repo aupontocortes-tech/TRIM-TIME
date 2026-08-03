@@ -1,11 +1,11 @@
 /**
  * Quando o horário do serviço termina, pending/confirmed → pending_finalization.
- * Nunca apaga agendamentos automaticamente (exceto cancelados antigos via rotina configurável).
+ * Limpeza do histórico é configurável (padrão 30 dias); faturamento finalizado fica no financeiro.
  */
 import type { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { isAppointmentEnded } from "@/lib/appointment-reminder-time"
-import { canceledRetentionDays } from "@/lib/appointment-status"
+import { historyRetentionDays } from "@/lib/appointment-status"
 import type { BarbershopSettings } from "@/lib/db/types"
 import { normalizeAppointmentTime, SLOT_BLOCKING_STATUSES } from "@/lib/scheduling"
 
@@ -76,12 +76,12 @@ export async function expireStaleAppointmentsWhere(where: Prisma.AppointmentWher
   return transitionEndedAppointmentsWhere(where)
 }
 
-/** Remove cancelados antigos do histórico (configurável; padrão 90 dias). */
-export async function cleanupOldCanceledAppointmentsForBarbershop(
+/** Remove agendamentos antigos do histórico (configurável; padrão 30 dias). Finalizados mantêm valor no financeiro. */
+export async function cleanupOldHistoryAppointmentsForBarbershop(
   barbershopId: string,
   settings?: BarbershopSettings | null
 ): Promise<number> {
-  const days = canceledRetentionDays(settings)
+  const days = historyRetentionDays(settings)
   if (days <= 0) return 0
 
   const cutoff = new Date()
@@ -91,9 +91,17 @@ export async function cleanupOldCanceledAppointmentsForBarbershop(
   const result = await prisma.appointment.deleteMany({
     where: {
       barbershopId,
-      status: "canceled",
       date: { lt: cutoff },
+      status: { in: ["canceled", "no_show", "completed", "pending_finalization"] },
     },
   })
   return result.count
+}
+
+/** @deprecated Use cleanupOldHistoryAppointmentsForBarbershop */
+export async function cleanupOldCanceledAppointmentsForBarbershop(
+  barbershopId: string,
+  settings?: BarbershopSettings | null
+): Promise<number> {
+  return cleanupOldHistoryAppointmentsForBarbershop(barbershopId, settings)
 }

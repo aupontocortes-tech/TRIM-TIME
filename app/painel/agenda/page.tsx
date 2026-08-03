@@ -57,6 +57,8 @@ import { formatWaitlistDayLabel, shopTodayYmd } from "@/lib/waitlist-expiry"
 import {
   appointmentStatusBadgeClass,
   appointmentStatusLabel,
+  HISTORY_RETENTION_OPTIONS,
+  historyRetentionDays,
 } from "@/lib/appointment-status"
 import {
   appointmentContactWhatsAppMessage,
@@ -351,6 +353,8 @@ export default function AgendaPage() {
   const [historico, setHistorico] = useState<AgendaItem[]>([])
   const [historicoLoading, setHistoricoLoading] = useState(false)
   const [historicoError, setHistoricoError] = useState("")
+  const [retentionDays, setRetentionDays] = useState(30)
+  const [savingRetention, setSavingRetention] = useState(false)
   const [barbers, setBarbers] = useState<Barber[]>([])
   const barbersForUnit = useMemo(() => {
     if (units.length <= 1 || !selectedUnitId) return barbers
@@ -365,7 +369,7 @@ export default function AgendaPage() {
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null)
   /** Confirmação antes de aplicar alteração de status no modal de detalhes. */
   const [acaoDetalhesDialog, setAcaoDetalhesDialog] = useState<
-    null | "confirmar" | "concluir" | "cancelar" | "nao_compareceu"
+    null | "confirmar" | "concluir" | "cancelar" | "nao_compareceu" | "recuperar"
   >(null)
   const [painelServicoValorOpen, setPainelServicoValorOpen] = useState(false)
   const [painelLinhasServicos, setPainelLinhasServicos] = useState<PainelServicoLinha[]>([])
@@ -569,6 +573,33 @@ export default function AgendaPage() {
   }, [barbersForUnit, filtroProf, isNetworkView, unitNameById])
 
   useEffect(() => {
+    setRetentionDays(historyRetentionDays(barbershop?.settings ?? null))
+  }, [barbershop?.settings])
+
+  const salvarRetencaoHistorico = async () => {
+    setSavingRetention(true)
+    setHistoricoError("")
+    try {
+      const r = await fetch("/api/barbershops", {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ settings: { appointment_history_retention_days: retentionDays } }),
+      })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) {
+        setHistoricoError(typeof j.error === "string" ? j.error : "Não foi possível salvar.")
+        return
+      }
+      setFeedback("Retenção do histórico atualizada.")
+    } catch {
+      setHistoricoError("Erro ao salvar retenção do histórico.")
+    } finally {
+      setSavingRetention(false)
+    }
+  }
+
+  useEffect(() => {
     void carregarDependencias()
   }, [selectedUnitId, unitScopeVersion, isNetworkView])
 
@@ -648,6 +679,7 @@ export default function AgendaPage() {
       if (payload.status === "confirmed") setFeedback("Agendamento confirmado.")
       else if (payload.status === "completed") setFeedback("Atendimento marcado como finalizado.")
       else if (payload.status === "no_show") setFeedback("Marcado como não compareceu.")
+      else if (payload.status === "pending_finalization") setFeedback("Agendamento recuperado.")
       else if (payload.status === "canceled") setFeedback("Agendamento cancelado.")
       else if (payload.date !== undefined || payload.time !== undefined)
         setFeedback("Horário remarcado com sucesso.")
@@ -1220,6 +1252,34 @@ export default function AgendaPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="rounded-lg border border-border/70 bg-muted/20 p-3 space-y-3">
+              <p className="text-sm font-medium text-foreground">Limpeza automática do histórico</p>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Após o prazo, registros antigos são removidos do banco. Atendimentos{" "}
+                <strong className="text-foreground">finalizados</strong> mantêm o valor no financeiro.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+                <select
+                  className="h-10 rounded-md border border-border bg-background px-3 text-sm text-foreground"
+                  value={retentionDays}
+                  onChange={(e) => setRetentionDays(Number(e.target.value))}
+                >
+                  {HISTORY_RETENTION_OPTIONS.map((o) => (
+                    <option key={o.days} value={o.days}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={savingRetention}
+                  onClick={() => void salvarRetencaoHistorico()}
+                >
+                  {savingRetention ? "Salvando…" : "Salvar"}
+                </Button>
+              </div>
+            </div>
             {historicoLoading ? (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
@@ -2272,6 +2332,30 @@ export default function AgendaPage() {
                     </Button>
                   </>
                 )}
+                {(agendamentoSelecionado.status === "completed" ||
+                  agendamentoSelecionado.status === "no_show" ||
+                  agendamentoSelecionado.status === "canceled") && (
+                  <>
+                    <Button
+                      variant="outline"
+                      className="min-h-12 flex-1 border-primary/40 px-5 text-base text-primary hover:bg-primary/10"
+                      disabled={actionLoadingId === agendamentoSelecionado.id}
+                      onClick={() => setAcaoDetalhesDialog("recuperar")}
+                    >
+                      Recuperar
+                    </Button>
+                    {agendamentoSelecionado.status !== "canceled" ? (
+                      <Button
+                        variant="outline"
+                        className="min-h-12 flex-1 border-destructive/30 px-5 text-base text-destructive hover:bg-destructive/10"
+                        disabled={actionLoadingId === agendamentoSelecionado.id}
+                        onClick={() => setAcaoDetalhesDialog("cancelar")}
+                      >
+                        Cancelar
+                      </Button>
+                    ) : null}
+                  </>
+                )}
               </div>
             </>
           )}
@@ -2293,9 +2377,11 @@ export default function AgendaPage() {
                   ? "Marcar como finalizado?"
                   : acaoDetalhesDialog === "nao_compareceu"
                     ? "Marcar como não compareceu?"
-                    : acaoDetalhesDialog === "cancelar"
-                      ? "Deseja cancelar?"
-                      : ""}
+                    : acaoDetalhesDialog === "recuperar"
+                      ? "Recuperar agendamento?"
+                      : acaoDetalhesDialog === "cancelar"
+                        ? "Deseja cancelar?"
+                        : ""}
             </AlertDialogTitle>
             <AlertDialogDescription className="text-muted-foreground text-sm leading-relaxed">
               {acaoDetalhesDialog === "confirmar"
@@ -2304,9 +2390,11 @@ export default function AgendaPage() {
                   ? "Use quando o serviço foi realizado. O registro vai para o histórico."
                   : acaoDetalhesDialog === "nao_compareceu"
                     ? "Use quando o cliente não apareceu no horário marcado."
-                    : acaoDetalhesDialog === "cancelar"
-                      ? "O agendamento será cancelado e ficará no histórico."
-                      : null}
+                    : acaoDetalhesDialog === "recuperar"
+                      ? "Volta para Pendente de finalização para você corrigir o status."
+                      : acaoDetalhesDialog === "cancelar"
+                        ? "O agendamento será cancelado e ficará no histórico."
+                        : null}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="gap-2 sm:flex-row sm:justify-end">
@@ -2339,10 +2427,17 @@ export default function AgendaPage() {
                   if (kind === "confirmar") ok = await aplicarAcao(sel.id, { status: "confirmed" })
                   else if (kind === "concluir") ok = await aplicarAcao(sel.id, { status: "completed" })
                   else if (kind === "nao_compareceu") ok = await aplicarAcao(sel.id, { status: "no_show" })
+                  else if (kind === "recuperar")
+                    ok = await aplicarAcao(sel.id, { status: "pending_finalization" })
                   else ok = await aplicarAcao(sel.id, { status: "canceled" })
                   if (ok) {
                     setAcaoDetalhesDialog(null)
-                    if (kind === "concluir" || kind === "nao_compareceu" || kind === "cancelar") {
+                    if (
+                      kind === "concluir" ||
+                      kind === "nao_compareceu" ||
+                      kind === "cancelar" ||
+                      kind === "recuperar"
+                    ) {
                       setAgendamentoSelecionado(null)
                     }
                   }
@@ -2357,9 +2452,11 @@ export default function AgendaPage() {
                     ? "Sim, finalizar"
                     : acaoDetalhesDialog === "nao_compareceu"
                       ? "Sim, não compareceu"
-                      : acaoDetalhesDialog === "cancelar"
-                        ? "Sim, cancelar"
-                        : ""}
+                      : acaoDetalhesDialog === "recuperar"
+                        ? "Sim, recuperar"
+                        : acaoDetalhesDialog === "cancelar"
+                          ? "Sim, cancelar"
+                          : ""}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>

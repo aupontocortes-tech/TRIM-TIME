@@ -138,7 +138,9 @@ export type BarbershopSettings = {
   /** Minutos para aceitar vaga após notificação da lista de espera (padrão 15). */
   waitlist_accept_deadline_minutes?: number
   loyalty_program?: BarbershopLoyaltyProgram | null
-  /** Dias para manter cancelados no histórico (0 = nunca apagar). Padrão: 90. */
+  /** Dias para manter registros no histórico (0 = nunca apagar). Padrão: 30. */
+  appointment_history_retention_days?: number | null
+  /** @deprecated Use appointment_history_retention_days */
   appointment_canceled_retention_days?: number | null
 }
 

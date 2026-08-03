@@ -15,7 +15,7 @@ import { sendClientNotificationEmail, type ClientEmailSendResult } from "@/lib/c
 import { hasFeature } from "@/lib/plans"
 import { resolveEffectivePlanForBarbershop } from "@/lib/barbershop-effective-plan-server"
 import {
-  cleanupOldCanceledAppointmentsForBarbershop,
+  cleanupOldHistoryAppointmentsForBarbershop,
   transitionEndedAppointmentsWhere,
 } from "@/lib/appointment-expiry"
 
@@ -56,7 +56,7 @@ export async function processAppointmentReminders(): Promise<ReminderRunStats> {
     select: { id: true, settings: true },
   })
   for (const shop of shops) {
-    await cleanupOldCanceledAppointmentsForBarbershop(
+    await cleanupOldHistoryAppointmentsForBarbershop(
       shop.id,
       (shop.settings ?? null) as BarbershopSettings | null
     )
