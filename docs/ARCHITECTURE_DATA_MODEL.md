@@ -15,7 +15,7 @@ Documento para **extensão segura** do SaaS. O app hoje usa **Supabase** nas API
 | Lista de espera | `waiting_list` | Notificação ao cancelar slot (API já dispara fluxo) |
 | Notificações (log) | `notification_log` | Tipos push/email/whatsapp + evento + payload JSON |
 | WhatsApp (stub) | `whatsapp_integrations` | Estrutura por barbearia |
-| Limites de plano | `lib/plans.ts` | 1 / 5 / ∞ barbeiros; `hasFeature`, `canUseBarberCommission` |
+| Limites de plano | `lib/plans.ts` | 1 / 3 / ∞ barbeiros; `hasFeature`, `canUseBarberCommission` |
 | Comissão (cálculo) | `lib/commissions.ts` | Agregação por período; % em `barbers` |
 | Sessão | Cookie `trimtime_barbershop_id` | Login por e-mail da barbearia |
 

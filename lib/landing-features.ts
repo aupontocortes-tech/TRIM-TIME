@@ -122,9 +122,9 @@ export const LANDING_FEATURES: LandingFeature[] = withAccents([
   {
     icon: Scissors,
     title: "Multi-Barbeiros",
-    descriptionShort: "Cada profissional com agenda e comissão próprias.",
+    descriptionShort: "Pro: até 3 profissionais; Premium: ilimitados.",
     description:
-      "Adicione quantos profissionais precisar. Cada um com sua própria agenda e comissões.",
+      "No Plano Pro, cadastre até 3 barbeiros com agenda e comissão próprias. No Premium, quantos precisar.",
   },
   {
     icon: Bell,

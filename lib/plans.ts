@@ -19,7 +19,7 @@ export const PLAN_LABELS: Record<SubscriptionPlan, string> = {
 /** Limite de barbeiros por plano. Premium = null = ilimitado */
 export const BARBER_LIMITS: Record<SubscriptionPlan, number | null> = {
   basic: 1,
-  pro: 5,
+  pro: 3,
   premium: null, // ilimitado
 }
 
@@ -55,7 +55,7 @@ export const PLAN_FEATURES = {
   ],
   pro: [
     "Tudo do Básico",
-    "Até 5 barbeiros",
+    "Até 3 barbeiros",
     "Lista de espera automática",
     "Controle financeiro",
     "Relatórios mensais simples",
