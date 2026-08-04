@@ -33,11 +33,9 @@ const VAR_GROUPS = ["Agendamento", "Lista de espera", "Informações"] as const
 type WhatsAppAutoRepliesSettingsProps = {
   sectionStep?: number
   hideEnableToggle?: boolean
-  hideWebhook?: boolean
   embedded?: boolean
   enabled: boolean
   rules: WhatsAppAutoReplyRule[]
-  webhookUrl: string
   onEnabledChange: (enabled: boolean) => void
   onRulesChange: (rules: WhatsAppAutoReplyRule[]) => void
 }
@@ -66,11 +64,9 @@ function sortRulesByDefaultOrder(rules: WhatsAppAutoReplyRule[]): WhatsAppAutoRe
 export function WhatsAppAutoRepliesSettings({
   sectionStep,
   hideEnableToggle,
-  hideWebhook,
   embedded,
   enabled,
   rules,
-  webhookUrl,
   onEnabledChange,
   onRulesChange,
 }: WhatsAppAutoRepliesSettingsProps) {
@@ -150,27 +146,6 @@ export function WhatsAppAutoRepliesSettings({
 
         {enabled ? (
           <>
-            {!hideWebhook ? (
-              <div className="rounded-lg border border-border/70 bg-muted/20 p-3 space-y-1.5">
-                <p className="text-xs font-medium text-foreground">Webhook no console Green API</p>
-                <p className="text-[11px] text-muted-foreground leading-snug">
-                  Em{" "}
-                  <a
-                    href="https://console.green-api.com/"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary hover:underline"
-                  >
-                    console.green-api.com
-                  </a>
-                  , abra sua instância → Configurações → cole esta URL:
-                </p>
-                <code className="block break-all rounded bg-background/80 px-2 py-1.5 text-[11px] text-foreground">
-                  {webhookUrl}
-                </code>
-              </div>
-            ) : null}
-
             <div className="space-y-3">
               <p className="text-sm font-medium text-foreground">Regras — clique para editar</p>
               <p className="text-xs text-muted-foreground -mt-2">
