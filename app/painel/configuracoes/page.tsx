@@ -78,6 +78,7 @@ import {
   UserPlus,
   Bell,
   MessageSquare,
+  MessageCircle,
   CalendarCheck,
   Clock3,
   Heart,
@@ -123,7 +124,8 @@ import { WhatsAppOutboundMessagesSettings } from "@/components/painel/whatsapp-o
 import { WhatsAppGreenApiWebhookCard } from "@/components/painel/whatsapp-green-api-webhook-card"
 import { WhatsAppQuickSetupCard } from "@/components/painel/whatsapp-quick-setup-card"
 import { WhatsAppReminderTimesSettings } from "@/components/painel/whatsapp-reminder-times-settings"
-import { WhatsAppTemplateVarsPanel } from "@/components/painel/whatsapp-template-vars-panel"
+import { WhatsAppPersonalizeSectionBlock } from "@/components/painel/whatsapp-personalize-section-block"
+import { WhatsAppInactiveMarketingSettings } from "@/components/painel/whatsapp-inactive-marketing-settings"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { DEFAULT_WHATSAPP_AUTO_REPLY_RULES } from "@/lib/whatsapp-auto-reply-defaults"
 import { GREEN_API_FIELD_COPY } from "@/lib/whatsapp-green-api"
@@ -4809,133 +4811,119 @@ export default function ConfiguracoesPage() {
                   <Button
                     type="button"
                     variant="outline"
-                    className="w-full justify-between border-border h-11 font-medium group"
+                    className="w-full justify-between border-border h-auto min-h-11 py-2.5 font-medium group"
                   >
-                    Personalizar mensagens e horários (opcional)
+                    <span className="flex flex-col items-start gap-0.5 text-left pr-2">
+                      <span>Personalizar mensagens e horários (opcional)</span>
+                      <span className="text-[11px] font-normal text-muted-foreground">
+                        Textos automáticos, lembretes e respostas
+                        {marketingInactiveFeature ? " · clientes inativos" : ""}
+                      </span>
+                    </span>
                     <ChevronDown className="h-4 w-4 shrink-0 transition-transform group-data-[state=open]:rotate-180" />
                   </Button>
                 </CollapsibleTrigger>
-                <CollapsibleContent className="space-y-6 pt-5">
-                  <WhatsAppOutboundMessagesSettings
-                    compact
-                    confirmTemplate={notifWaConfirmTpl}
-                    reminderTemplate={notifWaTpl}
-                    postServiceTemplate={notifWaPostTpl}
-                    remindersEnabled={notifWa}
-                    showMultiUnitHint={multiUnitsFeature}
-                    onConfirmChange={setNotifWaConfirmTpl}
-                    onReminderChange={setNotifWaTpl}
-                    onPostServiceChange={setNotifWaPostTpl}
-                  />
+                <CollapsibleContent className="space-y-5 pt-5">
+                  <p className="text-xs text-muted-foreground rounded-lg border border-border bg-muted/20 px-3 py-2.5 leading-relaxed">
+                    Tudo aqui é opcional — os textos padrão já funcionam. Abra só o bloco que quiser ajustar e
+                    clique em <strong className="text-foreground font-medium">Salvar</strong> no final da página.
+                  </p>
 
-                  {notifWa ? (
-                    <div className="space-y-2">
-                      <p className="text-sm font-medium text-foreground">Horários do lembrete</p>
+                  <WhatsAppPersonalizeSectionBlock
+                    icon={MessageSquare}
+                    title="Mensagens automáticas"
+                    description="Confirmação ao agendar, lembrete antes do horário e agradecimento após o corte."
+                  >
+                    <WhatsAppOutboundMessagesSettings
+                      embedded
+                      compact
+                      confirmTemplate={notifWaConfirmTpl}
+                      reminderTemplate={notifWaTpl}
+                      postServiceTemplate={notifWaPostTpl}
+                      remindersEnabled={notifWa}
+                      showMultiUnitHint={multiUnitsFeature}
+                      onConfirmChange={setNotifWaConfirmTpl}
+                      onReminderChange={setNotifWaTpl}
+                      onPostServiceChange={setNotifWaPostTpl}
+                    />
+                  </WhatsAppPersonalizeSectionBlock>
+
+                  <WhatsAppPersonalizeSectionBlock
+                    icon={Clock3}
+                    title="Horários do lembrete"
+                    description="Quantas horas ou minutos antes do horário o cliente recebe o aviso."
+                    inactive={!notifWa}
+                  >
+                    {notifWa ? (
                       <WhatsAppReminderTimesSettings
+                        embedded
                         options={WA_SECTION_REMINDER_OPTIONS}
                         selectedMinutes={notifReminderOffsets}
                         customHours={notifCustomReminderHours}
                         onToggleMinute={toggleReminderOffset}
                         onCustomHoursChange={setNotifCustomReminderHours}
                       />
-                    </div>
-                  ) : null}
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        Ligue &quot;Lembrete antes do horário&quot; na configuração rápida acima para escolher os
+                        horários.
+                      </p>
+                    )}
+                  </WhatsAppPersonalizeSectionBlock>
 
-                  <WhatsAppAutoRepliesSettings
-                    hideEnableToggle
-                    hideWebhook
-                    enabled={notifWaAutoReplyEnabled}
-                    rules={notifWaAutoReplyRules}
-                    webhookUrl={waWebhookUrl}
-                    onEnabledChange={setNotifWaAutoReplyEnabled}
-                    onRulesChange={setNotifWaAutoReplyRules}
-                  />
+                  <WhatsAppPersonalizeSectionBlock
+                    icon={MessageCircle}
+                    title="Respostas automáticas"
+                    description="O que o cliente digita no WhatsApp e o texto que o sistema responde sozinho."
+                    inactive={!notifWaAutoReplyEnabled}
+                  >
+                    {notifWaAutoReplyEnabled ? (
+                      <WhatsAppAutoRepliesSettings
+                        embedded
+                        hideEnableToggle
+                        hideWebhook
+                        enabled={notifWaAutoReplyEnabled}
+                        rules={notifWaAutoReplyRules}
+                        webhookUrl={waWebhookUrl}
+                        onEnabledChange={setNotifWaAutoReplyEnabled}
+                        onRulesChange={setNotifWaAutoReplyRules}
+                      />
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        Ligue &quot;Responder o cliente sozinho&quot; na configuração rápida acima para editar as
+                        respostas.
+                      </p>
+                    )}
+                  </WhatsAppPersonalizeSectionBlock>
 
-                  {marketingInactiveFeature && inactiveMarketingEnabled ? (
-                    <Card className="border-border bg-muted/10 shadow-none">
-                      <CardHeader className="pb-2">
-                        <CardTitle className="text-base text-foreground flex items-center gap-2">
-                          <Heart className="w-4 h-4 text-primary" />
-                          Clientes inativos — detalhes
-                        </CardTitle>
-                        <CardDescription className="text-muted-foreground">
-                          Padrão sugerido: {INACTIVE_MARKETING_DEFAULT_FIRST_DAYS},{" "}
-                          {INACTIVE_MARKETING_DEFAULT_SECOND_DAYS} e {INACTIVE_MARKETING_DEFAULT_STOP_DAYS} dias.
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent className="space-y-5 max-w-xl">
-                        {!waConnected ? (
-                          <p className="text-sm text-amber-600 dark:text-amber-400 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
-                            Conecte o WhatsApp acima para enviar as mensagens.
-                          </p>
-                        ) : null}
-                        <div className="grid gap-4 sm:grid-cols-3">
-                          <Field>
-                            <FieldLabel htmlFor="inactive-first-days">1ª mensagem (dias)</FieldLabel>
-                            <Input
-                              id="inactive-first-days"
-                              type="number"
-                              min={7}
-                              max={365}
-                              placeholder={String(INACTIVE_MARKETING_DEFAULT_FIRST_DAYS)}
-                              className="mt-1 bg-input border-border"
-                              value={inactiveFirstDays}
-                              onChange={(e) => setInactiveFirstDays(e.target.value)}
-                            />
-                          </Field>
-                          <Field>
-                            <FieldLabel htmlFor="inactive-second-days">2ª mensagem (dias)</FieldLabel>
-                            <Input
-                              id="inactive-second-days"
-                              type="number"
-                              min={7}
-                              max={365}
-                              placeholder={String(INACTIVE_MARKETING_DEFAULT_SECOND_DAYS)}
-                              className="mt-1 bg-input border-border"
-                              value={inactiveSecondDays}
-                              onChange={(e) => setInactiveSecondDays(e.target.value)}
-                            />
-                          </Field>
-                          <Field>
-                            <FieldLabel htmlFor="inactive-stop-days">Parar após (dias)</FieldLabel>
-                            <Input
-                              id="inactive-stop-days"
-                              type="number"
-                              min={7}
-                              max={365}
-                              placeholder={String(INACTIVE_MARKETING_DEFAULT_STOP_DAYS)}
-                              className="mt-1 bg-input border-border"
-                              value={inactiveStopDays}
-                              onChange={(e) => setInactiveStopDays(e.target.value)}
-                            />
-                          </Field>
-                        </div>
-                        <Field>
-                          <FieldLabel>Texto da 1ª mensagem</FieldLabel>
-                          <Textarea
-                            className="mt-1 bg-input border-border text-foreground min-h-[100px]"
-                            value={inactiveWaFirstTpl}
-                            onChange={(e) => setInactiveWaFirstTpl(e.target.value)}
-                          />
-                        </Field>
-                        <Field>
-                          <FieldLabel>Texto da 2ª mensagem</FieldLabel>
-                          <Textarea
-                            className="mt-1 bg-input border-border text-foreground min-h-[100px]"
-                            value={inactiveWaSecondTpl}
-                            onChange={(e) => setInactiveWaSecondTpl(e.target.value)}
-                          />
-                        </Field>
-                        <WhatsAppTemplateVarsPanel
-                          extraTags={[{ tag: "{{dias_sem_visita}}", desc: "Dias desde a última visita" }]}
+                  {marketingInactiveFeature ? (
+                    <WhatsAppPersonalizeSectionBlock
+                      icon={Heart}
+                      title="Clientes inativos"
+                      description="Mensagens para quem parou de vir — prazos e textos das duas tentativas."
+                      inactive={!inactiveMarketingEnabled}
+                    >
+                      {inactiveMarketingEnabled ? (
+                        <WhatsAppInactiveMarketingSettings
+                          waConnected={waConnected}
+                          firstDays={inactiveFirstDays}
+                          secondDays={inactiveSecondDays}
+                          stopDays={inactiveStopDays}
+                          firstTemplate={inactiveWaFirstTpl}
+                          secondTemplate={inactiveWaSecondTpl}
+                          onFirstDaysChange={setInactiveFirstDays}
+                          onSecondDaysChange={setInactiveSecondDays}
+                          onStopDaysChange={setInactiveStopDays}
+                          onFirstTemplateChange={setInactiveWaFirstTpl}
+                          onSecondTemplateChange={setInactiveWaSecondTpl}
                         />
-                      </CardContent>
-                    </Card>
-                  ) : marketingInactiveFeature ? (
-                    <p className="text-xs text-muted-foreground">
-                      Para ajustar prazos de clientes inativos, ligue &quot;Trazer quem parou de vir&quot; na
-                      configuração rápida acima.
-                    </p>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">
+                          Ligue &quot;Trazer quem parou de vir&quot; na configuração rápida acima para ajustar prazos
+                          e textos.
+                        </p>
+                      )}
+                    </WhatsAppPersonalizeSectionBlock>
                   ) : null}
                 </CollapsibleContent>
               </Collapsible>

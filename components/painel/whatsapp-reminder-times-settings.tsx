@@ -10,6 +10,7 @@ type WhatsAppReminderTimesSettingsProps = {
   options: readonly ReminderOption[]
   selectedMinutes: number[]
   customHours: string
+  embedded?: boolean
   onToggleMinute: (minutes: number) => void
   onCustomHoursChange: (value: string) => void
 }
@@ -18,15 +19,26 @@ export function WhatsAppReminderTimesSettings({
   options,
   selectedMinutes,
   customHours,
+  embedded,
   onToggleMinute,
   onCustomHoursChange,
 }: WhatsAppReminderTimesSettingsProps) {
   return (
-    <div className="space-y-4 rounded-lg border border-border bg-muted/20 p-4 max-w-xl">
-      <div>
-        <p className="text-sm font-medium text-foreground">Quanto tempo antes avisar?</p>
-        <p className="text-xs text-muted-foreground mt-0.5">Pode marcar mais de uma opção.</p>
-      </div>
+    <div
+      className={
+        embedded
+          ? "space-y-4 max-w-xl"
+          : "space-y-4 rounded-lg border border-border bg-muted/20 p-4 max-w-xl"
+      }
+    >
+      {!embedded ? (
+        <div>
+          <p className="text-sm font-medium text-foreground">Quanto tempo antes avisar?</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Pode marcar mais de uma opção.</p>
+        </div>
+      ) : (
+        <p className="text-xs text-muted-foreground">Marque um ou mais horários — o cliente recebe lembrete em cada um.</p>
+      )}
       <div className="flex flex-col gap-2.5">
         {options.map((opt) => (
           <label

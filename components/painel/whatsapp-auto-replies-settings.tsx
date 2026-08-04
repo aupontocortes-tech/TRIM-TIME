@@ -1,6 +1,7 @@
 "use client"
 
-import { Plus, RotateCcw, Trash2 } from "lucide-react"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { ChevronDown, Plus, RotateCcw, Trash2 } from "lucide-react"
 import type { WhatsAppAutoReplyRule } from "@/lib/db/types"
 import {
   DEFAULT_WHATSAPP_AUTO_REPLY_RULES,
@@ -33,6 +34,7 @@ type WhatsAppAutoRepliesSettingsProps = {
   sectionStep?: number
   hideEnableToggle?: boolean
   hideWebhook?: boolean
+  embedded?: boolean
   enabled: boolean
   rules: WhatsAppAutoReplyRule[]
   webhookUrl: string
@@ -65,6 +67,7 @@ export function WhatsAppAutoRepliesSettings({
   sectionStep,
   hideEnableToggle,
   hideWebhook,
+  embedded,
   enabled,
   rules,
   webhookUrl,
@@ -106,23 +109,33 @@ export function WhatsAppAutoRepliesSettings({
   }
 
   return (
-    <Card className={hideEnableToggle ? "border-border bg-muted/10 shadow-none" : "border-border bg-card"}>
-      <CardHeader>
-        <CardTitle className="text-base text-foreground flex items-center gap-2">
-          {sectionStep && !hideEnableToggle ? (
-            <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary">
-              {sectionStep}
-            </span>
-          ) : null}
-          Respostas automáticas
-        </CardTitle>
-        <CardDescription className="text-muted-foreground">
-          {hideEnableToggle
-            ? "Edite palavras que o cliente manda e a resposta de cada uma."
-            : "Quando o cliente manda uma palavra no WhatsApp, o sistema responde sozinho (ex.: \"endereço\" → manda o endereço). Áudio recebe aviso para digitar. Menu numerado só se nenhuma palavra bater."}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4 max-w-2xl">
+    <Card
+      className={
+        embedded
+          ? "border-0 bg-transparent shadow-none"
+          : hideEnableToggle
+            ? "border-border bg-muted/10 shadow-none"
+            : "border-border bg-card"
+      }
+    >
+      {!embedded ? (
+        <CardHeader>
+          <CardTitle className="text-base text-foreground flex items-center gap-2">
+            {sectionStep && !hideEnableToggle ? (
+              <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary">
+                {sectionStep}
+              </span>
+            ) : null}
+            Respostas automáticas
+          </CardTitle>
+          <CardDescription className="text-muted-foreground">
+            {hideEnableToggle
+              ? "Edite palavras que o cliente manda e a resposta de cada uma."
+              : "Quando o cliente manda uma palavra no WhatsApp, o sistema responde sozinho (ex.: \"endereço\" → manda o endereço). Áudio recebe aviso para digitar. Menu numerado só se nenhuma palavra bater."}
+          </CardDescription>
+        </CardHeader>
+      ) : null}
+      <CardContent className={embedded ? "p-0 space-y-4 max-w-2xl" : "space-y-4 max-w-2xl"}>
         {!hideEnableToggle ? (
           <label className="flex items-center gap-3 text-sm text-foreground cursor-pointer rounded-lg border border-border bg-muted/20 px-3 py-2.5">
             <Checkbox checked={enabled} onCheckedChange={(v) => onEnabledChange(v === true)} />
@@ -185,7 +198,7 @@ export function WhatsAppAutoRepliesSettings({
                 </Button>
               </div>
               <Field>
-                <FieldLabel>Palavras-chave (separe por vírgula)</FieldLabel>
+                <FieldLabel>O que o cliente pode digitar</FieldLabel>
                 <Input
                   className="mt-1 bg-input border-border text-foreground"
                   value={rule.keywords.join(", ")}
@@ -197,11 +210,14 @@ export function WhatsAppAutoRepliesSettings({
                         .filter(Boolean),
                     })
                   }
-                  placeholder="endereço, onde fica, localização"
+                  placeholder="endereço, onde fica, horário"
                 />
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Separe por vírgula. Ex.: cliente manda &quot;endereço&quot; → recebe a resposta abaixo.
+                </p>
               </Field>
               <Field>
-                <FieldLabel>Resposta automática</FieldLabel>
+                <FieldLabel>Resposta que o WhatsApp envia</FieldLabel>
                 <Textarea
                   className="mt-1 min-h-[72px] bg-input border-border text-foreground"
                   value={rule.reply_template}
@@ -229,36 +245,47 @@ export function WhatsAppAutoRepliesSettings({
           </Button>
         </div>
 
-        <div className="rounded-lg border border-border bg-muted/40 p-3 space-y-3">
-          <p className="text-xs font-medium text-foreground">Variáveis disponíveis na resposta</p>
-          <div className="flex flex-wrap gap-1.5">
-            {NOTIFICATION_TEMPLATE_VARIABLE_HELP.map((v) => (
-              <span
-                key={v.tag}
-                className="inline-flex items-center rounded-md bg-primary/10 px-2 py-0.5 font-mono text-[11px] text-primary"
-                title={v.desc}
-              >
-                {v.tag}
-              </span>
-            ))}
-          </div>
-          {VAR_GROUPS.map((group) => (
-            <div key={group}>
-              <p className="text-[11px] font-medium text-muted-foreground mb-1.5">{group}</p>
-              <div className="flex flex-wrap gap-1.5">
-                {AUTO_REPLY_EXTRA_VARS.filter((v) => v.group === group).map((v) => (
-                  <span
-                    key={v.tag}
-                    className="inline-flex items-center rounded-md bg-primary/10 px-2 py-0.5 font-mono text-[11px] text-primary"
-                    title={v.desc}
-                  >
-                    {v.tag}
-                  </span>
-                ))}
+        <Collapsible>
+          <CollapsibleTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="w-full justify-between h-9 px-2 text-xs text-muted-foreground hover:text-foreground group"
+            >
+              Ver palavras automáticas para as respostas
+              <ChevronDown className="h-3.5 w-3.5 transition-transform group-data-[state=open]:rotate-180" />
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="rounded-lg border border-border bg-muted/30 p-3 space-y-3 mt-1">
+            <p className="text-[11px] text-muted-foreground">
+              Copie e cole no texto da resposta. Na hora do envio viram o dado real do cliente.
+            </p>
+            <ul className="space-y-1.5">
+              {NOTIFICATION_TEMPLATE_VARIABLE_HELP.filter((v) =>
+                ["{{nome_cliente}}", "{{barbearia}}", "{{link_agendamento}}", "{{endereco}}"].includes(v.tag)
+              ).map((v) => (
+                <li key={v.tag} className="flex flex-wrap gap-x-2 text-[11px]">
+                  <code className="rounded bg-primary/10 px-1.5 py-0.5 font-mono text-primary">{v.tag}</code>
+                  <span className="text-muted-foreground">{v.desc}</span>
+                </li>
+              ))}
+            </ul>
+            {VAR_GROUPS.map((group) => (
+              <div key={group}>
+                <p className="text-[11px] font-medium text-foreground mb-1.5">{group}</p>
+                <ul className="space-y-1">
+                  {AUTO_REPLY_EXTRA_VARS.filter((v) => v.group === group).map((v) => (
+                    <li key={v.tag} className="flex flex-wrap gap-x-2 text-[11px]">
+                      <code className="rounded bg-primary/10 px-1.5 py-0.5 font-mono text-primary">{v.tag}</code>
+                      <span className="text-muted-foreground">{v.desc}</span>
+                    </li>
+                  ))}
+                </ul>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </CollapsibleContent>
+        </Collapsible>
           </>
         ) : null}
       </CardContent>

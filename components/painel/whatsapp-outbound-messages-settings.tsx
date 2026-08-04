@@ -25,6 +25,7 @@ type WhatsAppOutboundMessagesSettingsProps = {
   remindersEnabled: boolean
   showMultiUnitHint?: boolean
   compact?: boolean
+  embedded?: boolean
   onConfirmChange: (value: string) => void
   onReminderChange: (value: string) => void
   onPostServiceChange: (value: string) => void
@@ -67,6 +68,7 @@ export function WhatsAppOutboundMessagesSettings({
   remindersEnabled,
   showMultiUnitHint,
   compact,
+  embedded,
   onConfirmChange,
   onReminderChange,
   onPostServiceChange,
@@ -83,25 +85,9 @@ export function WhatsAppOutboundMessagesSettings({
     post: onPostServiceChange,
   }
 
-  return (
-    <Card className={compact ? "border-border bg-muted/10 shadow-none" : "bg-card border-border"}>
-      <CardHeader className={compact ? "pb-2" : undefined}>
-        <CardTitle className="text-foreground text-base flex items-center gap-2">
-          {!compact ? (
-            <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary">
-              2
-            </span>
-          ) : null}
-          Mensagens enviadas ao cliente
-        </CardTitle>
-        <CardDescription className="text-muted-foreground">
-          {compact
-            ? "Só mude se quiser um texto diferente do padrão."
-            : "Edite só se quiser personalizar. Se não mexer, o texto padrão já funciona. Abra cada bloco abaixo para ver e alterar."}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4 max-w-2xl">
-        <Accordion type="multiple" defaultValue={compact ? [] : ["confirm"]} className="w-full">
+  const body = (
+    <>
+      <Accordion type="multiple" defaultValue={compact || embedded ? [] : ["confirm"]} className="w-full">
           {MESSAGE_SECTIONS.map((section) => {
             const Icon = section.icon
             const disabled = section.id === "reminder" && !remindersEnabled
@@ -150,7 +136,38 @@ export function WhatsAppOutboundMessagesSettings({
         </Accordion>
 
         <WhatsAppTemplateVarsPanel showMultiUnitHint={showMultiUnitHint} />
-      </CardContent>
+    </>
+  )
+
+  if (embedded) {
+    return <div className="space-y-4 max-w-2xl">{body}</div>
+  }
+
+  return (
+    <Card className={compact ? "border-border bg-muted/10 shadow-none" : "bg-card border-border"}>
+      <CardHeader className={compact ? "pb-2" : undefined}>
+        <CardTitle className="text-foreground text-base flex items-center gap-2">
+          {!compact ? (
+            <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary">
+              2
+            </span>
+          ) : null}
+          Mensagens enviadas ao cliente
+        </CardTitle>
+        <CardDescription className="text-muted-foreground">
+          {compact ? (
+            <span className="block space-y-1">
+              <span className="block">Três mensagens automáticas — abra só a que quiser mudar:</span>
+              <span className="block text-[11px]">
+                confirmação ao agendar · lembrete antes do horário · agradecimento após o corte
+              </span>
+            </span>
+          ) : (
+            "Edite só se quiser personalizar. Se não mexer, o texto padrão já funciona. Abra cada bloco abaixo para ver e alterar."
+          )}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4 max-w-2xl">{body}</CardContent>
     </Card>
   )
 }
