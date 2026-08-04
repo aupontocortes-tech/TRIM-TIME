@@ -118,6 +118,8 @@ import { planSalesButtonVariant, planSalesTheme } from "@/lib/plan-sales-theme"
 import { BarberPhotoAdjust } from "@/components/barber-photo-adjust"
 import { WhatsAppConnectWizard } from "@/components/painel/whatsapp-connect-wizard"
 import { WhatsAppAutoRepliesSettings } from "@/components/painel/whatsapp-auto-replies-settings"
+import { WhatsAppOutboundMessagesSettings } from "@/components/painel/whatsapp-outbound-messages-settings"
+import { WhatsAppTemplateVarsPanel } from "@/components/painel/whatsapp-template-vars-panel"
 import { DEFAULT_WHATSAPP_AUTO_REPLY_RULES } from "@/lib/whatsapp-auto-reply-defaults"
 import { GREEN_API_FIELD_COPY } from "@/lib/whatsapp-green-api"
 import { ChangePasswordForm } from "@/components/account/change-password-form"
@@ -4758,32 +4760,64 @@ export default function ConfiguracoesPage() {
           ) : null}
 
           {whatsappIntegrationFeature ? (
+            <div className="rounded-lg border border-primary/25 bg-primary/5 px-4 py-3 text-sm text-muted-foreground max-w-2xl">
+              <p className="font-medium text-foreground mb-2">Como configurar (rápido)</p>
+              <ol className="list-decimal list-inside space-y-1 text-xs sm:text-sm">
+                <li>
+                  <strong className="text-foreground">Conecte</strong> o WhatsApp acima (Passo 1)
+                </li>
+                <li>
+                  <strong className="text-foreground">Revise os textos</strong> — o padrão já funciona; mude só se
+                  quiser (Passo 2)
+                </li>
+                <li>
+                  <strong className="text-foreground">Ative</strong> lembretes, respostas automáticas e clientes
+                  inativos conforme precisar (Passos 3–5)
+                </li>
+                <li>
+                  Clique em <strong className="text-foreground">Salvar configurações do WhatsApp</strong> no final
+                </li>
+              </ol>
+            </div>
+          ) : null}
+
+          {whatsappIntegrationFeature ? (
             <>
+              <WhatsAppOutboundMessagesSettings
+                confirmTemplate={notifWaConfirmTpl}
+                reminderTemplate={notifWaTpl}
+                postServiceTemplate={notifWaPostTpl}
+                remindersEnabled={notifWa}
+                showMultiUnitHint={multiUnitsFeature}
+                onConfirmChange={setNotifWaConfirmTpl}
+                onReminderChange={setNotifWaTpl}
+                onPostServiceChange={setNotifWaPostTpl}
+              />
+
               <Card id="wa-settings-section" className="bg-card border-border scroll-mt-24">
                 <CardHeader>
                   <CardTitle className="text-foreground text-base flex items-center gap-2">
-                    <Bell className="w-4 h-4 text-primary" />
+                    <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary">
+                      3
+                    </span>
                     Lembretes automáticos
                   </CardTitle>
-              <CardDescription className="text-muted-foreground">
-                O cliente recebe um aviso no WhatsApp antes do horário marcado.
-              </CardDescription>
-              <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
-                Confirmação, lembretes e pós-atendimento são enviados como texto livre via Green API — personalize os
-                modelos abaixo.
-              </p>
+                  <CardDescription className="text-muted-foreground">
+                    Avisa o cliente no WhatsApp antes do horário. O texto do lembrete você edita no Passo 2 acima.
+                  </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-5 max-w-xl">
                   <div className="flex items-center gap-3">
                     <Switch checked={notifWa} onCheckedChange={setNotifWa} id="notif-wa" />
                     <label htmlFor="notif-wa" className="text-sm font-medium text-foreground cursor-pointer">
-                      Ativar lembretes por WhatsApp
+                      Enviar lembrete por WhatsApp
                     </label>
                   </div>
 
-                  {notifWa && (
-                    <div className="space-y-4 pl-1">
-                      <p className="text-sm text-muted-foreground">Quando enviar o lembrete:</p>
+                  {notifWa ? (
+                    <div className="space-y-4 rounded-lg border border-border bg-muted/20 p-4">
+                      <p className="text-sm font-medium text-foreground">Com quanta antecedência avisar?</p>
+                      <p className="text-xs text-muted-foreground -mt-2">Marque uma ou mais opções.</p>
                       <div className="flex flex-col gap-2.5">
                         {WA_SECTION_REMINDER_OPTIONS.map((opt) => (
                           <label
@@ -4799,7 +4833,7 @@ export default function ConfiguracoesPage() {
                         ))}
                       </div>
                       <Field>
-                        <FieldLabel>Personalizado (em horas antes)</FieldLabel>
+                        <FieldLabel>Outro horário (horas antes)</FieldLabel>
                         <Input
                           type="number"
                           min={1}
@@ -4809,14 +4843,20 @@ export default function ConfiguracoesPage() {
                           onChange={(e) => setNotifCustomReminderHours(e.target.value)}
                           placeholder="Ex.: 3"
                         />
+                        <p className="text-[11px] text-muted-foreground mt-1">Opcional — soma às opções marcadas.</p>
                       </Field>
                     </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Desligado — confirmação e pós-atendimento continuam funcionando se o WhatsApp estiver conectado.
+                    </p>
                   )}
                 </CardContent>
               </Card>
 
               {whatsappIntegrationFeature ? (
                 <WhatsAppAutoRepliesSettings
+                  sectionStep={4}
                   enabled={notifWaAutoReplyEnabled}
                   rules={notifWaAutoReplyRules}
                   webhookUrl={waWebhookUrl}
@@ -4829,6 +4869,9 @@ export default function ConfiguracoesPage() {
                 <Card className="bg-card border-border">
                   <CardHeader>
                     <CardTitle className="text-foreground text-base flex items-center gap-2">
+                      <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary">
+                        5
+                      </span>
                       <Heart className="w-4 h-4 text-primary" />
                       Clientes inativos
                     </CardTitle>
@@ -4919,21 +4962,9 @@ export default function ConfiguracoesPage() {
                             onChange={(e) => setInactiveWaSecondTpl(e.target.value)}
                           />
                         </Field>
-                        <p className="text-xs text-muted-foreground">
-                          Variáveis:{" "}
-                          {NOTIFICATION_TEMPLATE_VARIABLE_HELP.filter((v) =>
-                            [
-                              "{{nome_cliente}}",
-                              "{{barbearia}}",
-                              "{{link_agendamento}}",
-                              "{{dias_sem_visita}}",
-                            ].includes(v.tag)
-                          ).map((v) => (
-                            <code key={v.tag} className="text-foreground/90 mr-1">
-                              {v.tag}
-                            </code>
-                          ))}
-                        </p>
+                        <WhatsAppTemplateVarsPanel
+                          extraTags={[{ tag: "{{dias_sem_visita}}", desc: "Dias desde a última visita" }]}
+                        />
                       </>
                     ) : null}
                   </CardContent>
@@ -4960,97 +4991,32 @@ export default function ConfiguracoesPage() {
                 </Card>
               )}
 
-              <Card className="bg-card border-border">
-                <CardHeader>
-                  <CardTitle className="text-foreground text-base flex items-center gap-2">
-                    <MessageSquare className="w-4 h-4 text-primary" />
-                    Textos das mensagens
-                  </CardTitle>
-                  <CardDescription className="text-muted-foreground">
-                    Personalize o que seus clientes recebem. Use as palavras entre {"{{ }}"} para incluir o nome, data, horário e serviço automaticamente.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-5 max-w-xl">
-                  <Field>
-                    <FieldLabel className="flex items-center gap-2">
-                      <CalendarCheck className="w-3.5 h-3.5 text-green-500" />
-                      Confirmação do agendamento
-                    </FieldLabel>
-                    <Textarea
-                      className="mt-1.5 bg-input border-border text-foreground min-h-[80px]"
-                      value={notifWaConfirmTpl}
-                      onChange={(e) => setNotifWaConfirmTpl(e.target.value)}
-                    />
-                    <p className="text-xs text-muted-foreground mt-1.5">
-                      Enviada quando o cliente marca um horário, quando você remarca na Agenda ou quando o cliente
-                      remarca pelo link de agendamento. Ex.: Olá {"{{nome_cliente}}"}, confirmado para {"{{data}}"} às{" "}
-                      {"{{horario}}"}!
-                    </p>
-                  </Field>
-                  <Field>
-                    <FieldLabel className="flex items-center gap-2">
-                      <Clock3 className="w-3.5 h-3.5 text-blue-500" />
-                      Lembrete antes do horário
-                    </FieldLabel>
-                    <Textarea
-                      className="mt-1.5 bg-input border-border text-foreground min-h-[80px]"
-                      value={notifWaTpl}
-                      onChange={(e) => setNotifWaTpl(e.target.value)}
-                      disabled={!notifWa}
-                    />
-                    <p className="text-xs text-muted-foreground mt-1.5">
-                      Enviada antes do horário agendado. Ex.: {"{{nome}}"}, lembrando do seu horário na {"{{barbearia}}"} às {"{{horario}}"}.
-                    </p>
-                  </Field>
-                  <Field>
-                    <FieldLabel className="flex items-center gap-2">
-                      <Heart className="w-3.5 h-3.5 text-rose-500" />
-                      Mensagem pós-atendimento
-                    </FieldLabel>
-                    <Textarea
-                      className="mt-1.5 bg-input border-border text-foreground min-h-[80px]"
-                      value={notifWaPostTpl}
-                      onChange={(e) => setNotifWaPostTpl(e.target.value)}
-                    />
-                    <p className="text-xs text-muted-foreground mt-1.5">
-                      Enviada depois do atendimento. Ex.: Obrigado pela visita, {"{{nome}}"}! Esperamos você na {"{{barbearia}}"}.
-                    </p>
-                  </Field>
+              {notifError ? (
+                <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm max-w-2xl">
+                  {notifError}
+                </div>
+              ) : null}
+              {notifOk ? (
+                <div className="p-3 rounded-lg border border-green-500/30 bg-green-500/10 text-sm text-green-600 max-w-2xl">
+                  Configurações do WhatsApp salvas.
+                </div>
+              ) : null}
 
-                  <div className="rounded-lg bg-muted/40 border border-border p-3">
-                    <p className="text-xs font-medium text-foreground mb-2">Palavras automáticas disponíveis:</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {NOTIFICATION_TEMPLATE_VARIABLE_HELP.map((v) => (
-                        <span
-                          key={v.tag}
-                          className="inline-flex items-center gap-1 rounded-md bg-primary/10 text-primary px-2 py-0.5 text-[11px] font-mono"
-                          title={v.desc}
-                        >
-                          {v.tag}
-                        </span>
-                      ))}
-                    </div>
-                    {multiUnitsFeature ? (
-                      <p className="text-xs text-muted-foreground mt-2">
-                        Com várias unidades, use <code className="text-foreground/90">{"{{unidade}}"}</code>,{" "}
-                        <code className="text-foreground/90">{"{{endereco}}"}</code> e{" "}
-                        <code className="text-foreground/90">{"{{maps}}"}</code> para o cliente saber onde ir.
-                      </p>
-                    ) : null}
-                  </div>
-                </CardContent>
-              </Card>
-
-              <div className="flex flex-wrap gap-3">
-                <Button
-                  type="button"
-                  className="bg-primary text-primary-foreground hover:bg-primary/90"
-                  disabled={notifBusy}
-                  onClick={() => void handleSaveNotificacoes()}
-                >
-                  <Save className="w-4 h-4 mr-2" />
-                  {notifBusy ? "Salvando..." : "Salvar configurações"}
-                </Button>
+              <div className="sticky bottom-0 z-10 -mx-1 px-1 py-3 bg-background/95 backdrop-blur border-t border-border">
+                <div className="flex flex-wrap items-center gap-3 max-w-2xl">
+                  <Button
+                    type="button"
+                    className="bg-primary text-primary-foreground hover:bg-primary/90"
+                    disabled={notifBusy}
+                    onClick={() => void handleSaveNotificacoes()}
+                  >
+                    <Save className="w-4 h-4 mr-2" />
+                    {notifBusy ? "Salvando..." : "Salvar configurações do WhatsApp"}
+                  </Button>
+                  <p className="text-xs text-muted-foreground">
+                    Salve depois de alterar textos, lembretes ou clientes inativos.
+                  </p>
+                </div>
               </div>
             </>
           ) : null}

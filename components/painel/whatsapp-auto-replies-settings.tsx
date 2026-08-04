@@ -30,6 +30,7 @@ const AUTO_REPLY_EXTRA_VARS = [
 const VAR_GROUPS = ["Agendamento", "Lista de espera", "Informações"] as const
 
 type WhatsAppAutoRepliesSettingsProps = {
+  sectionStep?: number
   enabled: boolean
   rules: WhatsAppAutoReplyRule[]
   webhookUrl: string
@@ -59,6 +60,7 @@ function sortRulesByDefaultOrder(rules: WhatsAppAutoReplyRule[]): WhatsAppAutoRe
 }
 
 export function WhatsAppAutoRepliesSettings({
+  sectionStep,
   enabled,
   rules,
   webhookUrl,
@@ -102,17 +104,23 @@ export function WhatsAppAutoRepliesSettings({
   return (
     <Card className="border-border bg-card">
       <CardHeader>
-        <CardTitle className="text-base text-foreground">Respostas automáticas (palavras-chave)</CardTitle>
+        <CardTitle className="text-base text-foreground flex items-center gap-2">
+          {sectionStep ? (
+            <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary">
+              {sectionStep}
+            </span>
+          ) : null}
+          Respostas automáticas
+        </CardTitle>
         <CardDescription className="text-muted-foreground">
-          Palavra-chave → resposta direta (ex.: &quot;tem horário para hoje&quot; manda o link de agendamento).
-          Áudio recebe aviso para digitar por escrito. A lista numerada só aparece se nenhuma palavra-chave
-          bater.
+          Quando o cliente manda uma palavra no WhatsApp, o sistema responde sozinho (ex.: &quot;endereço&quot; → manda
+          o endereço). Áudio recebe aviso para digitar. Menu numerado só se nenhuma palavra bater.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 max-w-2xl">
-        <label className="flex items-center gap-3 text-sm text-foreground cursor-pointer">
+        <label className="flex items-center gap-3 text-sm text-foreground cursor-pointer rounded-lg border border-border bg-muted/20 px-3 py-2.5">
           <Checkbox checked={enabled} onCheckedChange={(v) => onEnabledChange(v === true)} />
-          Ativar respostas automáticas por palavra-chave
+          Ativar respostas automáticas
         </label>
 
         <div className="rounded-lg border border-border/70 bg-muted/20 p-3 space-y-1.5">
@@ -135,7 +143,10 @@ export function WhatsAppAutoRepliesSettings({
         </div>
 
         <div className="space-y-3">
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Regras configuradas</p>
+          <p className="text-sm font-medium text-foreground">Regras — clique para editar</p>
+          <p className="text-xs text-muted-foreground -mt-2">
+            Cada linha é uma palavra (ou frase) que o cliente pode mandar e a resposta automática.
+          </p>
           {sortedRules.map((rule, index) => (
             <div key={rule.id ?? `rule-${index}`} className="rounded-lg border border-border p-3 space-y-3">
               <div className="flex items-center justify-between gap-2">
