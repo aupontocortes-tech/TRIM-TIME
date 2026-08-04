@@ -107,6 +107,8 @@ import {
   DEFAULT_WHATSAPP_POST_SERVICE,
   DEFAULT_WHATSAPP_REMINDER,
   DEFAULT_WHATSAPP_WAITLIST_SLOT,
+  DEFAULT_WHATSAPP_INACTIVE_FIRST,
+  DEFAULT_WHATSAPP_INACTIVE_SECOND,
   DEFAULT_EMAIL_WAITLIST_SLOT,
   DEFAULT_APP_WAITLIST_SLOT,
 } from "@/lib/notification-default-templates"
@@ -125,6 +127,12 @@ import {
   isPrincipalBarbershopUnit,
   resolveBarbeariaContactEditScope,
 } from "@/lib/barbearia-unit-form"
+import {
+  INACTIVE_MARKETING_DEFAULT_FIRST_DAYS,
+  INACTIVE_MARKETING_DEFAULT_SECOND_DAYS,
+  INACTIVE_MARKETING_DEFAULT_STOP_DAYS,
+  normalizeInactiveClientMarketing,
+} from "@/lib/inactive-client-marketing"
 
 const diasSemana = [
   { key: "segunda" as const, label: "Segunda-feira" },
@@ -278,6 +286,7 @@ export default function ConfiguracoesPage() {
   const emailNotificationsFeature = plan != null && hasFeature(plan, "email_notifications")
   const waitlistFeature = plan != null && hasFeature(plan, "waiting_list")
   const loyaltyFeature = plan != null && hasFeature(plan, "loyalty_program")
+  const marketingInactiveFeature = plan != null && hasFeature(plan, "marketing_inactive")
 
   const [barbearia, setBarbearia] = useState<BarbeariaForm>(emptyBarbearia)
   const [horarios, setHorarios] = useState<
@@ -414,6 +423,12 @@ export default function ConfiguracoesPage() {
     DEFAULT_WHATSAPP_AUTO_REPLY_RULES
   )
   const [notifBusy, setNotifBusy] = useState(false)
+  const [inactiveMarketingEnabled, setInactiveMarketingEnabled] = useState(false)
+  const [inactiveFirstDays, setInactiveFirstDays] = useState(String(INACTIVE_MARKETING_DEFAULT_FIRST_DAYS))
+  const [inactiveSecondDays, setInactiveSecondDays] = useState(String(INACTIVE_MARKETING_DEFAULT_SECOND_DAYS))
+  const [inactiveStopDays, setInactiveStopDays] = useState(String(INACTIVE_MARKETING_DEFAULT_STOP_DAYS))
+  const [inactiveWaFirstTpl, setInactiveWaFirstTpl] = useState(DEFAULT_WHATSAPP_INACTIVE_FIRST)
+  const [inactiveWaSecondTpl, setInactiveWaSecondTpl] = useState(DEFAULT_WHATSAPP_INACTIVE_SECOND)
   const [notifOk, setNotifOk] = useState(false)
   const [notifError, setNotifError] = useState<string | null>(null)
   const [unitBusy, setUnitBusy] = useState(false)
@@ -566,6 +581,21 @@ export default function ConfiguracoesPage() {
     barbershop?.id,
     barbershop?.updated_at,
     JSON.stringify(barbershop?.settings?.notification_settings ?? null),
+  ])
+
+  useEffect(() => {
+    if (!barbershop) return
+    const cfg = normalizeInactiveClientMarketing(barbershop.settings?.inactive_client_marketing)
+    setInactiveMarketingEnabled(cfg.enabled === true)
+    setInactiveFirstDays(String(cfg.first_message_days))
+    setInactiveSecondDays(String(cfg.second_message_days))
+    setInactiveStopDays(String(cfg.stop_after_days))
+    setInactiveWaFirstTpl(cfg.whatsapp_first_template ?? DEFAULT_WHATSAPP_INACTIVE_FIRST)
+    setInactiveWaSecondTpl(cfg.whatsapp_second_template ?? DEFAULT_WHATSAPP_INACTIVE_SECOND)
+  }, [
+    barbershop?.id,
+    barbershop?.updated_at,
+    JSON.stringify(barbershop?.settings?.inactive_client_marketing ?? null),
   ])
 
   const toggleReminderOffset = (minutes: number) => {
@@ -1575,12 +1605,46 @@ export default function ConfiguracoesPage() {
         setNotifBusy(false)
         return
       }
+      let inactiveMarketingPayload: {
+        enabled: boolean
+        first_message_days?: number
+        second_message_days?: number
+        stop_after_days?: number
+        whatsapp_first_template?: string
+        whatsapp_second_template?: string
+      } = { enabled: false }
+      if (marketingInactiveFeature && inactiveMarketingEnabled) {
+        if (!waConnected) {
+          setNotifError(
+            "Para ativar marketing de clientes inativos, conecte o WhatsApp na aba Integração."
+          )
+          setNotifBusy(false)
+          return
+        }
+        const first = Math.round(Number(inactiveFirstDays.replace(",", ".")))
+        const second = Math.round(Number(inactiveSecondDays.replace(",", ".")))
+        const stop = Math.round(Number(inactiveStopDays.replace(",", ".")))
+        if (!Number.isFinite(first) || !Number.isFinite(second) || !Number.isFinite(stop)) {
+          setNotifError("Informe dias válidos para o marketing de clientes inativos.")
+          setNotifBusy(false)
+          return
+        }
+        inactiveMarketingPayload = {
+          enabled: true,
+          first_message_days: first,
+          second_message_days: second,
+          stop_after_days: stop,
+          whatsapp_first_template: inactiveWaFirstTpl.trim() || DEFAULT_WHATSAPP_INACTIVE_FIRST,
+          whatsapp_second_template: inactiveWaSecondTpl.trim() || DEFAULT_WHATSAPP_INACTIVE_SECOND,
+        }
+      }
       const r = await fetch("/api/barbershops", {
         method: "PATCH",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           settings: {
+            inactive_client_marketing: inactiveMarketingPayload,
             notification_settings: {
               reminder_offsets_minutes: offsets,
               reminder_custom_minutes,
@@ -4627,6 +4691,141 @@ export default function ConfiguracoesPage() {
               </CardContent>
             </Card>
           ) : null}
+
+          {marketingInactiveFeature ? (
+            <Card className="bg-card border-border">
+              <CardHeader>
+                <CardTitle className="text-foreground flex items-center gap-2">
+                  <MessageSquare className="w-4 h-4 text-primary" />
+                  Clientes inativos — WhatsApp
+                </CardTitle>
+                <CardDescription className="text-muted-foreground">
+                  Envia mensagem automática para quem não comparece há um tempo. Você ajusta os dias abaixo — sugestão
+                  inicial: {INACTIVE_MARKETING_DEFAULT_FIRST_DAYS}, {INACTIVE_MARKETING_DEFAULT_SECOND_DAYS} e parar em{" "}
+                  {INACTIVE_MARKETING_DEFAULT_STOP_DAYS} (sem 3ª mensagem).
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-5 max-w-2xl">
+                <div className="flex items-center gap-2">
+                  <Switch
+                    checked={inactiveMarketingEnabled}
+                    onCheckedChange={setInactiveMarketingEnabled}
+                    id="inactive-marketing"
+                  />
+                  <FieldLabel htmlFor="inactive-marketing" className="cursor-pointer">
+                    Ativar reativação por WhatsApp
+                  </FieldLabel>
+                </div>
+                {inactiveMarketingEnabled ? (
+                  <>
+                    {!waConnected ? (
+                      <p className="text-sm text-amber-600 dark:text-amber-400 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
+                        Conecte o WhatsApp na aba <strong className="text-foreground">Integração</strong> para
+                        enviar as mensagens.
+                      </p>
+                    ) : null}
+                    <div className="grid gap-4 sm:grid-cols-3">
+                      <Field>
+                        <FieldLabel htmlFor="inactive-first-days">1ª mensagem (dias)</FieldLabel>
+                        <Input
+                          id="inactive-first-days"
+                          type="number"
+                          min={7}
+                          max={365}
+                          placeholder={String(INACTIVE_MARKETING_DEFAULT_FIRST_DAYS)}
+                          className="mt-1 bg-input border-border"
+                          value={inactiveFirstDays}
+                          onChange={(e) => setInactiveFirstDays(e.target.value)}
+                        />
+                        <p className="text-[11px] text-muted-foreground mt-1">Sem visita concluída</p>
+                      </Field>
+                      <Field>
+                        <FieldLabel htmlFor="inactive-second-days">2ª mensagem (dias)</FieldLabel>
+                        <Input
+                          id="inactive-second-days"
+                          type="number"
+                          min={7}
+                          max={365}
+                          placeholder={String(INACTIVE_MARKETING_DEFAULT_SECOND_DAYS)}
+                          className="mt-1 bg-input border-border"
+                          value={inactiveSecondDays}
+                          onChange={(e) => setInactiveSecondDays(e.target.value)}
+                        />
+                        <p className="text-[11px] text-muted-foreground mt-1">Última tentativa</p>
+                      </Field>
+                      <Field>
+                        <FieldLabel htmlFor="inactive-stop-days">Desistir após (dias)</FieldLabel>
+                        <Input
+                          id="inactive-stop-days"
+                          type="number"
+                          min={7}
+                          max={365}
+                          placeholder={String(INACTIVE_MARKETING_DEFAULT_STOP_DAYS)}
+                          className="mt-1 bg-input border-border"
+                          value={inactiveStopDays}
+                          onChange={(e) => setInactiveStopDays(e.target.value)}
+                        />
+                        <p className="text-[11px] text-muted-foreground mt-1">Não envia de novo</p>
+                      </Field>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Os três prazos são livres (entre 7 e 365 dias). A 2ª mensagem precisa ser depois da 1ª; “desistir”
+                      precisa ser depois da 2ª.
+                    </p>
+                    <Field>
+                      <FieldLabel>1ª mensagem (reativação)</FieldLabel>
+                      <Textarea
+                        className="mt-1 bg-input border-border text-foreground min-h-[120px]"
+                        value={inactiveWaFirstTpl}
+                        onChange={(e) => setInactiveWaFirstTpl(e.target.value)}
+                      />
+                    </Field>
+                    <Field>
+                      <FieldLabel>2ª mensagem (última tentativa)</FieldLabel>
+                      <Textarea
+                        className="mt-1 bg-input border-border text-foreground min-h-[120px]"
+                        value={inactiveWaSecondTpl}
+                        onChange={(e) => setInactiveWaSecondTpl(e.target.value)}
+                      />
+                    </Field>
+                    <p className="text-xs text-muted-foreground">
+                      Variáveis:{" "}
+                      {NOTIFICATION_TEMPLATE_VARIABLE_HELP.filter((v) =>
+                        ["{{nome_cliente}}", "{{barbearia}}", "{{link_agendamento}}", "{{dias_sem_visita}}"].includes(
+                          v.tag
+                        )
+                      ).map((v) => (
+                        <code key={v.tag} className="text-foreground/90 mr-1">
+                          {v.tag}
+                        </code>
+                      ))}
+                    </p>
+                  </>
+                ) : null}
+              </CardContent>
+            </Card>
+          ) : (
+            <Card className="bg-card border-border border-primary/25">
+              <CardHeader>
+                <CardTitle className="text-foreground flex items-center gap-2">
+                  <Lock className="w-4 h-4 text-primary" />
+                  Clientes inativos — WhatsApp
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground">
+                  Marketing automático para trazer de volta quem parou de vir. Disponível no{" "}
+                  <strong className="text-foreground">Plano Premium</strong> com WhatsApp conectado.
+                </p>
+                <Link
+                  href="/painel/configuracoes?tab=plano"
+                  className="inline-block mt-3 text-sm text-primary underline underline-offset-2 font-medium"
+                >
+                  Ver planos
+                </Link>
+              </CardContent>
+            </Card>
+          )}
 
           <div className="flex flex-wrap gap-3">
             <Button

@@ -17,6 +17,10 @@ export type NotificationTemplateVars = {
   link_confirmar?: string
   /** Minutos para aceitar a vaga (lista de espera). */
   prazo_minutos?: string
+  /** Link público de agendamento (/b/slug). */
+  link_agendamento?: string
+  /** Dias desde a última visita concluída (marketing de inativos). */
+  dias_sem_visita?: string
 }
 
 export const NOTIFICATION_TEMPLATE_VARIABLE_HELP = [
@@ -31,6 +35,8 @@ export const NOTIFICATION_TEMPLATE_VARIABLE_HELP = [
   { tag: "{{barbeiro}}", desc: "Nome do profissional" },
   { tag: "{{link_confirmar}}", desc: "Link para confirmar vaga (lista de espera)" },
   { tag: "{{prazo_minutos}}", desc: "Minutos para aceitar a vaga" },
+  { tag: "{{link_agendamento}}", desc: "Link público para agendar (/b/slug)" },
+  { tag: "{{dias_sem_visita}}", desc: "Dias desde a última visita do cliente" },
 ] as const
 
 /** Normaliza sinônimos usados nos modelos ({{nome}}, {{hora}}). */

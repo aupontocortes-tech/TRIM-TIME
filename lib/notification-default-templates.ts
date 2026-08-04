@@ -37,3 +37,9 @@ export const DEFAULT_EMAIL_WAITLIST_SLOT =
 
 export const DEFAULT_APP_WAITLIST_SLOT =
   "Vaga disponível: {{data}} às {{horario}} — {{servico}} com {{barbeiro}}. Confirme em até {{prazo_minutos}} min!"
+
+export const DEFAULT_WHATSAPP_INACTIVE_FIRST =
+  "Olá {{nome_cliente}}! Tudo bem?\n\nAqui é da {{barbearia}}. Sentimos sua falta — já faz {{dias_sem_visita}} dias desde sua última visita e adoraríamos te ver de novo.\n\nQuando quiser voltar, é só agendar pelo link:\n{{link_agendamento}}\n\nEstamos te esperando!"
+
+export const DEFAULT_WHATSAPP_INACTIVE_SECOND =
+  "Oi {{nome_cliente}}, tudo bem?\n\nPassamos aqui da {{barbearia}} para lembrar que faz um tempinho que você não aparece. Seria um prazer te receber de novo!\n\nAgende no horário que preferir:\n{{link_agendamento}}\n\nEsperamos você em breve!"

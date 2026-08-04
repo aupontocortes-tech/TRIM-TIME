@@ -299,6 +299,13 @@ function mergeBarbershopSettings(
       base.loyalty_program = inc.loyalty_program
     }
   }
+  if (inc.inactive_client_marketing !== undefined) {
+    if (!inc.inactive_client_marketing || !inc.inactive_client_marketing.enabled) {
+      delete base.inactive_client_marketing
+    } else {
+      base.inactive_client_marketing = inc.inactive_client_marketing
+    }
+  }
   return base as Prisma.InputJsonValue
 }
 
@@ -337,6 +344,19 @@ export async function PATCH(request: Request) {
         if (!refs.ok) return NextResponse.json({ error: refs.error }, { status: 400 })
       }
       body.settings.loyalty_program = validated.config
+    }
+
+    if (body.settings?.inactive_client_marketing !== undefined) {
+      const plan = await resolveEffectivePlanForActiveSession(barbershopId)
+      const { validateInactiveClientMarketingInput } = await import("@/lib/inactive-client-marketing")
+      const validated = validateInactiveClientMarketingInput(
+        body.settings.inactive_client_marketing ?? { enabled: false },
+        plan
+      )
+      if (!validated.ok) {
+        return NextResponse.json({ error: validated.error }, { status: 400 })
+      }
+      body.settings.inactive_client_marketing = validated.config
     }
 
     const mergedSettings = mergeBarbershopSettings(current.settings, body.settings)

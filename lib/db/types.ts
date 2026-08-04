@@ -101,6 +101,28 @@ export type WhatsAppAutoReplySettings = {
   rules?: WhatsAppAutoReplyRule[]
 }
 
+/** Marketing de reativação para clientes inativos (plano Premium + WhatsApp). */
+export type BarbershopInactiveClientMarketing = {
+  enabled?: boolean
+  /** Dias sem visita para enviar a 1ª mensagem (padrão 30). */
+  first_message_days?: number
+  /** Dias sem visita para enviar a 2ª mensagem (padrão 60). */
+  second_message_days?: number
+  /** Após este prazo, para de tentar (padrão 90 — sem 3ª mensagem). */
+  stop_after_days?: number
+  whatsapp_first_template?: string
+  whatsapp_second_template?: string
+}
+
+export type NormalizedInactiveClientMarketing = {
+  enabled: boolean
+  first_message_days: number
+  second_message_days: number
+  stop_after_days: number
+  whatsapp_first_template: string
+  whatsapp_second_template: string
+}
+
 /** Programa de fidelidade configurável pelo dono (plano Premium). */
 export type BarbershopLoyaltyProgram = {
   enabled: boolean
@@ -138,6 +160,8 @@ export type BarbershopSettings = {
   /** Minutos para aceitar vaga após notificação da lista de espera (padrão 15). */
   waitlist_accept_deadline_minutes?: number
   loyalty_program?: BarbershopLoyaltyProgram | null
+  /** Reativação de clientes inativos via WhatsApp (Premium). */
+  inactive_client_marketing?: BarbershopInactiveClientMarketing | null
   /** Dias para manter registros no histórico (0 = nunca apagar). Padrão: 30. */
   appointment_history_retention_days?: number | null
   /** @deprecated Use appointment_history_retention_days */
