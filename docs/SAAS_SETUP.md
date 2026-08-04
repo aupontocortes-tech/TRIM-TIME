@@ -56,9 +56,9 @@ Para produção, recomenda-se trocar por **Supabase Auth** e guardar `barbershop
 
 ## Planos e limites
 
-- **Básico**: 1 barbeiro; agenda, clientes, histórico, anotações, push.
+- **Básico**: 1 barbeiro; agenda, clientes, histórico, anotações, push, agendamento online (link público).
 - **Pro**: até 3 barbeiros; lista de espera, financeiro, relatórios, comissão, serviços/preços, email, backup.
-- **Premium**: barbeiros ilimitados; agendamento online, link público, dashboard completo, relatórios avançados, fidelidade, marketing, WhatsApp, remover branding.
+- **Premium**: barbeiros ilimitados; unidades ilimitadas, dashboard completo, relatórios avançados, fidelidade, marketing, WhatsApp, remover branding.
 
 O bloqueio por plano está nas APIs (ex.: `POST /api/barbers` retorna 403 com `code: "PLAN_LIMIT"` quando o limite de barbeiros é atingido). No front, use o componente `UpgradePlanDialog` ao receber 403 ou ao tentar ações acima do plano.
 
