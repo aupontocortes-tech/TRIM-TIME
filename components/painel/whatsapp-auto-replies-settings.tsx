@@ -31,6 +31,7 @@ const VAR_GROUPS = ["Agendamento", "Lista de espera", "Informações"] as const
 
 type WhatsAppAutoRepliesSettingsProps = {
   sectionStep?: number
+  hideEnableToggle?: boolean
   enabled: boolean
   rules: WhatsAppAutoReplyRule[]
   webhookUrl: string
@@ -61,6 +62,7 @@ function sortRulesByDefaultOrder(rules: WhatsAppAutoReplyRule[]): WhatsAppAutoRe
 
 export function WhatsAppAutoRepliesSettings({
   sectionStep,
+  hideEnableToggle,
   enabled,
   rules,
   webhookUrl,
@@ -102,10 +104,10 @@ export function WhatsAppAutoRepliesSettings({
   }
 
   return (
-    <Card className="border-border bg-card">
+    <Card className={hideEnableToggle ? "border-border bg-muted/10 shadow-none" : "border-border bg-card"}>
       <CardHeader>
         <CardTitle className="text-base text-foreground flex items-center gap-2">
-          {sectionStep ? (
+          {sectionStep && !hideEnableToggle ? (
             <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary">
               {sectionStep}
             </span>
@@ -113,40 +115,50 @@ export function WhatsAppAutoRepliesSettings({
           Respostas automáticas
         </CardTitle>
         <CardDescription className="text-muted-foreground">
-          Quando o cliente manda uma palavra no WhatsApp, o sistema responde sozinho (ex.: &quot;endereço&quot; → manda
-          o endereço). Áudio recebe aviso para digitar. Menu numerado só se nenhuma palavra bater.
+          {hideEnableToggle
+            ? "Edite palavras que o cliente manda e a resposta de cada uma."
+            : "Quando o cliente manda uma palavra no WhatsApp, o sistema responde sozinho (ex.: \"endereço\" → manda o endereço). Áudio recebe aviso para digitar. Menu numerado só se nenhuma palavra bater."}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 max-w-2xl">
-        <label className="flex items-center gap-3 text-sm text-foreground cursor-pointer rounded-lg border border-border bg-muted/20 px-3 py-2.5">
-          <Checkbox checked={enabled} onCheckedChange={(v) => onEnabledChange(v === true)} />
-          Ativar respostas automáticas
-        </label>
-
-        <div className="rounded-lg border border-border/70 bg-muted/20 p-3 space-y-1.5">
-          <p className="text-xs font-medium text-foreground">Webhook no console Green API</p>
-          <p className="text-[11px] text-muted-foreground leading-snug">
-            Em{" "}
-            <a
-              href="https://console.green-api.com/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary hover:underline"
-            >
-              console.green-api.com
-            </a>
-            , abra sua instância → Configurações → cole esta URL:
+        {!hideEnableToggle ? (
+          <label className="flex items-center gap-3 text-sm text-foreground cursor-pointer rounded-lg border border-border bg-muted/20 px-3 py-2.5">
+            <Checkbox checked={enabled} onCheckedChange={(v) => onEnabledChange(v === true)} />
+            Ativar respostas automáticas
+          </label>
+        ) : !enabled ? (
+          <p className="text-xs text-muted-foreground rounded-lg border border-dashed border-border px-3 py-2">
+            Desligado — ligue &quot;Responder o cliente sozinho&quot; na configuração rápida acima para editar as
+            respostas.
           </p>
-          <code className="block break-all rounded bg-background/80 px-2 py-1.5 text-[11px] text-foreground">
-            {webhookUrl}
-          </code>
-        </div>
+        ) : null}
 
-        <div className="space-y-3">
-          <p className="text-sm font-medium text-foreground">Regras — clique para editar</p>
-          <p className="text-xs text-muted-foreground -mt-2">
-            Cada linha é uma palavra (ou frase) que o cliente pode mandar e a resposta automática.
-          </p>
+        {enabled ? (
+          <>
+            <div className="rounded-lg border border-border/70 bg-muted/20 p-3 space-y-1.5">
+              <p className="text-xs font-medium text-foreground">Webhook no console Green API</p>
+              <p className="text-[11px] text-muted-foreground leading-snug">
+                Em{" "}
+                <a
+                  href="https://console.green-api.com/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline"
+                >
+                  console.green-api.com
+                </a>
+                , abra sua instância → Configurações → cole esta URL:
+              </p>
+              <code className="block break-all rounded bg-background/80 px-2 py-1.5 text-[11px] text-foreground">
+                {webhookUrl}
+              </code>
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-sm font-medium text-foreground">Regras — clique para editar</p>
+              <p className="text-xs text-muted-foreground -mt-2">
+                Cada linha é uma palavra (ou frase) que o cliente pode mandar e a resposta automática.
+              </p>
           {sortedRules.map((rule, index) => (
             <div key={rule.id ?? `rule-${index}`} className="rounded-lg border border-border p-3 space-y-3">
               <div className="flex items-center justify-between gap-2">
@@ -243,6 +255,8 @@ export function WhatsAppAutoRepliesSettings({
             </div>
           ))}
         </div>
+          </>
+        ) : null}
       </CardContent>
     </Card>
   )

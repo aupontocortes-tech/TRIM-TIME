@@ -67,6 +67,7 @@ import {
   Trash2,
   Edit2,
   Link as LinkIcon,
+  ChevronDown,
   Copy,
   Check,
   Share2,
@@ -119,7 +120,10 @@ import { BarberPhotoAdjust } from "@/components/barber-photo-adjust"
 import { WhatsAppConnectWizard } from "@/components/painel/whatsapp-connect-wizard"
 import { WhatsAppAutoRepliesSettings } from "@/components/painel/whatsapp-auto-replies-settings"
 import { WhatsAppOutboundMessagesSettings } from "@/components/painel/whatsapp-outbound-messages-settings"
+import { WhatsAppQuickSetupCard } from "@/components/painel/whatsapp-quick-setup-card"
+import { WhatsAppReminderTimesSettings } from "@/components/painel/whatsapp-reminder-times-settings"
 import { WhatsAppTemplateVarsPanel } from "@/components/painel/whatsapp-template-vars-panel"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { DEFAULT_WHATSAPP_AUTO_REPLY_RULES } from "@/lib/whatsapp-auto-reply-defaults"
 import { GREEN_API_FIELD_COPY } from "@/lib/whatsapp-green-api"
 import { ChangePasswordForm } from "@/components/account/change-password-form"
@@ -4760,140 +4764,98 @@ export default function ConfiguracoesPage() {
           ) : null}
 
           {whatsappIntegrationFeature ? (
-            <div className="rounded-lg border border-primary/25 bg-primary/5 px-4 py-3 text-sm text-muted-foreground max-w-2xl">
-              <p className="font-medium text-foreground mb-2">Como configurar (rápido)</p>
-              <ol className="list-decimal list-inside space-y-1 text-xs sm:text-sm">
-                <li>
-                  <strong className="text-foreground">Conecte</strong> o WhatsApp acima (Passo 1)
-                </li>
-                <li>
-                  <strong className="text-foreground">Revise os textos</strong> — o padrão já funciona; mude só se
-                  quiser (Passo 2)
-                </li>
-                <li>
-                  <strong className="text-foreground">Ative</strong> lembretes, respostas automáticas e clientes
-                  inativos conforme precisar (Passos 3–5)
-                </li>
-                <li>
-                  Clique em <strong className="text-foreground">Salvar configurações do WhatsApp</strong> no final
-                </li>
-              </ol>
-            </div>
-          ) : null}
-
-          {whatsappIntegrationFeature ? (
             <>
-              <WhatsAppOutboundMessagesSettings
-                confirmTemplate={notifWaConfirmTpl}
-                reminderTemplate={notifWaTpl}
-                postServiceTemplate={notifWaPostTpl}
+              <WhatsAppQuickSetupCard
                 remindersEnabled={notifWa}
-                showMultiUnitHint={multiUnitsFeature}
-                onConfirmChange={setNotifWaConfirmTpl}
-                onReminderChange={setNotifWaTpl}
-                onPostServiceChange={setNotifWaPostTpl}
+                onRemindersChange={setNotifWa}
+                autoRepliesEnabled={notifWaAutoReplyEnabled}
+                onAutoRepliesChange={setNotifWaAutoReplyEnabled}
+                inactiveEnabled={inactiveMarketingEnabled}
+                onInactiveChange={setInactiveMarketingEnabled}
+                showInactive={marketingInactiveFeature}
               />
 
-              <Card id="wa-settings-section" className="bg-card border-border scroll-mt-24">
-                <CardHeader>
-                  <CardTitle className="text-foreground text-base flex items-center gap-2">
-                    <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary">
-                      3
-                    </span>
-                    Lembretes automáticos
-                  </CardTitle>
-                  <CardDescription className="text-muted-foreground">
-                    Avisa o cliente no WhatsApp antes do horário. O texto do lembrete você edita no Passo 2 acima.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-5 max-w-xl">
-                  <div className="flex items-center gap-3">
-                    <Switch checked={notifWa} onCheckedChange={setNotifWa} id="notif-wa" />
-                    <label htmlFor="notif-wa" className="text-sm font-medium text-foreground cursor-pointer">
-                      Enviar lembrete por WhatsApp
-                    </label>
-                  </div>
-
-                  {notifWa ? (
-                    <div className="space-y-4 rounded-lg border border-border bg-muted/20 p-4">
-                      <p className="text-sm font-medium text-foreground">Com quanta antecedência avisar?</p>
-                      <p className="text-xs text-muted-foreground -mt-2">Marque uma ou mais opções.</p>
-                      <div className="flex flex-col gap-2.5">
-                        {WA_SECTION_REMINDER_OPTIONS.map((opt) => (
-                          <label
-                            key={opt.minutes}
-                            className="flex items-center gap-3 cursor-pointer text-sm text-foreground"
-                          >
-                            <Checkbox
-                              checked={notifReminderOffsets.includes(opt.minutes)}
-                              onCheckedChange={() => toggleReminderOffset(opt.minutes)}
-                            />
-                            {opt.label}
-                          </label>
-                        ))}
-                      </div>
-                      <Field>
-                        <FieldLabel>Outro horário (horas antes)</FieldLabel>
-                        <Input
-                          type="number"
-                          min={1}
-                          max={168}
-                          className="mt-1 bg-input border-border text-foreground max-w-[160px]"
-                          value={notifCustomReminderHours}
-                          onChange={(e) => setNotifCustomReminderHours(e.target.value)}
-                          placeholder="Ex.: 3"
-                        />
-                        <p className="text-[11px] text-muted-foreground mt-1">Opcional — soma às opções marcadas.</p>
-                      </Field>
-                    </div>
-                  ) : (
-                    <p className="text-xs text-muted-foreground">
-                      Desligado — confirmação e pós-atendimento continuam funcionando se o WhatsApp estiver conectado.
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
-
-              {whatsappIntegrationFeature ? (
-                <WhatsAppAutoRepliesSettings
-                  sectionStep={4}
-                  enabled={notifWaAutoReplyEnabled}
-                  rules={notifWaAutoReplyRules}
-                  webhookUrl={waWebhookUrl}
-                  onEnabledChange={setNotifWaAutoReplyEnabled}
-                  onRulesChange={setNotifWaAutoReplyRules}
-                />
-              ) : null}
-
-              {marketingInactiveFeature ? (
-                <Card className="bg-card border-border">
-                  <CardHeader>
+              {!marketingInactiveFeature ? (
+                <Card className="bg-card border-border border-primary/25 max-w-xl">
+                  <CardHeader className="pb-2">
                     <CardTitle className="text-foreground text-base flex items-center gap-2">
-                      <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary">
-                        5
-                      </span>
-                      <Heart className="w-4 h-4 text-primary" />
-                      Clientes inativos
+                      <Lock className="w-4 h-4 text-primary" />
+                      Trazer clientes inativos
                     </CardTitle>
                     <CardDescription className="text-muted-foreground">
-                      Mensagem automática no WhatsApp para quem parou de vir. Ajuste os dias — sugestão:{" "}
-                      {INACTIVE_MARKETING_DEFAULT_FIRST_DAYS}, {INACTIVE_MARKETING_DEFAULT_SECOND_DAYS} e parar em{" "}
-                      {INACTIVE_MARKETING_DEFAULT_STOP_DAYS} (sem 3ª mensagem).
+                      Disponível no Plano Premium.
                     </CardDescription>
                   </CardHeader>
-                  <CardContent className="space-y-5 max-w-xl">
-                    <div className="flex items-center gap-2">
-                      <Switch
-                        checked={inactiveMarketingEnabled}
-                        onCheckedChange={setInactiveMarketingEnabled}
-                        id="inactive-marketing-wa"
+                  <CardContent>
+                    <Link
+                      href="/painel/configuracoes?tab=plano"
+                      className="text-sm text-primary underline underline-offset-2 font-medium"
+                    >
+                      Ver planos
+                    </Link>
+                  </CardContent>
+                </Card>
+              ) : null}
+
+              <Collapsible className="max-w-2xl">
+                <CollapsibleTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full justify-between border-border h-11 font-medium group"
+                  >
+                    Personalizar mensagens e horários (opcional)
+                    <ChevronDown className="h-4 w-4 shrink-0 transition-transform group-data-[state=open]:rotate-180" />
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="space-y-6 pt-5">
+                  <WhatsAppOutboundMessagesSettings
+                    compact
+                    confirmTemplate={notifWaConfirmTpl}
+                    reminderTemplate={notifWaTpl}
+                    postServiceTemplate={notifWaPostTpl}
+                    remindersEnabled={notifWa}
+                    showMultiUnitHint={multiUnitsFeature}
+                    onConfirmChange={setNotifWaConfirmTpl}
+                    onReminderChange={setNotifWaTpl}
+                    onPostServiceChange={setNotifWaPostTpl}
+                  />
+
+                  {notifWa ? (
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium text-foreground">Horários do lembrete</p>
+                      <WhatsAppReminderTimesSettings
+                        options={WA_SECTION_REMINDER_OPTIONS}
+                        selectedMinutes={notifReminderOffsets}
+                        customHours={notifCustomReminderHours}
+                        onToggleMinute={toggleReminderOffset}
+                        onCustomHoursChange={setNotifCustomReminderHours}
                       />
-                      <FieldLabel htmlFor="inactive-marketing-wa" className="cursor-pointer">
-                        Ativar reativação por WhatsApp
-                      </FieldLabel>
                     </div>
-                    {inactiveMarketingEnabled ? (
-                      <>
+                  ) : null}
+
+                  <WhatsAppAutoRepliesSettings
+                    hideEnableToggle
+                    enabled={notifWaAutoReplyEnabled}
+                    rules={notifWaAutoReplyRules}
+                    webhookUrl={waWebhookUrl}
+                    onEnabledChange={setNotifWaAutoReplyEnabled}
+                    onRulesChange={setNotifWaAutoReplyRules}
+                  />
+
+                  {marketingInactiveFeature && inactiveMarketingEnabled ? (
+                    <Card className="border-border bg-muted/10 shadow-none">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-base text-foreground flex items-center gap-2">
+                          <Heart className="w-4 h-4 text-primary" />
+                          Clientes inativos — detalhes
+                        </CardTitle>
+                        <CardDescription className="text-muted-foreground">
+                          Padrão sugerido: {INACTIVE_MARKETING_DEFAULT_FIRST_DAYS},{" "}
+                          {INACTIVE_MARKETING_DEFAULT_SECOND_DAYS} e {INACTIVE_MARKETING_DEFAULT_STOP_DAYS} dias.
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-5 max-w-xl">
                         {!waConnected ? (
                           <p className="text-sm text-amber-600 dark:text-amber-400 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
                             Conecte o WhatsApp acima para enviar as mensagens.
@@ -4912,7 +4874,6 @@ export default function ConfiguracoesPage() {
                               value={inactiveFirstDays}
                               onChange={(e) => setInactiveFirstDays(e.target.value)}
                             />
-                            <p className="text-[11px] text-muted-foreground mt-1">Sem visita concluída</p>
                           </Field>
                           <Field>
                             <FieldLabel htmlFor="inactive-second-days">2ª mensagem (dias)</FieldLabel>
@@ -4926,10 +4887,9 @@ export default function ConfiguracoesPage() {
                               value={inactiveSecondDays}
                               onChange={(e) => setInactiveSecondDays(e.target.value)}
                             />
-                            <p className="text-[11px] text-muted-foreground mt-1">Última tentativa</p>
                           </Field>
                           <Field>
-                            <FieldLabel htmlFor="inactive-stop-days">Desistir após (dias)</FieldLabel>
+                            <FieldLabel htmlFor="inactive-stop-days">Parar após (dias)</FieldLabel>
                             <Input
                               id="inactive-stop-days"
                               type="number"
@@ -4940,24 +4900,20 @@ export default function ConfiguracoesPage() {
                               value={inactiveStopDays}
                               onChange={(e) => setInactiveStopDays(e.target.value)}
                             />
-                            <p className="text-[11px] text-muted-foreground mt-1">Não envia de novo</p>
                           </Field>
                         </div>
-                        <p className="text-xs text-muted-foreground">
-                          Prazos livres (7–365 dias). A 2ª mensagem vem depois da 1ª; “desistir” vem depois da 2ª.
-                        </p>
                         <Field>
-                          <FieldLabel>1ª mensagem (reativação)</FieldLabel>
+                          <FieldLabel>Texto da 1ª mensagem</FieldLabel>
                           <Textarea
-                            className="mt-1 bg-input border-border text-foreground min-h-[120px]"
+                            className="mt-1 bg-input border-border text-foreground min-h-[100px]"
                             value={inactiveWaFirstTpl}
                             onChange={(e) => setInactiveWaFirstTpl(e.target.value)}
                           />
                         </Field>
                         <Field>
-                          <FieldLabel>2ª mensagem (última tentativa)</FieldLabel>
+                          <FieldLabel>Texto da 2ª mensagem</FieldLabel>
                           <Textarea
-                            className="mt-1 bg-input border-border text-foreground min-h-[120px]"
+                            className="mt-1 bg-input border-border text-foreground min-h-[100px]"
                             value={inactiveWaSecondTpl}
                             onChange={(e) => setInactiveWaSecondTpl(e.target.value)}
                           />
@@ -4965,31 +4921,16 @@ export default function ConfiguracoesPage() {
                         <WhatsAppTemplateVarsPanel
                           extraTags={[{ tag: "{{dias_sem_visita}}", desc: "Dias desde a última visita" }]}
                         />
-                      </>
-                    ) : null}
-                  </CardContent>
-                </Card>
-              ) : (
-                <Card className="bg-card border-border border-primary/25">
-                  <CardHeader>
-                    <CardTitle className="text-foreground text-base flex items-center gap-2">
-                      <Lock className="w-4 h-4 text-primary" />
-                      Clientes inativos
-                    </CardTitle>
-                    <CardDescription className="text-muted-foreground">
-                      Reativação automática por WhatsApp — recurso do Plano Premium.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <Link
-                      href="/painel/configuracoes?tab=plano"
-                      className="text-sm text-primary underline underline-offset-2 font-medium"
-                    >
-                      Ver planos
-                    </Link>
-                  </CardContent>
-                </Card>
-              )}
+                      </CardContent>
+                    </Card>
+                  ) : marketingInactiveFeature ? (
+                    <p className="text-xs text-muted-foreground">
+                      Para ajustar prazos de clientes inativos, ligue &quot;Trazer quem parou de vir&quot; na
+                      configuração rápida acima.
+                    </p>
+                  ) : null}
+                </CollapsibleContent>
+              </Collapsible>
 
               {notifError ? (
                 <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm max-w-2xl">
@@ -5011,10 +4952,10 @@ export default function ConfiguracoesPage() {
                     onClick={() => void handleSaveNotificacoes()}
                   >
                     <Save className="w-4 h-4 mr-2" />
-                    {notifBusy ? "Salvando..." : "Salvar configurações do WhatsApp"}
+                    {notifBusy ? "Salvando..." : "Salvar"}
                   </Button>
                   <p className="text-xs text-muted-foreground">
-                    Salve depois de alterar textos, lembretes ou clientes inativos.
+                    Conectou e ligou o que precisa? É só salvar.
                   </p>
                 </div>
               </div>

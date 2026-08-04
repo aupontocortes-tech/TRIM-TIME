@@ -24,6 +24,7 @@ type WhatsAppOutboundMessagesSettingsProps = {
   postServiceTemplate: string
   remindersEnabled: boolean
   showMultiUnitHint?: boolean
+  compact?: boolean
   onConfirmChange: (value: string) => void
   onReminderChange: (value: string) => void
   onPostServiceChange: (value: string) => void
@@ -65,6 +66,7 @@ export function WhatsAppOutboundMessagesSettings({
   postServiceTemplate,
   remindersEnabled,
   showMultiUnitHint,
+  compact,
   onConfirmChange,
   onReminderChange,
   onPostServiceChange,
@@ -82,21 +84,24 @@ export function WhatsAppOutboundMessagesSettings({
   }
 
   return (
-    <Card className="bg-card border-border">
-      <CardHeader>
+    <Card className={compact ? "border-border bg-muted/10 shadow-none" : "bg-card border-border"}>
+      <CardHeader className={compact ? "pb-2" : undefined}>
         <CardTitle className="text-foreground text-base flex items-center gap-2">
-          <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary">
-            2
-          </span>
-          Textos enviados ao cliente
+          {!compact ? (
+            <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary">
+              2
+            </span>
+          ) : null}
+          Mensagens enviadas ao cliente
         </CardTitle>
         <CardDescription className="text-muted-foreground">
-          Edite só se quiser personalizar. Se não mexer, o texto padrão já funciona. Abra cada bloco abaixo
-          para ver e alterar.
+          {compact
+            ? "Só mude se quiser um texto diferente do padrão."
+            : "Edite só se quiser personalizar. Se não mexer, o texto padrão já funciona. Abra cada bloco abaixo para ver e alterar."}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 max-w-2xl">
-        <Accordion type="multiple" defaultValue={["confirm"]} className="w-full">
+        <Accordion type="multiple" defaultValue={compact ? [] : ["confirm"]} className="w-full">
           {MESSAGE_SECTIONS.map((section) => {
             const Icon = section.icon
             const disabled = section.id === "reminder" && !remindersEnabled
