@@ -24,7 +24,7 @@ const TOGGLE_ROWS = [
   {
     id: "auto",
     title: "Responder o cliente sozinho",
-    desc: "Quando mandam mensagem (ex.: endereço, horário), responde automaticamente.",
+    desc: "Quando mandam mensagem (ex.: endereço, horário), responde automaticamente. Ative e configure o webhook que aparece abaixo.",
   },
   {
     id: "inactive",

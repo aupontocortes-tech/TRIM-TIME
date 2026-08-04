@@ -120,6 +120,7 @@ import { BarberPhotoAdjust } from "@/components/barber-photo-adjust"
 import { WhatsAppConnectWizard } from "@/components/painel/whatsapp-connect-wizard"
 import { WhatsAppAutoRepliesSettings } from "@/components/painel/whatsapp-auto-replies-settings"
 import { WhatsAppOutboundMessagesSettings } from "@/components/painel/whatsapp-outbound-messages-settings"
+import { WhatsAppGreenApiWebhookCard } from "@/components/painel/whatsapp-green-api-webhook-card"
 import { WhatsAppQuickSetupCard } from "@/components/painel/whatsapp-quick-setup-card"
 import { WhatsAppReminderTimesSettings } from "@/components/painel/whatsapp-reminder-times-settings"
 import { WhatsAppTemplateVarsPanel } from "@/components/painel/whatsapp-template-vars-panel"
@@ -4765,6 +4766,7 @@ export default function ConfiguracoesPage() {
 
           {whatsappIntegrationFeature ? (
             <>
+              <div id="wa-settings-section" className="scroll-mt-24">
               <WhatsAppQuickSetupCard
                 remindersEnabled={notifWa}
                 onRemindersChange={setNotifWa}
@@ -4774,6 +4776,11 @@ export default function ConfiguracoesPage() {
                 onInactiveChange={setInactiveMarketingEnabled}
                 showInactive={marketingInactiveFeature}
               />
+              </div>
+
+              {notifWaAutoReplyEnabled && waApiConnected ? (
+                <WhatsAppGreenApiWebhookCard webhookUrl={waWebhookUrl} />
+              ) : null}
 
               {!marketingInactiveFeature ? (
                 <Card className="bg-card border-border border-primary/25 max-w-xl">
@@ -4836,6 +4843,7 @@ export default function ConfiguracoesPage() {
 
                   <WhatsAppAutoRepliesSettings
                     hideEnableToggle
+                    hideWebhook
                     enabled={notifWaAutoReplyEnabled}
                     rules={notifWaAutoReplyRules}
                     webhookUrl={waWebhookUrl}
