@@ -10,7 +10,6 @@ import {
 import { assertValidProfilePhotoDataUrl } from "@/lib/photo-data-url"
 import { cpfDigits } from "@/lib/cpf"
 import { trySendWhatsAppAppointmentConfirmation } from "@/lib/whatsapp-appointment-events"
-import { trySendEmailAppointmentConfirmation } from "@/lib/email-appointment-events"
 import { trySendPushAppointmentConfirmation } from "@/lib/push-appointment-events"
 import { normalizeClientPhoneForStorage } from "@/lib/format-phone-br"
 import { parseAppointmentDate, utcDayRangeForYmd } from "@/lib/appointment-prisma-helpers"
@@ -480,7 +479,6 @@ export async function POST(
 
     if (created.length > 0) {
       await trySendWhatsAppAppointmentConfirmation(shop.id, created[0].id)
-      void trySendEmailAppointmentConfirmation(shop.id, created[0].id)
       void trySendPushAppointmentConfirmation(shop.id, created[0].id)
     }
 
